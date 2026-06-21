@@ -29,8 +29,8 @@ The current implementation provides:
 - an exhaustive Phase 2 encoder variant for research comparisons when payload
   size search is more important than encode latency;
 - a `turboquant-q4` reference baseline for measuring the base random-rotation
-  scalar quantization path plus QJL residual inner-product estimator before the
-  quaternion overlay;
+  scalar quantization path plus structured QJL residual inner-product estimator
+  before the quaternion overlay;
 - an exact `lossless-f32` envelope for bit-identical f32 transport while the
   residual-compression design is developed;
 - a small CLI for encoding, chunked encoding, and decoding raw f32

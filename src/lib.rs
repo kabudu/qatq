@@ -15,6 +15,7 @@ const PHASE2_PREFIX_LEN: usize = 8;
 const PHASE2_PREDICTOR_METADATA_LEN: usize = 12;
 const DEFAULT_PHASE1_SEED: u64 = 0x5141_5451_c0de_0001;
 const TURBOQUANT_QJL_MAX_PROJECTIONS: usize = 256;
+const TURBOQUANT_QJL_SEED_XOR: u64 = 0x514a_4c5f_5352_4854;
 const XOR_ZERO_RUN: u8 = 0;
 const XOR_RAW_RUN: u8 = 1;
 const BYTE_REPEAT_RUN: u8 = 2;
@@ -495,9 +496,13 @@ pub fn estimate_turboquant_q4_inner_product(
     let mut padded_query = finite_predictor_values(query);
     padded_query.resize(parsed.coord_count, 0.0);
     let mut correction_dot = 0.0_f32;
-    for row in 0..parsed.qjl_projection_count {
-        let projected = gaussian_projection_dot(&padded_query, parsed.seed, row);
-        correction_dot += projected * qjl_sign_value(parsed.qjl_signs[row]);
+    let projected_query = qjl_project_values(&padded_query, parsed.seed);
+    for (projected, sign) in projected_query
+        .iter()
+        .zip(parsed.qjl_signs.iter())
+        .take(parsed.qjl_projection_count)
+    {
+        correction_dot += projected * qjl_sign_value(*sign);
     }
     Ok(mse_dot
         + (SQRT_PI_OVER_TWO / parsed.qjl_projection_count as f32)
@@ -1795,8 +1800,10 @@ fn build_turboquant_parts(values: &[f32], config: Phase1Config) -> TurboQuantPar
     let qjl_signs = if residual_norm == 0.0 {
         vec![true; qjl_projection_count]
     } else {
-        (0..qjl_projection_count)
-            .map(|row| gaussian_projection_dot(&residual, config.seed, row) >= 0.0)
+        qjl_project_values(&residual, config.seed)
+            .into_iter()
+            .take(qjl_projection_count)
+            .map(|projected| projected >= 0.0)
             .collect()
     };
 
@@ -2488,12 +2495,13 @@ fn add_qjl_correction(values: &mut [f32], seed: u64, residual_norm: f32, qjl_sig
         return;
     }
     let scale = (SQRT_PI_OVER_TWO / projection_count as f32) * residual_norm;
-    for (col, value) in values.iter_mut().enumerate() {
-        let mut projected = 0.0_f32;
-        for row in 0..projection_count {
-            projected += gaussian_projection_entry(seed, row, col) * qjl_sign_value(qjl_signs[row]);
-        }
-        *value += scale * projected;
+    let mut correction = vec![0.0_f32; dimension];
+    for (index, sign) in qjl_signs.iter().enumerate() {
+        correction[index] = qjl_sign_value(*sign);
+    }
+    let correction = qjl_unproject_values(&correction, seed);
+    for (value, correction) in values.iter_mut().zip(correction.iter()) {
+        *value += scale * correction;
     }
 }
 
@@ -2818,28 +2826,20 @@ fn qjl_sign_value(value: bool) -> f32 {
     }
 }
 
-fn gaussian_projection_dot(values: &[f32], seed: u64, row: usize) -> f32 {
-    values
-        .iter()
-        .enumerate()
-        .map(|(col, value)| gaussian_projection_entry(seed, row, col) * value)
-        .sum()
+fn qjl_project_values(values: &[f32], seed: u64) -> Vec<f32> {
+    random_hadamard_rotate(
+        values,
+        seed ^ TURBOQUANT_QJL_SEED_XOR,
+        RotationDirection::Forward,
+    )
 }
 
-fn gaussian_projection_entry(seed: u64, row: usize, col: usize) -> f32 {
-    let row = row as u64;
-    let col = col as u64;
-    let first =
-        splitmix64(seed ^ 0x514a_4c5f_4741_5553 ^ row.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ col);
-    let second = splitmix64(first ^ 0xd1b5_4a32_d192_ed03);
-    let u1 = uniform_open01(first);
-    let u2 = uniform_open01(second);
-    (-2.0 * u1.ln()).sqrt() * (std::f32::consts::TAU * u2).cos()
-}
-
-fn uniform_open01(bits: u64) -> f32 {
-    let mantissa = ((bits >> 40) as u32).max(1);
-    mantissa as f32 / (1_u32 << 24) as f32
+fn qjl_unproject_values(values: &[f32], seed: u64) -> Vec<f32> {
+    random_hadamard_rotate(
+        values,
+        seed ^ TURBOQUANT_QJL_SEED_XOR,
+        RotationDirection::Inverse,
+    )
 }
 
 fn deterministic_unit_quaternion(seed: u64, lane: u64) -> Quaternion {

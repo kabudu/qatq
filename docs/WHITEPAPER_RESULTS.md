@@ -64,10 +64,11 @@ raw-f32le byte-compression rows and a `turboquant-q4` base reference row. The
 `turboquant-q4` row is a QATQ reference comparator with QJL residual signs for
 inner-product estimation, not an official Google implementation.
 
-The QJL reference path is currently intentionally direct rather than optimized:
-it uses bounded deterministic Gaussian projections and reports heavyweight
-timing with one iteration/sample. These rows are useful for correctness and
-paper-comparison structure, not yet for runtime-performance claims.
+The QJL reference path uses bounded deterministic signed-Hadamard projections,
+so QJL projection and correction are structured O(d log d) operations rather
+than dense projection loops. These rows are now suitable as runtime-comparator
+measurements, while still remaining a QATQ reference implementation rather than
+official Google code.
 
 ## Gate Policy
 

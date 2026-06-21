@@ -15,8 +15,6 @@ use qatq::{
 
 const ITERATIONS: usize = 200;
 const TIMING_SAMPLES: usize = 3;
-const HEAVY_ITERATIONS: usize = 1;
-const HEAVY_TIMING_SAMPLES: usize = 1;
 const CONTAINER_CHUNK_VALUES: usize = 65_536;
 
 fn main() {
@@ -66,12 +64,6 @@ fn run() -> Result<(), String> {
     report.push_str("These are deterministic microbenchmarks for codec-level comparison. Synthetic datasets are included by default. External raw `f32le` fixtures can be added with `--input name:path.f32le` or fixture manifests.\n\n");
     report.push_str(&format!("- iterations per timing sample: `{ITERATIONS}`\n"));
     report.push_str(&format!("- timing samples: `{TIMING_SAMPLES}`\n"));
-    report.push_str(&format!(
-        "- heavyweight reference iterations per timing sample: `{HEAVY_ITERATIONS}`\n"
-    ));
-    report.push_str(&format!(
-        "- heavyweight reference timing samples: `{HEAVY_TIMING_SAMPLES}`\n"
-    ));
     report.push_str("- timing value: `best sample mean`\n");
     report.push_str(&format!(
         "- external fixtures: `{}`\n",
@@ -542,8 +534,8 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
         turboquant_encoded.len(),
         dataset.values.len(),
         None,
-        time_encode_heavy(|| encode_turboquant_q4(&dataset.values)),
-        time_decode_heavy(|| decode_turboquant_q4(&turboquant_encoded).expect("turboquant decode")),
+        time_encode(|| encode_turboquant_q4(&dataset.values)),
+        time_decode(|| decode_turboquant_q4(&turboquant_encoded).expect("turboquant decode")),
         &dataset.values,
         &turboquant_decoded,
     ));
@@ -643,18 +635,6 @@ fn time_encode<T>(mut f: impl FnMut() -> T) -> f64 {
 
 fn time_decode<T>(mut f: impl FnMut() -> T) -> f64 {
     time_loop(ITERATIONS, TIMING_SAMPLES, || {
-        black_box(f());
-    })
-}
-
-fn time_encode_heavy<T>(mut f: impl FnMut() -> T) -> f64 {
-    time_loop(HEAVY_ITERATIONS, HEAVY_TIMING_SAMPLES, || {
-        black_box(f());
-    })
-}
-
-fn time_decode_heavy<T>(mut f: impl FnMut() -> T) -> f64 {
-    time_loop(HEAVY_ITERATIONS, HEAVY_TIMING_SAMPLES, || {
         black_box(f());
     })
 }

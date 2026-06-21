@@ -17,8 +17,8 @@ DeepMind / NYU work:
 
 The QATQ `turboquant-q4` mode is a reference base-comparator path. It implements
 deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and a
-QJL residual sign estimator for query-side inner products. It is not an
-official Google implementation.
+structured QJL residual sign estimator for query-side inner products. It is not
+an official Google implementation.
 
 ## Quaternion Lineage
 

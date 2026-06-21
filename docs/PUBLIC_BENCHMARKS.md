@@ -6,8 +6,6 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 
 - iterations per timing sample: `200`
 - timing samples: `3`
-- heavyweight reference iterations per timing sample: `1`
-- heavyweight reference timing samples: `1`
 - timing value: `best sample mean`
 - external fixtures: `4`
 - fixture manifests: `1`
@@ -17,14 +15,14 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 
 | group | dataset | values | codec | phase2 strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless | byte-plane-blocks | 16424 | 0.5012 | 17.15 | 16.41 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-container | qatc-container | 16452 | 0.5021 | 17.26 | 16.84 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless | byte-plane-blocks | 32808 | 0.5006 | 34.60 | 33.18 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-container | qatc-container | 32836 | 0.5010 | 35.97 | 34.75 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless | raw-bits | 49188 | 1.0007 | 436.03 | 74.62 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-container | qatc-container | 49216 | 1.0013 | 577.71 | 70.03 | yes | 0.000000 | 0.000000 |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless | raw-bits | 16420 | 1.0022 | 154.24 | 19.09 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-container | qatc-container | 16448 | 1.0039 | 132.30 | 19.58 | yes | 0.000000 | NaN |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless | byte-plane-blocks | 16424 | 0.5012 | 18.95 | 18.11 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-container | qatc-container | 16452 | 0.5021 | 19.09 | 17.75 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless | byte-plane-blocks | 32808 | 0.5006 | 35.90 | 33.69 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-container | qatc-container | 32836 | 0.5010 | 43.64 | 36.17 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless | raw-bits | 49188 | 1.0007 | 421.99 | 55.22 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-container | qatc-container | 49216 | 1.0013 | 421.91 | 55.75 | yes | 0.000000 | 0.000000 |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless | raw-bits | 16420 | 1.0022 | 112.16 | 18.23 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-container | qatc-container | 16448 | 1.0039 | 112.65 | 18.48 | yes | 0.000000 | NaN |
 
 ## Interpretation
 
