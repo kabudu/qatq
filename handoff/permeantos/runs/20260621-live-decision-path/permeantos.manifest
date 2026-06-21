@@ -1,0 +1,349 @@
+[fixture]
+group = "permeantos-kv"
+name = "qwen25-05b-long-1920-layer0-key"
+path = "../captures/permeantos-20260621/qwen25-05b-long-1920-layer0-key.f32le"
+shape = "[1920, 2, 64]"
+notes = "model=Qwen/Qwen2.5-0.5B-Instruct; model_family=qwen; scenario=AWS long-horizon WSS QATQ round trip; runtime_path=local MLX source to AWS vLLM target; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=7371c81877edd34cb94c9d029bbbf5ba7b42aa0a2732068ac609514b1dd03b6b; values=245760; bytes=983040; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen25-05b-long-1920-layer23-value"
+path = "../captures/permeantos-20260621/qwen25-05b-long-1920-layer23-value.f32le"
+shape = "[1920, 2, 64]"
+notes = "model=Qwen/Qwen2.5-0.5B-Instruct; model_family=qwen; scenario=AWS long-horizon WSS QATQ round trip; runtime_path=local MLX source to AWS vLLM target; source_tensor=layer.23.value; tensor_role=value; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=f6e4ff4bd0a3cba7f27b3d8aeacfa017296fa4346e516c14945687eadc37883c; values=245760; bytes=983040; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "tinyllama-11b-1984-layer0-key"
+path = "../captures/permeantos-20260621/tinyllama-11b-1984-layer0-key.f32le"
+shape = "[1984, 4, 64]"
+notes = "model=TinyLlama/TinyLlama-1.1B-Chat-v1.0; model_family=tinyllama; scenario=AWS raw-transfer TinyLlama structural E2E proof; runtime_path=local MLX source to AWS vLLM target; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=e34bc6f4aa0d19edda4bb21eb25bb9fa7a8bb18a97e6b00db8c67a3026bfd497; values=507904; bytes=2031616; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "tinyllama-11b-1984-layer21-value"
+path = "../captures/permeantos-20260621/tinyllama-11b-1984-layer21-value.f32le"
+shape = "[1984, 4, 64]"
+notes = "model=TinyLlama/TinyLlama-1.1B-Chat-v1.0; model_family=tinyllama; scenario=AWS raw-transfer TinyLlama structural E2E proof; runtime_path=local MLX source to AWS vLLM target; source_tensor=layer.21.value; tensor_role=value; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=7c2440639e95caf1fa0b76b77d6ee57cfb4bccf2f95ae95d949bc356568e178b; values=507904; bytes=2031616; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen25-15b-1984-layer0-key"
+path = "../captures/permeantos-20260621/qwen25-15b-1984-layer0-key.f32le"
+shape = "[1984, 2, 128]"
+notes = "model=Qwen/Qwen2.5-1.5B-Instruct; model_family=qwen; scenario=AWS Qwen2.5 1.5B raw-transfer backend compatibility capture; runtime_path=local MLX source to AWS vLLM target; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=73677b57d68c4f80e7e0d5a27dcc00d983d48b33b62a3235922a4244dddbe1f3; values=507904; bytes=2031616; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen25-15b-1984-layer27-value"
+path = "../captures/permeantos-20260621/qwen25-15b-1984-layer27-value.f32le"
+shape = "[1984, 2, 128]"
+notes = "model=Qwen/Qwen2.5-1.5B-Instruct; model_family=qwen; scenario=AWS Qwen2.5 1.5B raw-transfer backend compatibility capture; runtime_path=local MLX source to AWS vLLM target; source_tensor=layer.27.value; tensor_role=value; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=1269871639a33545ad9f33d590773328367b2a508f15e7a67ffa0eeb23abcfda; values=507904; bytes=2031616; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "phi35-mini-256-layer0-key"
+path = "../captures/permeantos-20260621/phi35-mini-256-layer0-key.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=microsoft; scenario=local MLX extraction stress capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=8b1bd5d62f904efca2976a8b5da74dfaaad06e79855a9ba032d5792728ae00cf; values=786432; bytes=3145728; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "phi35-mini-256-layer31-value"
+path = "../captures/permeantos-20260621/phi35-mini-256-layer31-value.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=microsoft; scenario=local MLX extraction stress capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.value; tensor_role=value; runtime_tensor_dtype=unknown; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=d56cf00477dbfbb6027a25d7b5c4092b810f1ef37cfc40467141a4269b773378; values=786432; bytes=3145728; run_id=permeantos-20260621"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq64-layer0-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq64-layer0-key.f32le"
+shape = "[64, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=27b2b78ac135ce907f85e9b2531b4e5b47d06ccecf1a4455382a97ead781c44f; values=49152; bytes=196608; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq64-layer0-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq64-layer0-value.f32le"
+shape = "[64, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=f6af5fdee42f61374838e8c0ef00da23172ba2bede0140cc7771e83d5e366fcb; values=49152; bytes=196608; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq64-layer6-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq64-layer6-key.f32le"
+shape = "[64, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.6.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=d86b0838b851780118ac979780c2880e2c75df40ba97186632010d0bffcee848; values=49152; bytes=196608; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq64-layer6-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq64-layer6-value.f32le"
+shape = "[64, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.6.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=c008b84ee04d4cba79321c7284ff1682220108233d3e81815ad6b3e1534176a3; values=49152; bytes=196608; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq64-layer11-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq64-layer11-key.f32le"
+shape = "[64, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.11.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=a0e77771c6e410326d92e35cd4e4e54758776be20116d6cf631d484990ed5bf9; values=49152; bytes=196608; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq64-layer11-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq64-layer11-value.f32le"
+shape = "[64, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.11.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=1b93e5275a81f185f560e0e7f9e7731a353b29e8f6fb77c381a53eeb2ca6d0a0; values=49152; bytes=196608; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq256-layer0-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq256-layer0-key.f32le"
+shape = "[256, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=171631a231775fd38eedad3607fcb07cd4e692b97db37de516d63e8bcefe29bc; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq256-layer0-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq256-layer0-value.f32le"
+shape = "[256, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=2e851af6e922711f95217f8b43d9167dc37655b21da096ba65e4dce53db506c0; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq256-layer6-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq256-layer6-key.f32le"
+shape = "[256, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.6.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=0352f7f0d5ad2b425e4fe2bfd212eb43dd24c768f5b6d745e789552bcf36b796; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq256-layer6-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq256-layer6-value.f32le"
+shape = "[256, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.6.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=b5cbdc76ade2d13a4a06de83a56e952964a42bc6b280df19c9b1de2bb9b278a8; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq256-layer11-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq256-layer11-key.f32le"
+shape = "[256, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.11.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=cfbece953197faf4aa467dfb90ec8361d3747bdc23310f2d898d9e90665e4e7b; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq256-layer11-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq256-layer11-value.f32le"
+shape = "[256, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.11.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=de3095118b1e368008fef4a249885c400af6dde989727b40eb41d260a212a0a5; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq512-layer0-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq512-layer0-key.f32le"
+shape = "[512, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=22f11d89964b48207a5cd73551f823299eec99381ca073c6f643b0340486bfc1; values=393216; bytes=1572864; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq512-layer0-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq512-layer0-value.f32le"
+shape = "[512, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=e4265ac48bf1123b3d3abdcbf1cbd37cf9454c9bc5ed522cb33c232fb731f629; values=393216; bytes=1572864; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq512-layer6-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq512-layer6-key.f32le"
+shape = "[512, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.6.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=4d6174a6c8957205f7da398cac78f950d0e39b654fcb4495147d30ba54ce8f89; values=393216; bytes=1572864; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq512-layer6-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq512-layer6-value.f32le"
+shape = "[512, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.6.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=1442c00e66b5fcb9b443655ef6255d5999e6ad91fa50541ad7309499135d6bb9; values=393216; bytes=1572864; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq512-layer11-key"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq512-layer11-key.f32le"
+shape = "[512, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.11.key; tensor_role=key; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=70d6bc42a1e64fa9854b8eac20a573bdb657d51c9ff87ed8768ed31740e73d7d; values=393216; bytes=1572864; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "gpt2-seq512-layer11-value"
+path = "../captures/permeantos-20260621-expanded/gpt2-seq512-layer11-value.f32le"
+shape = "[512, 12, 64]"
+notes = "model=gpt2; model_family=gpt2; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.11.value; tensor_role=value; runtime_tensor_dtype=mlx.core.float32; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=89aa51cb65e1fe2de618f2756650f98dd955830a5f208b3fc2891b2e0aedf4b2; values=393216; bytes=1572864; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq64-layer0-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq64-layer0-key.f32le"
+shape = "[64, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=cb646a8762f3d50f9983ecc5bafa0f080afa257c94ee0d7a7f34cb9e33eb4756; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq64-layer0-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq64-layer0-value.f32le"
+shape = "[64, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=377fad734aadedd8ec7ed4a1edd9ad77f9670c2b8c32d225d0258ffa272d8b3c; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq64-layer16-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq64-layer16-key.f32le"
+shape = "[64, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.16.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=689e62cefa14cdd8ba62cd813ac3e4f61369d23aec7f925f6e1720de5e392d13; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq64-layer16-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq64-layer16-value.f32le"
+shape = "[64, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.16.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=38fbbef893bb8266f50124213a9686638e523ab6b80372c591d95e0e8402b9ac; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq64-layer31-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq64-layer31-key.f32le"
+shape = "[64, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=334b7e2b9069b85e4f7f987cbe3dd944bbfdaa1551e11ac78359819f58cebc7a; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq64-layer31-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq64-layer31-value.f32le"
+shape = "[64, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=3351a2fd33f9a927612af47835c1f90c9ad8abd0d7914d954ba47443560374bd; values=196608; bytes=786432; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq256-layer0-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq256-layer0-key.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=8b1bd5d62f904efca2976a8b5da74dfaaad06e79855a9ba032d5792728ae00cf; values=786432; bytes=3145728; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq256-layer0-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq256-layer0-value.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=b3f8669e49ed050727899c532442c3b16312f59f6637ac17ee65f56dc1f55604; values=786432; bytes=3145728; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq256-layer16-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq256-layer16-key.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.16.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=29eec69bd3acd75d93057ca09cc9eacc1cf6ca23b6bf5ada5b5d06650e87d31c; values=786432; bytes=3145728; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq256-layer16-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq256-layer16-value.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.16.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=c4d76f5c8cf23d3aaa6470d9a3aedbc0f1911e9e174b985690550e1584811e04; values=786432; bytes=3145728; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq256-layer31-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq256-layer31-key.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=2cc75b7f64db8ac3a1f19420600f89a0e0b415ca4f23164085db6707f4e970a4; values=786432; bytes=3145728; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq256-layer31-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq256-layer31-value.f32le"
+shape = "[256, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=d56cf00477dbfbb6027a25d7b5c4092b810f1ef37cfc40467141a4269b773378; values=786432; bytes=3145728; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq512-layer0-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512-layer0-key.f32le"
+shape = "[512, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=f8c37da2a92e386bc3b8b7294246ede283f8fe28da15a54c5dac4ecced7f167f; values=1572864; bytes=6291456; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq512-layer0-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512-layer0-value.f32le"
+shape = "[512, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=477c1c23610468f15c868003917604239174a450b9bd63ab6e577947df4ab3ab; values=1572864; bytes=6291456; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq512-layer16-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512-layer16-key.f32le"
+shape = "[512, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.16.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=49a699fc18ac325211b0a14a793536b6d54181ec57eb59cf6b004ed274af931d; values=1572864; bytes=6291456; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq512-layer16-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512-layer16-value.f32le"
+shape = "[512, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.16.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=5e3916afb723d09f0922eee57239c5cb3f2b3e256351b1ac01e27335eeb2b151; values=1572864; bytes=6291456; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq512-layer31-key"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512-layer31-key.f32le"
+shape = "[512, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=03a93cb2ed9210c00aff41a04881a3c4ae0ae3017a88a62f292202510dc7af3b; values=1572864; bytes=6291456; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "microsoft-phi-3-5-mini-instruct-seq512-layer31-value"
+path = "../captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512-layer31-value.f32le"
+shape = "[512, 32, 96]"
+notes = "model=microsoft/Phi-3.5-mini-instruct; model_family=phi3.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.31.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=7f7d00196256ad1011945e59beb852f27a279bd1cef4097c83bf93d990891c66; values=1572864; bytes=6291456; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen-qwen2-5-7b-instruct-seq64-layer0-key"
+path = "../captures/permeantos-20260621-expanded/qwen-qwen2-5-7b-instruct-seq64-layer0-key.f32le"
+shape = "[64, 4, 128]"
+notes = "model=Qwen/Qwen2.5-7B-Instruct; model_family=qwen2.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=a3335c11561a7b4bdffe5d01a6fdc379b12bc10d9350f318ebb99567505a9b8f; values=32768; bytes=131072; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen-qwen2-5-7b-instruct-seq64-layer0-value"
+path = "../captures/permeantos-20260621-expanded/qwen-qwen2-5-7b-instruct-seq64-layer0-value.f32le"
+shape = "[64, 4, 128]"
+notes = "model=Qwen/Qwen2.5-7B-Instruct; model_family=qwen2.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.0.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=02146cc15afc9c368602667d385d759d3e9a667785b5c5e096a397f1fdc0ae82; values=32768; bytes=131072; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen-qwen2-5-7b-instruct-seq64-layer14-key"
+path = "../captures/permeantos-20260621-expanded/qwen-qwen2-5-7b-instruct-seq64-layer14-key.f32le"
+shape = "[64, 4, 128]"
+notes = "model=Qwen/Qwen2.5-7B-Instruct; model_family=qwen2.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.14.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=781eb3c8812f39d39b0fe618149907b9ff37918875e1d2d7f6eb1202f6a011f1; values=32768; bytes=131072; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen-qwen2-5-7b-instruct-seq64-layer14-value"
+path = "../captures/permeantos-20260621-expanded/qwen-qwen2-5-7b-instruct-seq64-layer14-value.f32le"
+shape = "[64, 4, 128]"
+notes = "model=Qwen/Qwen2.5-7B-Instruct; model_family=qwen2.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.14.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=2a6bfecb21fe9728cc197865de66c594b0fb0d97e363c0275d81da65676736be; values=32768; bytes=131072; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen-qwen2-5-7b-instruct-seq64-layer27-key"
+path = "../captures/permeantos-20260621-expanded/qwen-qwen2-5-7b-instruct-seq64-layer27-key.f32le"
+shape = "[64, 4, 128]"
+notes = "model=Qwen/Qwen2.5-7B-Instruct; model_family=qwen2.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.27.key; tensor_role=key; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=c18564417c2ec66127fdbb01d55081d139f31c0739d7e2523bd3d57eca18b908; values=32768; bytes=131072; run_id=permeantos-20260621-expanded"
+
+[fixture]
+group = "permeantos-kv"
+name = "qwen-qwen2-5-7b-instruct-seq64-layer27-value"
+path = "../captures/permeantos-20260621-expanded/qwen-qwen2-5-7b-instruct-seq64-layer27-value.f32le"
+shape = "[64, 4, 128]"
+notes = "model=Qwen/Qwen2.5-7B-Instruct; model_family=qwen2.5; scenario=local MLX source expanded QATQ evidence capture; runtime_path=local MLX source tensor extraction; source_tensor=layer.27.value; tensor_role=value; runtime_tensor_dtype=mlx.core.bfloat16; export_dtype=raw-little-endian-ieee754-f32-no-header; sha256=ed1e86fc2ed5e0b340f1bbb0ce63dceab21b0cb1d8413cfb47b4eb0c86c297c1; values=32768; bytes=131072; run_id=permeantos-20260621-expanded"

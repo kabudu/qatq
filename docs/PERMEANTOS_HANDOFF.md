@@ -2,18 +2,19 @@
 
 ## Current Next Run
 
-The current PermeantOS task is no longer just fixture capture. QATQ has a
-production storage-decision API and the throughput-normalized gate now passes
-on the 50-fixture PermeantOS evidence set.
+The PermeantOS production decision-path run has completed successfully. QATQ has
+a production storage-decision API, the throughput-normalized gate passes on the
+50-fixture PermeantOS evidence set, and PermeantOS has now validated both live
+migration storage branches.
 
-Use this document for general evidence-run background, but use the current
-next-run instructions as the source of truth for the next PermeantOS execution:
+Use this document for general evidence-run background. The latest completed live
+integration result is summarized in:
 
 ```text
-handoff/permeantos/NEXT_RUN_INSTRUCTIONS.md
+handoff/permeantos/LIVE_DECISION_PATH_RESULTS.md
 ```
 
-That run must exercise both production paths:
+The executed run exercised both production paths:
 
 - `Phase2EncodeDecision::Compressed` for compression-positive bfloat16-derived
   KV tensors;
@@ -26,9 +27,10 @@ The large-tensor readiness gate is now
 analysis, but it should not block large-tensor readiness by itself.
 
 The remaining sections are the retained evidence-capture runbook. They still
-apply when PermeantOS is producing new raw tensor fixtures, but the current
-production integration task is governed by
-`handoff/permeantos/NEXT_RUN_INSTRUCTIONS.md`.
+apply when PermeantOS is producing new raw tensor fixtures. The previous
+production integration instructions in `handoff/permeantos/NEXT_RUN_INSTRUCTIONS.md`
+should now be treated as a regression recipe for revalidating the live migration
+path after codec or PermeantOS transfer changes.
 
 ## Direct Task For PermeantOS
 

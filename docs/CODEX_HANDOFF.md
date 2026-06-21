@@ -9,9 +9,9 @@ Open the next dedicated Codex session in:
 Suggested next goal:
 
 ```text
-Use Lazarus mode to integrate and validate the QATQ Phase 2 storage-decision
-API in PermeantOS, exercising both compressed and raw pass-through paths, then
-analyze the returned end-to-end exactness and timing evidence.
+Use Lazarus mode to convert the PermeantOS live migration evidence into the
+next QATQ engineering increment: gate-policy cleanup, paper/white-paper result
+updates, and throughput-focused optimization without weakening bit-exactness.
 ```
 
 Reference paper URL:
@@ -35,6 +35,9 @@ Important current-state notes:
 - Production callers should use `try_encode_phase2_lossless_decision_with_config`.
   `Compressed` means store/transmit a QATQ Phase 2 payload. `PassThroughRaw`
   means store/transmit raw f32le bytes and record QATQ pass-through metadata.
+- PermeantOS has exercised both decision branches on the live migration path.
+  See `handoff/permeantos/LIVE_DECISION_PATH_RESULTS.md` and
+  `handoff/permeantos/RUN_NOTES.md`.
 - The `QATC` container wraps multiple Phase 2 payloads for sequential large
   tensor files. Random-access metadata and service-level streaming remain
   future work.
@@ -45,5 +48,7 @@ Important current-state notes:
   service-budget analysis.
 - Current PermeantOS next-run instructions are in
   `handoff/permeantos/NEXT_RUN_INSTRUCTIONS.md`.
+- The PermeantOS next-run instructions have been executed successfully; retain
+  them as the integration recipe and regression checklist.
 - General-purpose byte compression is out of scope unless evidence shows the
   transform improves residual entropy on non-KV tensor payloads.
