@@ -17,6 +17,7 @@ cargo fmt
 cargo test rejects_nonzero_reserved_header_bytes
 cargo test byte_plane
 cargo test phase2_lossless_container
+cargo test phase2_decision
 cargo test --test cli
 cargo test --test bench
 cargo check
@@ -33,6 +34,7 @@ Results:
 - `cargo test rejects_nonzero_reserved_header_bytes`: passed.
 - `cargo test byte_plane`: passed.
 - `cargo test phase2_lossless_container`: passed.
+- `cargo test phase2_decision`: passed.
 - `cargo test --test cli`: passed.
 - `cargo test --test bench`: passed.
 - `cargo check`: passed.
@@ -41,9 +43,9 @@ Results:
 - absolute-latency gate: failed as expected on the two largest Phi captures; exactness, ratio, and encode checks passed.
 - throughput-normalized gate: passed for all 8 real PermeantOS captures.
 - `cargo fmt --check`: passed.
-- Tests: 82 passed, 0 failed.
-  - library tests: 59 passed.
-  - benchmark integration tests: 9 passed.
+- Tests: 86 passed, 0 failed.
+  - library tests: 61 passed.
+  - benchmark integration tests: 11 passed.
   - CLI integration tests: 14 passed.
 - Benchmark report: regenerated at [BENCHMARKS.md](BENCHMARKS.md).
 - Paper table report: regenerated at [PAPER_TABLES.md](PAPER_TABLES.md).
@@ -71,6 +73,9 @@ Coverage added:
 - adjacent-bit Phase 2 delta-XOR byte-plane RLE strategy selection for
   correlated exact bitstreams;
 - public Phase 2 strategy inspection for encoded exact payloads;
+- public Phase 2 storage-decision APIs that return either a compressed QATQ
+  payload or raw f32le pass-through bytes when the selected exact strategy is
+  `raw-bits`;
 - bounded Phase 2 RLE strategy probing for incompressible streams;
 - direct Phase 2 byte-plane RLE strategy probing without materializing the
   plane buffer, with byte-for-byte equivalence against the former materialized

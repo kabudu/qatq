@@ -285,6 +285,49 @@ pub enum Phase2Strategy {
     BytePlaneBlocks,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Phase2EncodeDecision {
+    Compressed {
+        payload: Vec<u8>,
+        strategy: Phase2Strategy,
+        raw_f32le_len: usize,
+    },
+    PassThroughRaw {
+        bytes: Vec<u8>,
+    },
+}
+
+impl Phase2EncodeDecision {
+    pub fn should_compress(&self) -> bool {
+        matches!(self, Self::Compressed { .. })
+    }
+
+    pub fn should_pass_through(&self) -> bool {
+        matches!(self, Self::PassThroughRaw { .. })
+    }
+
+    pub fn strategy(&self) -> Option<Phase2Strategy> {
+        match self {
+            Self::Compressed { strategy, .. } => Some(*strategy),
+            Self::PassThroughRaw { .. } => None,
+        }
+    }
+
+    pub fn stored_bytes(&self) -> &[u8] {
+        match self {
+            Self::Compressed { payload, .. } => payload,
+            Self::PassThroughRaw { bytes } => bytes,
+        }
+    }
+
+    pub fn raw_f32le_len(&self) -> usize {
+        match self {
+            Self::Compressed { raw_f32le_len, .. } => *raw_f32le_len,
+            Self::PassThroughRaw { bytes } => bytes.len(),
+        }
+    }
+}
+
 impl Phase2Strategy {
     fn from_id(id: u8) -> Result<Self, QatqError> {
         match id {
@@ -407,6 +450,39 @@ pub fn try_encode_phase2_lossless_with_config(
 ) -> Result<Vec<u8>, QatqError> {
     validate_single_payload_value_count(values.len())?;
     Ok(encode_phase2_lossless_unchecked(values, config))
+}
+
+pub fn encode_phase2_lossless_decision(values: &[f32]) -> Phase2EncodeDecision {
+    encode_phase2_lossless_decision_with_config(values, Phase1Config::default())
+}
+
+pub fn encode_phase2_lossless_decision_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Phase2EncodeDecision {
+    try_encode_phase2_lossless_decision_with_config(values, config)
+        .expect("value count exceeds single-payload bound; use chunked APIs")
+}
+
+pub fn try_encode_phase2_lossless_decision_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Result<Phase2EncodeDecision, QatqError> {
+    validate_single_payload_value_count(values.len())?;
+    let raw_f32le_len = checked_value_byte_len(values.len())?;
+    let payload = encode_phase2_lossless_unchecked(values, config);
+    let strategy = phase2_lossless_strategy(&payload)?;
+    if strategy == Phase2Strategy::RawBits {
+        Ok(Phase2EncodeDecision::PassThroughRaw {
+            bytes: encode_f32_bits_le(values),
+        })
+    } else {
+        Ok(Phase2EncodeDecision::Compressed {
+            payload,
+            strategy,
+            raw_f32le_len,
+        })
+    }
 }
 
 fn encode_phase2_lossless_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
@@ -1504,6 +1580,14 @@ fn encode_f32_bits_be(values: &[f32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(values.len() * 4);
     for value in values {
         out.extend_from_slice(&value.to_bits().to_be_bytes());
+    }
+    out
+}
+
+fn encode_f32_bits_le(values: &[f32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(values.len() * 4);
+    for value in values {
+        out.extend_from_slice(&value.to_bits().to_le_bytes());
     }
     out
 }
@@ -2723,6 +2807,51 @@ mod tests {
             f32_bits(&decode_phase2_lossless(&encoded).unwrap()),
             f32_bits(&values)
         );
+    }
+
+    #[test]
+    fn phase2_decision_passes_through_raw_bits_as_f32le() {
+        let values = [
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1122_3344),
+            f32::from_bits(0x5566_7788),
+            f32::from_bits(0x99aa_bbcc),
+        ];
+        let decision =
+            try_encode_phase2_lossless_decision_with_config(&values, Phase1Config::default())
+                .unwrap();
+
+        let expected = encode_f32_bits_le(&values);
+        assert!(decision.should_pass_through());
+        assert!(!decision.should_compress());
+        assert_eq!(decision.strategy(), None);
+        assert_eq!(decision.raw_f32le_len(), expected.len());
+        assert_eq!(decision.stored_bytes(), expected.as_slice());
+    }
+
+    #[test]
+    fn phase2_decision_compresses_non_raw_strategy() {
+        let values = vec![0.0_f32; 128];
+        let decision = encode_phase2_lossless_decision(&values);
+
+        match decision {
+            Phase2EncodeDecision::Compressed {
+                payload,
+                strategy,
+                raw_f32le_len,
+            } => {
+                assert_eq!(strategy, Phase2Strategy::BytePlaneBlocks);
+                assert_eq!(raw_f32le_len, values.len() * 4);
+                assert!(payload.len() < raw_f32le_len);
+                assert_eq!(
+                    f32_bits(&decode_phase2_lossless(&payload).unwrap()),
+                    f32_bits(&values)
+                );
+            }
+            Phase2EncodeDecision::PassThroughRaw { .. } => {
+                panic!("compressible values should return a compressed decision")
+            }
+        }
     }
 
     #[test]

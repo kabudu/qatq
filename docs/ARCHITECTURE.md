@@ -170,6 +170,20 @@ than encode time. Phase 2 is compression-positive on the current real
 PermeantOS KV fixtures, but the fixture set is still too small for broad
 production claims. The `lossless-f32` mode remains the exact envelope control.
 
+Production callers should use `encode_phase2_lossless_decision` or
+`try_encode_phase2_lossless_decision_with_config` when deciding what to store.
+These APIs make the benchmark gate policy first-class:
+
+- `Compressed` returns a normal `QATQ` Phase 2 payload, the selected
+  `Phase2Strategy`, and the original raw f32le byte length.
+- `PassThroughRaw` returns raw little-endian f32 bytes when Phase 2 would choose
+  the `raw-bits` strategy. That is an explicit instruction to bypass QATQ/QATC
+  storage for that tensor rather than persist a compression-negative exact
+  envelope.
+
+The existing `encode_phase2_lossless*` APIs still always return a valid `QATQ`
+payload for research, inspection, and compatibility tests.
+
 Decoder safety bounds:
 
 - payload headers are rejected above `67,108,864` f32 values per payload;
@@ -194,6 +208,8 @@ Decoder safety bounds:
   `phase2_lossless_strategy`, and benchmark reports include that label so paper
   evidence can distinguish raw fallback, byte-plane coding, delta-XOR coding,
   and predictor fallback.
+- Public Phase 2 storage-decision APIs expose the production compress vs raw
+  pass-through decision without requiring callers to parse benchmark reports.
 - Phase 2 byte-RLE decode writes f32 values directly from validated runs instead
   of materializing an intermediate byte stream.
 - Phase 2 byte-plane decode writes validated plane runs into a preallocated word
