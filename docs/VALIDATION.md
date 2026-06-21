@@ -59,8 +59,8 @@ Results:
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
 - `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
 - `cargo package --list --allow-dirty`: passed.
-- Tests: 98 passed, 0 failed.
-  - library tests: 69 passed.
+- Tests: 101 passed, 0 failed.
+  - library tests: 72 passed.
   - benchmark integration tests: 13 passed.
   - CLI integration tests: 16 passed.
 - Public benchmark report: regenerated at [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md).
@@ -76,6 +76,10 @@ Coverage added:
 - `turboquant-q4` reference baseline round trip shape preservation and
   compression ratio;
 - `turboquant-q4` deterministic seed/config behavior;
+- `turboquant-q4` QJL inner-product estimator consistency with the
+  QJL-corrected decoded vector;
+- `turboquant-q4` query-length mismatch rejection for inner-product estimates;
+- `turboquant-q4` invalid residual-norm rejection;
 - deterministic Phase 1 seed/config behavior;
 - empty Phase 1 tensor handling;
 - partial quaternion-lane handling;

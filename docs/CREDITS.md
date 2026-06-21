@@ -16,10 +16,9 @@ DeepMind / NYU work:
   extreme compression", published March 24, 2026.
 
 The QATQ `turboquant-q4` mode is a reference base-comparator path. It implements
-deterministic data-oblivious orthogonal rotation plus scalar q4 quantization for
-codec-level comparison against the quaternion overlay. It is not an official
-Google implementation and does not yet expose the full TurboQuant query-side
-QJL inner-product estimator.
+deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and a
+QJL residual sign estimator for query-side inner products. It is not an
+official Google implementation.
 
 ## Quaternion Lineage
 

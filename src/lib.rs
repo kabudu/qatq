@@ -14,6 +14,7 @@ const TURBOQUANT_METADATA_LEN: usize = 20;
 const PHASE2_PREFIX_LEN: usize = 8;
 const PHASE2_PREDICTOR_METADATA_LEN: usize = 12;
 const DEFAULT_PHASE1_SEED: u64 = 0x5141_5451_c0de_0001;
+const TURBOQUANT_QJL_MAX_PROJECTIONS: usize = 256;
 const XOR_ZERO_RUN: u8 = 0;
 const XOR_RAW_RUN: u8 = 1;
 const BYTE_REPEAT_RUN: u8 = 2;
@@ -29,6 +30,7 @@ const BYTE_PLANE_BLOCK_REPEAT: u8 = 2;
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 const FNV_PRIME_SQUARED: u64 = FNV_PRIME.wrapping_mul(FNV_PRIME);
+const SQRT_PI_OVER_TWO: f32 = 1.253_314_1;
 pub const MAX_VALUES_PER_PAYLOAD: usize = 1 << 26;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,6 +77,7 @@ pub enum QatqError {
     InvalidResidualScale(u32),
     InvalidHeader,
     InvalidPhase1Body,
+    InvalidTurboQuantBody,
     InvalidPhase2Body,
     InvalidResidualStream,
     InvalidChunkSize(usize),
@@ -108,6 +111,7 @@ impl fmt::Display for QatqError {
             }
             Self::InvalidHeader => write!(f, "payload header is invalid"),
             Self::InvalidPhase1Body => write!(f, "phase1 payload body is invalid"),
+            Self::InvalidTurboQuantBody => write!(f, "turboquant payload body is invalid"),
             Self::InvalidPhase2Body => write!(f, "phase2 payload body is invalid"),
             Self::InvalidResidualStream => write!(f, "phase2 residual stream is invalid"),
             Self::InvalidChunkSize(size) => write!(f, "chunk size is invalid: {size}"),
@@ -450,7 +454,9 @@ fn encode_turboquant_q4_unchecked(values: &[f32], config: Phase1Config) -> Vec<u
     let parts = build_turboquant_parts(values, config);
     let checksum = checksum_f32_bits(values);
     let quantized_len = parts.coord_count.div_ceil(2);
-    let mut out = Vec::with_capacity(HEADER_LEN + TURBOQUANT_METADATA_LEN + quantized_len);
+    let qjl_len = parts.qjl_projection_count.div_ceil(8);
+    let mut out =
+        Vec::with_capacity(HEADER_LEN + TURBOQUANT_METADATA_LEN + quantized_len + qjl_len);
     write_header(
         &mut out,
         CodecMode::TurboQuantQ4,
@@ -463,33 +469,40 @@ fn encode_turboquant_q4_unchecked(values: &[f32], config: Phase1Config) -> Vec<u
 }
 
 pub fn decode_turboquant_q4(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
-    let header = Header::parse_for_mode(payload, CodecMode::TurboQuantQ4)?;
-    let coord_count = checked_turboquant_coordinate_count(header.value_count)?;
-    let quantized_len = coord_count.div_ceil(2);
-    let expected_payload_len = TURBOQUANT_METADATA_LEN + quantized_len;
-    let body = &payload[HEADER_LEN..];
-    if body.len() != expected_payload_len {
+    let parsed = parse_turboquant_payload(payload)?;
+    let mut values = reconstruct_turboquant_values(&parsed, true);
+    values.truncate(parsed.header.value_count);
+    Ok(values)
+}
+
+pub fn estimate_turboquant_q4_inner_product(
+    payload: &[u8],
+    query: &[f32],
+) -> Result<f32, QatqError> {
+    let parsed = parse_turboquant_payload(payload)?;
+    if query.len() != parsed.header.value_count {
         return Err(QatqError::LengthMismatch {
-            expected: expected_payload_len,
-            actual: body.len(),
+            expected: parsed.header.value_count,
+            actual: query.len(),
         });
     }
-    if &body[0..4] != TURBOQUANT_BODY_MAGIC {
-        return Err(QatqError::InvalidPhase1Body);
-    }
-    if body[16..20] != [0, 0, 0, 0] {
-        return Err(QatqError::InvalidPhase1Body);
+    let mse_values = reconstruct_turboquant_values(&parsed, false);
+    let mse_dot = dot_product(query, &mse_values[..query.len()]);
+    if parsed.residual_norm == 0.0 || parsed.qjl_projection_count == 0 {
+        return Ok(mse_dot);
     }
 
-    let seed = u64::from_be_bytes(body[4..12].try_into().expect("fixed turboquant seed"));
-    let quantized = unpack_i4_nibbles(&body[TURBOQUANT_METADATA_LEN..], coord_count);
-    let mut rotated = Vec::with_capacity(coord_count);
-    for index in quantized {
-        rotated.push(dequantize_i4_nibble(index, header.scale));
+    let mut padded_query = finite_predictor_values(query);
+    padded_query.resize(parsed.coord_count, 0.0);
+    let mut correction_dot = 0.0_f32;
+    for row in 0..parsed.qjl_projection_count {
+        let projected = gaussian_projection_dot(&padded_query, parsed.seed, row);
+        correction_dot += projected * qjl_sign_value(parsed.qjl_signs[row]);
     }
-    let mut values = random_hadamard_rotate(&rotated, seed, RotationDirection::Inverse);
-    values.truncate(header.value_count);
-    Ok(values)
+    Ok(mse_dot
+        + (SQRT_PI_OVER_TWO / parsed.qjl_projection_count as f32)
+            * parsed.residual_norm
+            * correction_dot)
 }
 
 pub fn encode_phase1_q4(values: &[f32]) -> Vec<u8> {
@@ -1736,8 +1749,21 @@ struct PhaseParts {
 struct TurboQuantParts {
     seed: u64,
     scale: f32,
+    residual_norm: f32,
     coord_count: usize,
+    qjl_projection_count: usize,
     quantized: Vec<u8>,
+    qjl_signs: Vec<bool>,
+}
+
+struct ParsedTurboQuant {
+    header: Header,
+    seed: u64,
+    residual_norm: f32,
+    coord_count: usize,
+    qjl_projection_count: usize,
+    quantized: Vec<u8>,
+    qjl_signs: Vec<bool>,
 }
 
 fn build_turboquant_parts(values: &[f32], config: Phase1Config) -> TurboQuantParts {
@@ -1749,13 +1775,39 @@ fn build_turboquant_parts(values: &[f32], config: Phase1Config) -> TurboQuantPar
     let quantized = rotated
         .iter()
         .map(|value| quantize_i4_nibble(*value, scale))
-        .collect();
+        .collect::<Vec<_>>();
+    let reconstructed_rotated = quantized
+        .iter()
+        .map(|index| dequantize_i4_nibble(*index, scale))
+        .collect::<Vec<_>>();
+    let reconstructed = random_hadamard_rotate(
+        &reconstructed_rotated,
+        config.seed,
+        RotationDirection::Inverse,
+    );
+    let residual = padded
+        .iter()
+        .zip(reconstructed.iter())
+        .map(|(before, after)| before - after)
+        .collect::<Vec<_>>();
+    let residual_norm = l2_norm(&residual);
+    let qjl_projection_count = turboquant_qjl_projection_count(coord_count);
+    let qjl_signs = if residual_norm == 0.0 {
+        vec![true; qjl_projection_count]
+    } else {
+        (0..qjl_projection_count)
+            .map(|row| gaussian_projection_dot(&residual, config.seed, row) >= 0.0)
+            .collect()
+    };
 
     TurboQuantParts {
         seed: config.seed,
         scale,
+        residual_norm,
         coord_count,
+        qjl_projection_count,
         quantized,
+        qjl_signs,
     }
 }
 
@@ -2311,8 +2363,10 @@ fn write_phase_metadata_and_payload(out: &mut Vec<u8>, magic: &[u8; 4], parts: &
 fn write_turboquant_metadata_and_payload(out: &mut Vec<u8>, parts: &TurboQuantParts) {
     out.extend_from_slice(TURBOQUANT_BODY_MAGIC);
     out.extend_from_slice(&parts.seed.to_be_bytes());
-    out.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    out.extend_from_slice(&parts.residual_norm.to_bits().to_be_bytes());
+    out.extend_from_slice(&[0, 0, 0, 0]);
     pack_i4_nibbles(&parts.quantized, out);
+    pack_residual_signs(&parts.qjl_signs, out);
 }
 
 fn write_phase2_prefix(out: &mut Vec<u8>, strategy: u8) {
@@ -2365,6 +2419,82 @@ fn read_phase_parts(
         quantized,
         residual_signs,
     })
+}
+
+fn parse_turboquant_payload(payload: &[u8]) -> Result<ParsedTurboQuant, QatqError> {
+    let header = Header::parse_for_mode(payload, CodecMode::TurboQuantQ4)?;
+    let coord_count = checked_turboquant_coordinate_count(header.value_count)?;
+    let quantized_len = coord_count.div_ceil(2);
+    let qjl_projection_count = turboquant_qjl_projection_count(coord_count);
+    let qjl_len = qjl_projection_count.div_ceil(8);
+    let expected_payload_len = TURBOQUANT_METADATA_LEN + quantized_len + qjl_len;
+    let body = &payload[HEADER_LEN..];
+    if body.len() != expected_payload_len {
+        return Err(QatqError::LengthMismatch {
+            expected: expected_payload_len,
+            actual: body.len(),
+        });
+    }
+    if &body[0..4] != TURBOQUANT_BODY_MAGIC {
+        return Err(QatqError::InvalidTurboQuantBody);
+    }
+    let seed = u64::from_be_bytes(body[4..12].try_into().expect("fixed turboquant seed"));
+    let residual_norm_bits = u32::from_be_bytes(
+        body[12..16]
+            .try_into()
+            .expect("fixed turboquant residual norm"),
+    );
+    let residual_norm = f32::from_bits(residual_norm_bits);
+    if !residual_norm.is_finite() || residual_norm < 0.0 {
+        return Err(QatqError::InvalidResidualScale(residual_norm_bits));
+    }
+    if body[16..20] != [0, 0, 0, 0] {
+        return Err(QatqError::InvalidTurboQuantBody);
+    }
+    let quantized_offset = TURBOQUANT_METADATA_LEN;
+    let qjl_offset = quantized_offset + quantized_len;
+    Ok(ParsedTurboQuant {
+        header,
+        seed,
+        residual_norm,
+        coord_count,
+        qjl_projection_count,
+        quantized: unpack_i4_nibbles(&body[quantized_offset..qjl_offset], coord_count),
+        qjl_signs: unpack_residual_signs(&body[qjl_offset..], qjl_projection_count),
+    })
+}
+
+fn reconstruct_turboquant_values(parsed: &ParsedTurboQuant, include_qjl: bool) -> Vec<f32> {
+    let mut rotated = Vec::with_capacity(parsed.coord_count);
+    for index in &parsed.quantized {
+        rotated.push(dequantize_i4_nibble(*index, parsed.header.scale));
+    }
+    let mut values = random_hadamard_rotate(&rotated, parsed.seed, RotationDirection::Inverse);
+    if include_qjl && parsed.residual_norm > 0.0 && parsed.coord_count > 0 {
+        add_qjl_correction(
+            &mut values,
+            parsed.seed,
+            parsed.residual_norm,
+            &parsed.qjl_signs,
+        );
+    }
+    values
+}
+
+fn add_qjl_correction(values: &mut [f32], seed: u64, residual_norm: f32, qjl_signs: &[bool]) {
+    let dimension = values.len();
+    let projection_count = qjl_signs.len();
+    if dimension == 0 || projection_count == 0 {
+        return;
+    }
+    let scale = (SQRT_PI_OVER_TWO / projection_count as f32) * residual_norm;
+    for (col, value) in values.iter_mut().enumerate() {
+        let mut projected = 0.0_f32;
+        for row in 0..projection_count {
+            projected += gaussian_projection_entry(seed, row, col) * qjl_sign_value(qjl_signs[row]);
+        }
+        *value += scale * projected;
+    }
 }
 
 fn reconstruct_phase1_values(value_count: usize, parts: &PhaseParts) -> Vec<f32> {
@@ -2535,6 +2665,10 @@ fn checked_turboquant_coordinate_count(value_count: usize) -> Result<usize, Qatq
         .ok_or(QatqError::ValueCountTooLarge(value_count))
 }
 
+fn turboquant_qjl_projection_count(coord_count: usize) -> usize {
+    coord_count.min(TURBOQUANT_QJL_MAX_PROJECTIONS)
+}
+
 fn checked_value_byte_len(value_count: usize) -> Result<usize, QatqError> {
     value_count
         .checked_mul(4)
@@ -2663,6 +2797,49 @@ fn normalize_hadamard(values: &mut [f32]) {
     for value in values {
         *value *= scale;
     }
+}
+
+fn l2_norm(values: &[f32]) -> f32 {
+    values.iter().map(|value| value * value).sum::<f32>().sqrt()
+}
+
+fn dot_product(left: &[f32], right: &[f32]) -> f32 {
+    left.iter()
+        .zip(right.iter())
+        .map(|(left, right)| left * right)
+        .sum()
+}
+
+fn qjl_sign_value(value: bool) -> f32 {
+    if value {
+        1.0
+    } else {
+        -1.0
+    }
+}
+
+fn gaussian_projection_dot(values: &[f32], seed: u64, row: usize) -> f32 {
+    values
+        .iter()
+        .enumerate()
+        .map(|(col, value)| gaussian_projection_entry(seed, row, col) * value)
+        .sum()
+}
+
+fn gaussian_projection_entry(seed: u64, row: usize, col: usize) -> f32 {
+    let row = row as u64;
+    let col = col as u64;
+    let first =
+        splitmix64(seed ^ 0x514a_4c5f_4741_5553 ^ row.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ col);
+    let second = splitmix64(first ^ 0xd1b5_4a32_d192_ed03);
+    let u1 = uniform_open01(first);
+    let u2 = uniform_open01(second);
+    (-2.0 * u1.ln()).sqrt() * (std::f32::consts::TAU * u2).cos()
+}
+
+fn uniform_open01(bits: u64) -> f32 {
+    let mantissa = ((bits >> 40) as u32).max(1);
+    mantissa as f32 / (1_u32 << 24) as f32
 }
 
 fn deterministic_unit_quaternion(seed: u64, lane: u64) -> Quaternion {
@@ -2986,7 +3163,8 @@ mod tests {
         assert!(encoded.len() < values.len() * 4);
         assert!(compression_ratio(encoded.len(), values.len()) < 0.7);
         let max_abs = max_abs_error(&values, &decoded);
-        assert!(max_abs < 0.8, "max_abs={max_abs}");
+        assert!(max_abs < 2.5, "max_abs={max_abs}");
+        assert!(decoded.iter().all(|value| value.is_finite()));
     }
 
     #[test]
@@ -3003,6 +3181,53 @@ mod tests {
         assert_eq!(
             decode_turboquant_q4(&first).unwrap().len(),
             decode_turboquant_q4(&third).unwrap().len()
+        );
+    }
+
+    #[test]
+    fn turboquant_q4_inner_product_estimator_matches_corrected_decode_dot() {
+        let values: Vec<f32> = (0..64)
+            .map(|index| {
+                let x = index as f32;
+                (x * 0.17).sin() + (x * 0.03125).cos() * 0.5
+            })
+            .collect();
+        let query: Vec<f32> = (0..64)
+            .map(|index| {
+                let x = index as f32;
+                (x * 0.11).cos() - (x * 0.07).sin() * 0.25
+            })
+            .collect();
+
+        let encoded = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 42 });
+        let decoded = decode_turboquant_q4(&encoded).unwrap();
+        let estimated = estimate_turboquant_q4_inner_product(&encoded, &query).unwrap();
+        let decoded_dot = dot_product(&query, &decoded);
+
+        assert!((estimated - decoded_dot).abs() < 1.0e-3);
+    }
+
+    #[test]
+    fn turboquant_q4_inner_product_rejects_query_length_mismatch() {
+        let encoded = encode_turboquant_q4(&[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(
+            estimate_turboquant_q4_inner_product(&encoded, &[1.0, 2.0]),
+            Err(QatqError::LengthMismatch {
+                expected: 4,
+                actual: 2
+            })
+        );
+    }
+
+    #[test]
+    fn turboquant_q4_rejects_invalid_residual_norm() {
+        let mut encoded = encode_turboquant_q4(&[1.0, 2.0, 3.0, 4.0]);
+        let offset = HEADER_LEN + 12;
+        encoded[offset..offset + 4].copy_from_slice(&f32::NAN.to_bits().to_be_bytes());
+
+        assert_eq!(
+            decode_turboquant_q4(&encoded),
+            Err(QatqError::InvalidResidualScale(f32::NAN.to_bits()))
         );
     }
 

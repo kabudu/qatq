@@ -34,9 +34,9 @@ The original seed implementation did not perform this full pipeline; it used a
 deterministic signed-int4 approximation to validate migration-style plumbing.
 
 The `turboquant-q4` mode is now the base TurboQuant-style comparator. It uses
-deterministic data-oblivious orthogonal rotation plus scalar q4 quantization
-without the quaternion overlay. It is not an official Google implementation and
-does not yet expose the full QJL query-side inner-product estimator.
+deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and a
+QJL residual sign estimator without the quaternion overlay. It is not an
+official Google implementation.
 
 ## Current Implementation Notes
 

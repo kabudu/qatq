@@ -24,9 +24,9 @@ experiment. It is useful for measurement but does not claim lossless
 reconstruction.
 
 The `turboquant-q4` mode is the current base reference path: deterministic
-data-oblivious orthogonal rotation plus scalar q4 quantization. It is included
-so the quaternion overlay can be measured against a non-quaternion baseline.
-Full query-side QJL inner-product estimator support remains future work.
+data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual
+signs for query-side inner-product estimation. It is included so the quaternion
+overlay can be measured against a non-quaternion baseline.
 
 ## Phase 2 - Lossless QATQ-Family Mode
 

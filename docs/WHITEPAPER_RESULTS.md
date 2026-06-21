@@ -61,8 +61,13 @@ against raw f32, software FP8 e4m3, seed lossy-i4, phase1-q4, phase2-lossless,
 phase2 exhaustive, and QATC container rows. These are codec-level baselines, not
 runtime-native hardware comparisons. The comparison now includes zstd/lz4
 raw-f32le byte-compression rows and a `turboquant-q4` base reference row. The
-`turboquant-q4` row is a QATQ reference comparator, not an official Google
-implementation and not a full query-side QJL estimator implementation.
+`turboquant-q4` row is a QATQ reference comparator with QJL residual signs for
+inner-product estimation, not an official Google implementation.
+
+The QJL reference path is currently intentionally direct rather than optimized:
+it uses bounded deterministic Gaussian projections and reports heavyweight
+timing with one iteration/sample. These rows are useful for correctness and
+paper-comparison structure, not yet for runtime-performance claims.
 
 ## Gate Policy
 
@@ -92,9 +97,9 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
 
 ## Remaining Work Before A Public Claim
 
-- Add the full TurboQuant QJL query-side inner-product estimator before making
-  query-quality claims against Google's TurboQuant paper.
 - Compare against runtime-native quantization baselines.
+- Add end-to-end query-quality experiments before making quality claims against
+  Google's TurboQuant paper.
 - Add model-quality or task-quality evaluation for lossy Phase 1.
 - Expand fuzzing duration in CI and add coverage/supply-chain checks.
 - Define a random-access or streaming container/service format if runtime
