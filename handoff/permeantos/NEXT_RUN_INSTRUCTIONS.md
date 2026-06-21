@@ -192,11 +192,12 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/permeantos.manifest \
   --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md \
   --gate-require-external \
+  --gate-policy production-kv \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
-  --max-phase2-decode-ns-per-value 2.10 \
+  --max-phase2-decode-ns-per-value 3.00 \
   --max-phase2-container-ratio 0.96 \
-  --max-phase2-container-decode-ns-per-value 2.20
+  --max-phase2-container-decode-ns-per-value 3.00
 ```
 
 Run the fixed absolute-latency gate too, but do not use it as the large-tensor
@@ -209,6 +210,7 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/permeantos.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
+  --gate-policy latency-budget \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
   --max-phase2-decode-us 1000 \

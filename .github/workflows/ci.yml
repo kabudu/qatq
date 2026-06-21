@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+
+jobs:
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format
+        run: cargo fmt --check
+      - name: Check
+        run: cargo check --all-targets
+      - name: Test
+        run: cargo test
+      - name: Check fuzz targets
+        run: cargo check --manifest-path fuzz/Cargo.toml
+      - name: Verify public fixtures
+        run: cargo run --bin qatq -- fixture verify --manifest fixtures/public.manifest --output docs/PUBLIC_FIXTURE_AUDIT.ci.md
+      - name: Public production gate
+        run: >
+          cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic
+          --manifest fixtures/public.manifest
+          --gate-output docs/PUBLIC_BENCHMARK_GATE.ci.md
+          --gate-require-external
+          --gate-policy production-kv
+          --max-phase2-ratio 0.96
+          --max-phase2-encode-us 5000
+          --max-phase2-decode-ns-per-value 50.00
+          --max-phase2-container-ratio 0.97
+          --max-phase2-container-decode-ns-per-value 50.00
+      - name: Package
+        run: cargo package --allow-dirty

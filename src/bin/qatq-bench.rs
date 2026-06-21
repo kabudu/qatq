@@ -123,13 +123,13 @@ fn run() -> Result<(), String> {
         "- `raw-f32le` is a transport-size and copy-cost control, not a compression codec.\n",
     );
     report.push_str("- `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.\n");
-    report.push_str("- `lossy-i4` is the original PermeantOS seed baseline.\n");
+    report.push_str("- `lossy-i4` is the original seed baseline.\n");
     report.push_str("- `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.\n");
     report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.\n");
     report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
     report.push_str("- `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.\n");
     report.push_str("- Phase 1 is still lossy. The residual side channel is an experiment for lowering reconstruction error, not a bit-identical lossless design.\n");
-    report.push_str("- Real PermeantOS/KV-cache results should be added as external fixtures and kept separate from synthetic rows in paper tables.\n");
+    report.push_str("- Runtime KV-cache results should be added as external fixtures and kept separate from synthetic rows in paper tables.\n");
     report.push_str("- External fixture values are loaded and benchmarked one dataset at a time; reports keep only metadata and result rows so multiple large captures do not remain resident together.\n");
 
     if let Some(path) = options.paper_output.as_ref() {
@@ -157,6 +157,7 @@ fn parse_options() -> Result<BenchOptions, String> {
     let mut paper_output = None;
     let mut gate_output = None;
     let mut gate_require_external = false;
+    let mut gate_policy = GatePolicy::Custom;
     let mut include_synthetic = true;
     let mut phase2_only = false;
     let mut max_phase2_ratio = None;
@@ -194,6 +195,10 @@ fn parse_options() -> Result<BenchOptions, String> {
             }
             "--gate-require-external" => {
                 gate_require_external = true;
+            }
+            "--gate-policy" => {
+                index += 1;
+                gate_policy = parse_gate_policy(args.get(index))?;
             }
             "--no-synthetic" => {
                 include_synthetic = false;
@@ -267,6 +272,7 @@ fn parse_options() -> Result<BenchOptions, String> {
         paper_output,
         gate_output,
         gate_require_external,
+        gate_policy,
         include_synthetic,
         phase2_only,
         max_phase2_ratio,
@@ -312,7 +318,7 @@ fn parse_fixture_input(spec: &str) -> Result<FixtureInput, String> {
 }
 
 fn usage() -> String {
-    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--gate-output <path>] [--gate-require-external] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
+    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
 }
 
 struct BenchOptions {
@@ -320,6 +326,7 @@ struct BenchOptions {
     paper_output: Option<PathBuf>,
     gate_output: Option<PathBuf>,
     gate_require_external: bool,
+    gate_policy: GatePolicy,
     include_synthetic: bool,
     phase2_only: bool,
     max_phase2_ratio: Option<f64>,
@@ -331,6 +338,47 @@ struct BenchOptions {
     max_phase2_container_decode_ns_per_value: Option<f64>,
     inputs: Vec<FixtureInput>,
     manifests: Vec<PathBuf>,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum GatePolicy {
+    Custom,
+    ProductionKv,
+    LatencyBudget,
+}
+
+impl GatePolicy {
+    fn label(self) -> &'static str {
+        match self {
+            GatePolicy::Custom => "custom",
+            GatePolicy::ProductionKv => "production-kv",
+            GatePolicy::LatencyBudget => "latency-budget",
+        }
+    }
+
+    fn readiness_role(self) -> &'static str {
+        match self {
+            GatePolicy::Custom => "caller-defined gate",
+            GatePolicy::ProductionKv => {
+                "production readiness for mixed-size external KV tensors; use throughput-normalized decode ns/value ceilings"
+            }
+            GatePolicy::LatencyBudget => {
+                "service-budget analysis; fixed absolute microsecond ceilings are not the large-tensor production readiness gate"
+            }
+        }
+    }
+}
+
+fn parse_gate_policy(value: Option<&String>) -> Result<GatePolicy, String> {
+    let value = value.ok_or_else(|| "--gate-policy requires a value".to_string())?;
+    match value.as_str() {
+        "custom" => Ok(GatePolicy::Custom),
+        "production-kv" => Ok(GatePolicy::ProductionKv),
+        "latency-budget" => Ok(GatePolicy::LatencyBudget),
+        other => Err(format!(
+            "invalid --gate-policy value {other}; expected custom, production-kv, or latency-budget"
+        )),
+    }
 }
 
 #[derive(Clone)]
@@ -911,6 +959,25 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
         );
     }
 
+    if options.gate_policy == GatePolicy::ProductionKv {
+        if options.max_phase2_decode_us.is_some()
+            || options.max_phase2_container_decode_us.is_some()
+            || options.max_phase2_decode_ns_per_value.is_none()
+            || options.max_phase2_container_decode_ns_per_value.is_none()
+        {
+            passed = false;
+            rows.push("| gate | production-kv policy | fail | production KV readiness requires decode ns/value ceilings and must not use fixed decode-us ceilings |".to_string());
+        }
+    }
+
+    if options.gate_policy == GatePolicy::LatencyBudget
+        && options.max_phase2_decode_us.is_none()
+        && options.max_phase2_container_decode_us.is_none()
+    {
+        passed = false;
+        rows.push("| gate | latency-budget policy | fail | latency-budget analysis requires at least one fixed decode-us ceiling |".to_string());
+    }
+
     for dataset in benchmarked {
         if evaluate_external_only && dataset.summary.source != DatasetSource::External {
             continue;
@@ -1059,6 +1126,11 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
     report.push_str(&format!(
         "- status: `{}`\n",
         if passed { "pass" } else { "fail" }
+    ));
+    report.push_str(&format!("- policy: `{}`\n", options.gate_policy.label()));
+    report.push_str(&format!(
+        "- readiness role: `{}`\n",
+        options.gate_policy.readiness_role()
     ));
     report.push_str(&format!("- evaluated fixtures: `{}`\n", rows.len()));
     report.push_str(&format!("- external fixtures: `{external_count}`\n"));
@@ -1251,7 +1323,7 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
 
     out.push_str("\n## Use In Paper Drafts\n\n");
     out.push_str("- Treat synthetic rows as method/debug evidence only.\n");
-    out.push_str("- Use external PermeantOS/KV-cache fixture groups for claims about runtime migration or model-state compression.\n");
+    out.push_str("- Use external runtime/KV-cache fixture groups for claims about runtime migration or model-state compression.\n");
     out.push_str("- Phase 2 exact rows are the current evidence base for lossless QATQ claims; Phase 1 lossy rows remain baseline/error-structure context.\n");
     out
 }

@@ -1,0 +1,30 @@
+# QATQ generated public fixture manifest
+# Regenerate with: cargo run --bin qatq -- fixture generate --manifest fixtures/public.manifest --dir fixtures/generated
+
+[fixture]
+group = "qatq-public"
+name = "bf16-kv-ramp-64x8x16"
+path = "generated/bf16-kv-ramp-64x8x16.f32le"
+shape = "[tokens=64, heads=8, dim=16]"
+notes = "generated public bfloat16-like KV ramp; low f32 mantissa bytes zeroed; values=8192"
+
+[fixture]
+group = "qatq-public"
+name = "bf16-kv-wave-128x8x16"
+path = "generated/bf16-kv-wave-128x8x16.f32le"
+shape = "[tokens=128, heads=8, dim=16]"
+notes = "generated public bfloat16-like KV wave; compression-positive phase2 fixture; values=16384"
+
+[fixture]
+group = "qatq-public"
+name = "f32-noisy-pass-through-64x12x16"
+path = "generated/f32-noisy-pass-through-64x12x16.f32le"
+shape = "[tokens=64, heads=12, dim=16]"
+notes = "generated public float32 noisy fixture; expected no-compress pass-through candidate; values=12288"
+
+[fixture]
+group = "qatq-public"
+name = "stress-signed-zero-nan-inf"
+path = "generated/stress-signed-zero-nan-inf.f32le"
+shape = "[values=4096]"
+notes = "generated public exactness stress fixture with signed zero, infinities, and NaN payload bits; values=4096"

@@ -1,0 +1,26 @@
+[package]
+name = "qatq-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+qatq = { path = ".." }
+
+[[bin]]
+name = "decode_payload"
+path = "fuzz_targets/decode_payload.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "phase2_roundtrip"
+path = "fuzz_targets/phase2_roundtrip.rs"
+test = false
+doc = false
+bench = false

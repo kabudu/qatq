@@ -52,7 +52,7 @@ total value count, then allocates the output vector once and decodes chunks.
 This avoids repeated growth on valid large files while rejecting bogus totals
 before allocation.
 
-This container is intentionally sequential. It is suitable for PermeantOS
+This container is intentionally sequential. It is suitable for runtime
 handoff artifacts and CLI round trips, but it does not yet provide random-access
 indexes or a long-lived streaming service protocol.
 
@@ -67,7 +67,7 @@ benchmark, paper-table, and gate reports.
 ## Phase 1 Quaternion Path
 
 The `phase1-q4` mode is the first training-free QATQ implementation. It is
-implemented as a separate mode so the original PermeantOS-compatible `lossy-i4`
+implemented as a separate mode so the original seed-baseline `lossy-i4`
 baseline remains stable for comparison.
 
 Encoding:
@@ -118,7 +118,7 @@ track therefore needs a residual:
 The `phase2-lossless` mode implements the first QATQ-family exact codec. The
 default encoder is latency-oriented: it accepts compression-positive byte-level
 or byte-plane candidates before probing delta-XOR byte-plane residuals or
-spending CPU on the QATQ predictor. Real PermeantOS KV-cache captures exposed a
+spending CPU on the QATQ predictor. Runtime KV-cache captures exposed a
 common exact pattern where the high two f32 byte planes vary and the low two
 byte planes are all zero, so Phase 2 also has a `byte-plane-blocks` strategy
 that stores each byte plane as raw, repeated, or zero. The
@@ -167,7 +167,7 @@ NaN payload bits. Fast selection prevents the predictor path from dominating
 encode latency when a byte-plane candidate already compresses exactly.
 Exhaustive selection can still be used when smallest payload search matters more
 than encode time. Phase 2 is compression-positive on the current real
-PermeantOS KV fixtures, but the fixture set is still too small for broad
+runtime KV fixtures, but the fixture set is still too small for broad
 production claims. The `lossless-f32` mode remains the exact envelope control.
 
 Production callers should use `encode_phase2_lossless_decision` or
@@ -218,9 +218,9 @@ Decoder safety bounds:
 - Phase 2 byte-plane block decode has direct fast paths for the common
   `raw, raw, zero, zero` and `raw, raw, raw, raw` plane layouts; it fuses
   checksum validation with f32 reconstruction to avoid a second pass over large
-  PermeantOS tensors.
+  bfloat16-derived tensors.
 - Phase 2 byte-plane block encode has a direct fast path for the common
-  `raw, raw, zero, zero` layout seen in bfloat16-derived PermeantOS KV
+  `raw, raw, zero, zero` layout seen in bfloat16-derived runtime KV
   captures. It builds the two raw high-byte planes directly from f32 values and
   fuses checksum calculation, avoiding the full raw-bit staging buffer.
 - QATC container decode rejects zero-chunk containers and pre-validates chunk

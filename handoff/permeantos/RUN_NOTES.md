@@ -60,12 +60,12 @@ The GPT-2 pass-through live run used:
 
 - `cargo fmt --check`: pass
 - `cargo check`: pass
-- `cargo test`: pass, 89 tests total across lib/bin/integration/doc targets
+- `cargo test`: pass, 91 tests total across lib/bin/integration/doc targets
 - fixture audit: regenerated `docs/FIXTURE_AUDIT.md`
 - phase2 benchmark report: regenerated `docs/BENCHMARKS.md`
 - paper tables: regenerated `docs/PAPER_TABLES.md`
-- throughput gate: pass, regenerated `docs/BENCHMARK_GATE_THROUGHPUT.md`
-- fixed absolute latency gate: fail by fixed decode-us ceilings on large tensors, regenerated `docs/BENCHMARK_GATE.md`
+- production KV throughput gate: pass, regenerated `docs/BENCHMARK_GATE_THROUGHPUT.md` with `--gate-policy production-kv`
+- fixed latency-budget gate: fail by fixed decode-us ceilings on large tensors, regenerated `docs/BENCHMARK_GATE.md` with `--gate-policy latency-budget`
 
 ## PermeantOS Validation Summary
 
@@ -77,6 +77,6 @@ The GPT-2 pass-through live run used:
 
 ## Follow-Up Expectations For QATQ
 
-- Keep the throughput gate as the primary production gate for mixed-size external KV captures.
-- Revisit the fixed absolute decode-us gate policy; it currently penalizes large tensors even when throughput and exactness are healthy.
+- Keep the `production-kv` throughput gate as the primary production gate for mixed-size external KV captures.
+- Treat the fixed decode-us gate as `latency-budget` analysis; it currently penalizes large tensors even when throughput and exactness are healthy.
 - Use PermeantOS live manifests above as the production integration proof for both decision branches.

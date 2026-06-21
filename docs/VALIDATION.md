@@ -22,12 +22,18 @@ cargo test byte_plane_blocks
 cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks
 cargo test --test cli
 cargo test --test bench
-cargo check
+cargo check --all-targets
 cargo test
-cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-us 1000 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-us 1200
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 2.10 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 2.20
+cargo run --example production_chunk
+cargo run --bin qatq -- fixture generate --manifest fixtures/public.manifest --dir fixtures/generated
+cargo run --bin qatq -- fixture verify --manifest fixtures/public.manifest --output docs/PUBLIC_FIXTURE_AUDIT.md
+cargo run --release --bin qatq-bench -- --no-synthetic --output docs/PUBLIC_COMPARATIVE_BASELINES.md --paper-output docs/PUBLIC_COMPARATIVE_TABLES.md --manifest fixtures/public.manifest
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/PUBLIC_BENCHMARKS.md --paper-output docs/PUBLIC_PAPER_TABLES.md --manifest fixtures/public.manifest
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.96 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 50.00 --max-phase2-container-ratio 0.97 --max-phase2-container-decode-ns-per-value 50.00
 cargo fmt --check
+cargo check --manifest-path fuzz/Cargo.toml
+cargo package --allow-dirty
+cargo package --list --allow-dirty
 ```
 
 Results:
@@ -41,20 +47,25 @@ Results:
 - `cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks`: passed.
 - `cargo test --test cli`: passed.
 - `cargo test --test bench`: passed.
-- `cargo check`: passed.
+- `cargo check --all-targets`: passed.
 - `cargo test`: passed.
-- `cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest`: passed.
-- absolute-latency gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed.
-- throughput-normalized gate: passed for all 50 real PermeantOS captures after the byte-plane-block encode fast path.
+- `cargo run --example production_chunk`: passed.
+- public fixture generation and audit: passed.
+- public comparative baseline report: passed.
+- public benchmark and paper reports: passed.
+- latency-budget gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed. This gate is service-budget analysis, not the large-tensor production readiness signal.
+- public production KV throughput gate: passed with the split `production-kv` policy and portable `50.00 ns/value` direct/container decode ceilings.
 - `cargo fmt --check`: passed.
-- Tests: 89 passed, 0 failed.
-  - library tests: 64 passed.
-  - benchmark integration tests: 11 passed.
-  - CLI integration tests: 14 passed.
-- Benchmark report: regenerated at [BENCHMARKS.md](BENCHMARKS.md).
-- Paper table report: regenerated at [PAPER_TABLES.md](PAPER_TABLES.md).
-- Absolute gate report: regenerated at [BENCHMARK_GATE.md](BENCHMARK_GATE.md).
-- Throughput-normalized gate report: generated at [BENCHMARK_GATE_THROUGHPUT.md](BENCHMARK_GATE_THROUGHPUT.md).
+- `cargo check --manifest-path fuzz/Cargo.toml`: passed.
+- `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
+- `cargo package --list --allow-dirty`: passed.
+- Tests: 95 passed, 0 failed.
+  - library tests: 67 passed.
+  - benchmark integration tests: 13 passed.
+  - CLI integration tests: 15 passed.
+- Public benchmark report: regenerated at [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md).
+- Public paper table report: regenerated at [PUBLIC_PAPER_TABLES.md](PUBLIC_PAPER_TABLES.md).
+- Public production KV throughput gate report: regenerated at [PUBLIC_BENCHMARK_GATE.md](PUBLIC_BENCHMARK_GATE.md).
 
 Coverage added:
 
@@ -73,7 +84,7 @@ Coverage added:
 - `phase2-lossless` deterministic seed/config behavior;
 - adaptive Phase 2 raw-bit, byte-RLE, and byte-plane RLE strategy selection;
 - byte-plane block strategy selection for repetitive whole-plane f32 byte
-  layouts in real PermeantOS captures;
+  layouts in bfloat16-derived runtime captures;
 - adjacent-bit Phase 2 delta-XOR byte-plane RLE strategy selection for
   correlated exact bitstreams;
 - public Phase 2 strategy inspection for encoded exact payloads;
@@ -166,7 +177,7 @@ Coverage added:
   into `f32` values instead of retaining a second full byte buffer.
 - Benchmark harness processes external fixture datasets one at a time and keeps
   only dataset metadata plus result rows after each benchmark, bounding peak
-  fixture residency for PermeantOS-scale manifests.
+  fixture residency for large runtime-scale manifests.
 - Benchmark harness smoke coverage for fixture manifests and `--paper-output`.
 - Benchmark gate pass/fail behavior for Phase 2 exact ratio/latency thresholds.
 - Benchmark gate pass/fail behavior for `QATC` container ratio thresholds.
@@ -195,11 +206,11 @@ Coverage added:
 
 Known validation limits:
 
-- Benchmarks use deterministic synthetic tensors, not live PermeantOS KV-cache
+- Benchmarks include deterministic public tensors, not live runtime KV-cache
   captures.
 - The FP8 comparison is a local finite-value software E4M3 baseline, not a
   hardware/runtime FP8 path.
 - Phase 1 quality metrics are codec reconstruction metrics only. Phase 2 exact
   metrics prove bit-identical f32 reconstruction locally, but they do not yet
   measure model perplexity, agent migration fidelity, latency inside
-  PermeantOS, residual entropy on real KV tensors, or downstream task success.
+  external runtimes, residual entropy on real KV tensors, or downstream task success.

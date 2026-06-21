@@ -109,8 +109,9 @@ Any bit-exactness failure is `failed`, not `analysis-only`.
 
 ## Operator Summary
 
-PermeantOS should treat this as a data-capture and evidence-generation task, not
-as a runtime integration task yet.
+PermeantOS should treat the retained sections below as the data-capture and
+evidence-generation runbook. The live runtime integration task has since been
+completed and is summarized in `handoff/permeantos/LIVE_DECISION_PATH_RESULTS.md`.
 
 The expected flow is:
 
@@ -120,7 +121,9 @@ The expected flow is:
 4. Add those captures to `fixtures/permeantos.manifest`.
 5. Verify the manifest and write `docs/FIXTURE_AUDIT.md`.
 6. Generate `docs/BENCHMARKS.md` and `docs/PAPER_TABLES.md`.
-7. Run the readiness gate and write `docs/BENCHMARK_GATE.md`.
+7. Run the production readiness gate and write
+   `docs/BENCHMARK_GATE_THROUGHPUT.md`; run the fixed latency-budget analysis
+   separately into `docs/BENCHMARK_GATE.md`.
 8. Run at least one direct `cmp` spot check for `QATQ` and, for large captures,
    one `QATC` container spot check.
 9. Return the manifest, reports, run notes, and either raw captures or stable
@@ -177,17 +180,19 @@ cargo run --release --bin qatq-bench -- \
   --paper-output docs/PAPER_TABLES.md \
   --manifest fixtures/permeantos.manifest
 
-# 9. Run the readiness gate against real external fixtures.
+# 9. Run the production readiness gate against real external fixtures.
 cargo run --release --bin qatq-bench -- \
   --phase2-only \
+  --no-synthetic \
   --manifest fixtures/permeantos.manifest \
-  --gate-output docs/BENCHMARK_GATE.md \
+  --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md \
   --gate-require-external \
+  --gate-policy production-kv \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
-  --max-phase2-decode-us 1000 \
+  --max-phase2-decode-ns-per-value 3.00 \
   --max-phase2-container-ratio 0.96 \
-  --max-phase2-container-decode-us 1200
+  --max-phase2-container-decode-ns-per-value 3.00
 
 # 10. Run at least one direct exact payload spot check.
 cargo run -- encode --mode phase2-lossless \
@@ -219,6 +224,7 @@ Required files:
 - `docs/FIXTURE_AUDIT.md`
 - `docs/BENCHMARKS.md`
 - `docs/PAPER_TABLES.md`
+- `docs/BENCHMARK_GATE_THROUGHPUT.md`
 - `docs/BENCHMARK_GATE.md`
 - `handoff/permeantos/RUN_NOTES.md`
 - `handoff/permeantos/commands.log` or equivalent command transcript
@@ -598,37 +604,41 @@ before replacing benchmark, paper-table, or gate reports.
 That single-input path is useful for smoke testing, but the final handoff should
 use `fixtures/permeantos.manifest` so metadata and fingerprints are preserved.
 
-## Run The Readiness Gate
+## Run The Production Readiness Gate
 
-Run the gate with explicit thresholds:
+Run the production KV gate with explicit throughput-normalized thresholds:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
   --phase2-only \
+  --no-synthetic \
   --manifest fixtures/permeantos.manifest \
-  --gate-output docs/BENCHMARK_GATE.md \
+  --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md \
   --gate-require-external \
+  --gate-policy production-kv \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
-  --max-phase2-decode-us 1000 \
+  --max-phase2-decode-ns-per-value 3.00 \
   --max-phase2-container-ratio 0.96 \
-  --max-phase2-container-decode-us 1200
+  --max-phase2-container-decode-ns-per-value 3.00
 ```
 
 Gate meaning:
 
 - `--gate-require-external` fails the run if no external fixtures were loaded.
+- `--gate-policy production-kv` fails the run if fixed decode-us ceilings are
+  mixed into the production KV gate.
 - `--max-phase2-ratio 0.95` requires `phase2-lossless` to produce output no
   larger than 95% of raw `f32` bytes for each benchmarked tensor.
 - `--max-phase2-encode-us 5000` requires encode time at or below 5000
   microseconds per benchmarked tensor on the current machine.
-- `--max-phase2-decode-us 1000` requires decode time at or below 1000
-  microseconds per benchmarked tensor on the current machine.
+- `--max-phase2-decode-ns-per-value 3.00` requires direct decode throughput at
+  or below 3.00 nanoseconds per f32 value.
 - `--max-phase2-container-ratio 0.96` requires the sequential `QATC` artifact
   to produce output no larger than 96% of raw `f32` bytes for each benchmarked
   tensor.
-- `--max-phase2-container-decode-us 1200` requires `QATC` decode time at or
-  below 1200 microseconds per benchmarked tensor on the current machine.
+- `--max-phase2-container-decode-ns-per-value 3.00` requires `QATC` decode
+  throughput at or below 3.00 nanoseconds per f32 value.
 - `--phase2-only` skips unrelated codec rows during readiness gates and times
   only `phase2-lossless` plus QATC.
 - bit-exact reconstruction is mandatory.
@@ -636,20 +646,21 @@ Gate meaning:
 The command exits nonzero if the gate fails. Keep failed gate reports. A failed
 gate is useful evidence and should be handed back to QATQ.
 
-For captures with substantially different value counts, also run the
-throughput-normalized decode gate:
+Run fixed absolute latency separately only as service-budget analysis:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
   --phase2-only \
+  --no-synthetic \
   --manifest fixtures/permeantos.manifest \
-  --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md \
+  --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
+  --gate-policy latency-budget \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
-  --max-phase2-decode-ns-per-value 2.10 \
+  --max-phase2-decode-us 1000 \
   --max-phase2-container-ratio 0.96 \
-  --max-phase2-container-decode-ns-per-value 2.20
+  --max-phase2-container-decode-us 1200
 ```
 
 Thresholds may be adjusted only when the reason is recorded in the run notes.
@@ -821,6 +832,7 @@ Return this handoff bundle:
 - `docs/FIXTURE_AUDIT.md`
 - `docs/BENCHMARKS.md`
 - `docs/PAPER_TABLES.md`
+- `docs/BENCHMARK_GATE_THROUGHPUT.md`
 - `docs/BENCHMARK_GATE.md`
 - `handoff/permeantos/RUN_NOTES.md`
 - `handoff/permeantos/commands.log` when available

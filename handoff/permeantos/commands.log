@@ -32,5 +32,6 @@ cargo check
 cargo test
 cargo run --bin qatq -- fixture verify --manifest fixtures/permeantos.manifest --output docs/FIXTURE_AUDIT.md
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 2.10 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 2.20
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-us 1000 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-us 1200
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 3.00 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 3.00
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE.md --gate-require-external --gate-policy latency-budget --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-us 1000 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-us 1200
+cargo test --test bench

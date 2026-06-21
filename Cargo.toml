@@ -2,12 +2,34 @@
 name = "qatq"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 description = "Quaternion-Augmented TurboQuant research codec for KV cache and tensor migration"
 license = "Apache-2.0"
 repository = "https://github.com/kabudu/qatq"
 readme = "README.md"
 keywords = ["quantization", "kv-cache", "llm", "compression", "quaternion"]
 categories = ["compression", "science"]
+include = [
+    "Cargo.toml",
+    "Cargo.lock",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+    "src/**",
+    "examples/**",
+    "tests/**",
+    "docs/ARCHITECTURE.md",
+    "docs/FIXTURES.md",
+    "docs/PUBLIC_*.md",
+    "docs/PUBLIC_COMPARATIVE_*.md",
+    "docs/PAPER_REFRESH_NOTES.md",
+    "docs/WHITEPAPER_RESULTS.md",
+    "docs/VALIDATION.md",
+    "docs/RUNTIME_ADAPTERS.md",
+    "docs/RELEASE_CHECKLIST.md",
+    "fixtures/public.manifest",
+    "fixtures/generated/**",
+]
 
 [lib]
 name = "qatq"
@@ -16,4 +38,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "qatq"
 path = "src/main.rs"
-

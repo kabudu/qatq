@@ -1,21 +1,23 @@
 # QATQ
 
-QATQ is a new research-grade Rust project for **Quaternion-Augmented
+QATQ is a research-grade Rust project for **Quaternion-Augmented
 TurboQuant**: a codec family aimed at compressing LLM KV caches and other
 high-dimensional tensor streams used during live agent/runtime migration.
 
-This repository is intentionally separate from PermeantOS. PermeantOS proved
-that an experimental QATQ-inspired transfer codec can move agent state across a
-real MLX-to-vLLM AWS migration path. This project exists to turn the codec
-itself into a serious standalone library, CLI, and eventually a service that
-any runtime can adopt.
+QATQ is standalone. It includes its own deterministic public fixture generator,
+public benchmark corpus, CLI, Rust library API, CI workflow, fuzzing scaffold,
+and release checklist. External runtime evidence can be attached through
+fixture manifests, but no external project is required to build, test, benchmark,
+or use QATQ.
 
 ## Status
 
-This is a private seed repository. The current implementation provides:
+The current implementation provides:
 
-- a deterministic lossy signed-int4 tensor codec compatible with the first
-  PermeantOS experiments;
+- deterministic public fixture generation with `qatq fixture generate`;
+- public CI-ready fixture, benchmark, paper-table, and gate reports;
+- production chunk helpers for exact phase-2 storage decisions and restore;
+- a deterministic lossy signed-int4 tensor codec retained as a seed baseline;
 - a Phase 1 training-free `phase1-q4` codec with quaternion grouping,
   deterministic Hamilton-product rotation, scalar q4 quantization, and a
   compact 1-bit residual-sign side channel;
@@ -30,16 +32,18 @@ This is a private seed repository. The current implementation provides:
   residual-compression design is developed;
 - a small CLI for encoding, chunked encoding, and decoding raw f32
   little-endian files;
-- tests for payload validation, lossy round trips, exact f32 round trips, and
-  Phase 1 deterministic/configured behavior.
+- tests for payload validation, lossy round trips, exact f32 round trips, Phase
+  1 deterministic/configured behavior, production chunk restore, CLI behavior,
+  and benchmark gate policy.
 
 Phase 1 is still lossy and experimental. `phase2-lossless` is exact by
 construction and uses a fast strategy policy: compression-positive byte or
 byte-plane candidates are accepted before building the more expensive QATQ
 predictor. The exhaustive encoder remains available for research comparisons.
-Compression performance is not proven until real KV/tensor fixtures are
-measured. Current single payloads are bounded to `67,108,864` f32 values each;
-larger tensors should use the Phase 2 `QATC` chunk container.
+The generated public fixtures are the default reproducible evidence set. Larger
+or private runtime captures can be added as optional external manifests. Current
+single payloads are bounded to `67,108,864` f32 values each; larger tensors
+should use the Phase 2 `QATC` chunk container.
 
 ## What QATQ Is For
 
@@ -118,18 +122,31 @@ written successfully:
 cargo run -- decode output.qatc restored.f32le
 ```
 
-Run the local benchmark report:
+Generate the public fixture corpus:
 
 ```sh
-cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md
+cargo run --bin qatq -- fixture generate \
+  --manifest fixtures/public.manifest \
+  --dir fixtures/generated
 ```
 
-Add raw f32 little-endian fixtures, such as future PermeantOS KV-cache captures:
+Run the public benchmark report:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --no-synthetic \
+  --output docs/PUBLIC_BENCHMARKS.md \
+  --paper-output docs/PUBLIC_PAPER_TABLES.md \
+  --manifest fixtures/public.manifest
+```
+
+Add optional raw f32 little-endian fixtures from any runtime:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
   --output docs/BENCHMARKS.md \
-  --input permeantos-kv:path/to/kv-cache.f32le
+  --input runtime-kv:path/to/kv-cache.f32le
 ```
 
 Use a fixture manifest and generate paper-ready summary tables:
@@ -138,7 +155,7 @@ Use a fixture manifest and generate paper-ready summary tables:
 cargo run --release --bin qatq-bench -- \
   --output docs/BENCHMARKS.md \
   --paper-output docs/PAPER_TABLES.md \
-  --manifest fixtures/permeantos.manifest
+  --manifest fixtures/public.manifest
 ```
 
 Add `--no-synthetic` when you want an external-fixture-only smoke run or gate.
@@ -148,33 +165,57 @@ before report outputs are replaced.
 
 See [docs/FIXTURES.md](docs/FIXTURES.md) for the manifest format.
 
-Append a validated PermeantOS/KV fixture entry:
+Append a validated runtime/KV fixture entry:
 
 ```sh
 cargo run -- fixture add \
-  --manifest fixtures/permeantos.manifest \
-  --group permeantos-kv \
+  --manifest fixtures/runtime.manifest \
+  --group runtime-kv \
   --name llama-layer12-k \
   --path captures/llama-layer12-k.f32le \
   --shape "[layers=1, heads=32, tokens=128, dim=128]" \
-  --notes "MLX source capture before migration"
+  --notes "runtime source capture"
 ```
 
 Verify a manifest and write an audit report:
 
 ```sh
 cargo run -- fixture verify \
-  --manifest fixtures/permeantos.manifest \
-  --output docs/FIXTURE_AUDIT.md
+  --manifest fixtures/public.manifest \
+  --output docs/PUBLIC_FIXTURE_AUDIT.md
 ```
 
-Run a benchmark readiness gate:
+Run the production KV readiness gate. This is the primary gate for mixed-size
+external KV tensors because decode is judged by throughput-normalized
+nanoseconds per value:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --manifest fixtures/permeantos.manifest \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
+  --gate-output docs/PUBLIC_BENCHMARK_GATE.md \
+  --gate-require-external \
+  --gate-policy production-kv \
+  --max-phase2-ratio 0.96 \
+  --max-phase2-encode-us 5000 \
+  --max-phase2-decode-ns-per-value 50.00 \
+  --max-phase2-container-ratio 0.97 \
+  --max-phase2-container-decode-ns-per-value 50.00
+```
+
+Run the fixed absolute-latency gate only as service-budget analysis for small
+tensors or deployment-specific envelopes. It is intentionally not the
+large-tensor production readiness signal:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
+  --gate-policy latency-budget \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
   --max-phase2-decode-us 1000 \
@@ -247,11 +288,10 @@ assert_eq!(decoded_count, 3);
 # Ok::<(), qatq::QatqError>(())
 ```
 
-## Relationship To PermeantOS
+## External Validation
 
-PermeantOS currently treats `qatq` as an experimental transfer codec. Once this
-project matures, PermeantOS should depend on the `qatq` crate instead of owning
-codec internals directly.
-
-PermeantOS capture and return instructions are in
-[docs/PERMEANTOS_HANDOFF.md](docs/PERMEANTOS_HANDOFF.md).
+QATQ does not depend on any external runtime. Historical runtime-integration
+evidence is retained under `handoff/` as optional validation provenance. New
+runtime integrations should follow
+[docs/RUNTIME_ADAPTERS.md](docs/RUNTIME_ADAPTERS.md) and provide ordinary
+fixture manifests rather than runtime-specific project coupling.

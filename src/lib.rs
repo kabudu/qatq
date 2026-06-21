@@ -285,6 +285,61 @@ pub enum Phase2Strategy {
     BytePlaneBlocks,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProductionStorage {
+    QatqPhase2,
+    RawF32LePassThrough,
+}
+
+impl ProductionStorage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::QatqPhase2 => "qatq-phase2",
+            Self::RawF32LePassThrough => "raw-f32le-pass-through",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductionChunkMetadata {
+    pub storage: ProductionStorage,
+    pub raw_f32le_len: usize,
+    pub strategy: Option<Phase2Strategy>,
+}
+
+impl ProductionChunkMetadata {
+    pub fn storage_label(&self) -> &'static str {
+        self.storage.as_str()
+    }
+
+    pub fn value_count(&self) -> Result<usize, QatqError> {
+        if self.raw_f32le_len % 4 != 0 {
+            return Err(QatqError::InvalidHeader);
+        }
+        Ok(self.raw_f32le_len / 4)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductionEncodeResult {
+    pub metadata: ProductionChunkMetadata,
+    pub bytes: Vec<u8>,
+}
+
+impl ProductionEncodeResult {
+    pub fn should_compress(&self) -> bool {
+        self.metadata.storage == ProductionStorage::QatqPhase2
+    }
+
+    pub fn should_pass_through(&self) -> bool {
+        self.metadata.storage == ProductionStorage::RawF32LePassThrough
+    }
+
+    pub fn stored_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Phase2EncodeDecision {
     Compressed {
@@ -482,6 +537,70 @@ pub fn try_encode_phase2_lossless_decision_with_config(
             strategy,
             raw_f32le_len,
         })
+    }
+}
+
+pub fn try_encode_production_chunk(values: &[f32]) -> Result<ProductionEncodeResult, QatqError> {
+    try_encode_production_chunk_with_config(values, Phase1Config::default())
+}
+
+pub fn try_encode_production_chunk_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Result<ProductionEncodeResult, QatqError> {
+    let decision = try_encode_phase2_lossless_decision_with_config(values, config)?;
+    Ok(production_result_from_decision(decision))
+}
+
+pub fn production_result_from_decision(decision: Phase2EncodeDecision) -> ProductionEncodeResult {
+    match decision {
+        Phase2EncodeDecision::Compressed {
+            payload,
+            strategy,
+            raw_f32le_len,
+        } => ProductionEncodeResult {
+            metadata: ProductionChunkMetadata {
+                storage: ProductionStorage::QatqPhase2,
+                raw_f32le_len,
+                strategy: Some(strategy),
+            },
+            bytes: payload,
+        },
+        Phase2EncodeDecision::PassThroughRaw { bytes } => ProductionEncodeResult {
+            metadata: ProductionChunkMetadata {
+                storage: ProductionStorage::RawF32LePassThrough,
+                raw_f32le_len: bytes.len(),
+                strategy: None,
+            },
+            bytes,
+        },
+    }
+}
+
+pub fn restore_production_chunk(
+    metadata: &ProductionChunkMetadata,
+    bytes: &[u8],
+) -> Result<Vec<f32>, QatqError> {
+    match metadata.storage {
+        ProductionStorage::QatqPhase2 => {
+            let restored = decode_phase2_lossless(bytes)?;
+            let expected_len = metadata.raw_f32le_len;
+            let actual_len = checked_value_byte_len(restored.len())?;
+            if actual_len != expected_len {
+                return Err(QatqError::LengthMismatch {
+                    expected: expected_len,
+                    actual: actual_len,
+                });
+            }
+            if let Some(expected_strategy) = metadata.strategy {
+                let actual_strategy = phase2_lossless_strategy(bytes)?;
+                if actual_strategy != expected_strategy {
+                    return Err(QatqError::InvalidPhase2Body);
+                }
+            }
+            Ok(restored)
+        }
+        ProductionStorage::RawF32LePassThrough => decode_raw_f32le_pass_through(metadata, bytes),
     }
 }
 
@@ -1601,6 +1720,28 @@ fn encode_f32_bits_le(values: &[f32]) -> Vec<u8> {
         out.extend_from_slice(&value.to_bits().to_le_bytes());
     }
     out
+}
+
+fn decode_raw_f32le_pass_through(
+    metadata: &ProductionChunkMetadata,
+    bytes: &[u8],
+) -> Result<Vec<f32>, QatqError> {
+    if bytes.len() != metadata.raw_f32le_len {
+        return Err(QatqError::LengthMismatch {
+            expected: metadata.raw_f32le_len,
+            actual: bytes.len(),
+        });
+    }
+    if bytes.len() % 4 != 0 {
+        return Err(QatqError::InvalidHeader);
+    }
+    let mut values = Vec::with_capacity(bytes.len() / 4);
+    for chunk in bytes.chunks_exact(4) {
+        values.push(f32::from_bits(u32::from_le_bytes(
+            chunk.try_into().expect("chunk size checked"),
+        )));
+    }
+    Ok(values)
 }
 
 #[cfg(test)]
@@ -2965,6 +3106,57 @@ mod tests {
                 panic!("compressible values should return a compressed decision")
             }
         }
+    }
+
+    #[test]
+    fn production_chunk_roundtrip_restores_compressed_payload() {
+        let values = vec![0.0_f32; 128];
+        let encoded = try_encode_production_chunk(&values).unwrap();
+
+        assert!(encoded.should_compress());
+        assert_eq!(encoded.metadata.storage_label(), "qatq-phase2");
+        assert_eq!(encoded.metadata.raw_f32le_len, values.len() * 4);
+        assert_eq!(
+            encoded.metadata.strategy,
+            Some(Phase2Strategy::BytePlaneBlocks)
+        );
+
+        let restored = restore_production_chunk(&encoded.metadata, encoded.stored_bytes()).unwrap();
+        assert_eq!(f32_bits(&restored), f32_bits(&values));
+    }
+
+    #[test]
+    fn production_chunk_roundtrip_restores_pass_through_payload() {
+        let values = [
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1122_3344),
+            f32::from_bits(0x5566_7788),
+            f32::from_bits(0x99aa_bbcc),
+        ];
+        let encoded = try_encode_production_chunk(&values).unwrap();
+
+        assert!(encoded.should_pass_through());
+        assert_eq!(encoded.metadata.storage_label(), "raw-f32le-pass-through");
+        assert_eq!(encoded.metadata.raw_f32le_len, values.len() * 4);
+        assert_eq!(encoded.metadata.strategy, None);
+
+        let restored = restore_production_chunk(&encoded.metadata, encoded.stored_bytes()).unwrap();
+        assert_eq!(f32_bits(&restored), f32_bits(&values));
+    }
+
+    #[test]
+    fn production_chunk_rejects_mismatched_metadata() {
+        let values = vec![0.0_f32; 128];
+        let mut encoded = try_encode_production_chunk(&values).unwrap();
+        encoded.metadata.raw_f32le_len += 4;
+
+        assert_eq!(
+            restore_production_chunk(&encoded.metadata, encoded.stored_bytes()),
+            Err(QatqError::LengthMismatch {
+                expected: values.len() * 4 + 4,
+                actual: values.len() * 4
+            })
+        );
     }
 
     #[test]
