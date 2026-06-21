@@ -1155,23 +1155,29 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
     }
 
     out.push_str("\n## Lossless Envelope Comparison\n\n");
-    out.push_str("| group | dataset | phase2 strategy | lossless-f32 ratio | phase2-lossless ratio | container ratio | ratio delta | container overhead bytes | phase2 exact RMSE | phase2 decode us | container decode us |\n");
-    out.push_str("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+    out.push_str("| group | dataset | phase2 strategy | exact baseline | exact baseline ratio | phase2-lossless ratio | container ratio | ratio delta | container overhead bytes | phase2 exact RMSE | phase2 decode us | container decode us |\n");
+    out.push_str(
+        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+    );
     for dataset in benchmarked {
-        if let (Some(exact), Some(phase2), Some(container)) = (
-            find_result(&dataset.results, "lossless-f32"),
+        if let (Some(phase2), Some(container)) = (
             find_result(&dataset.results, "phase2-lossless"),
             find_result(&dataset.results, "phase2-lossless-container"),
         ) {
+            let exact = find_result(&dataset.results, "lossless-f32");
+            let (exact_label, exact_ratio) = exact
+                .map(|result| ("lossless-f32", result.ratio))
+                .unwrap_or(("raw-f32", 1.0));
             out.push_str(&format!(
-                "| {} | {} | {} | {:.4} | {:.4} | {:.4} | {:+.4} | {} | {:.6} | {:.2} | {:.2} |\n",
+                "| {} | {} | {} | {} | {:.4} | {:.4} | {:.4} | {:+.4} | {} | {:.6} | {:.2} | {:.2} |\n",
                 dataset.summary.group,
                 dataset.summary.name,
                 phase2.phase2_strategy.unwrap_or(""),
-                exact.ratio,
+                exact_label,
+                exact_ratio,
                 phase2.ratio,
                 container.ratio,
-                phase2.ratio - exact.ratio,
+                phase2.ratio - exact_ratio,
                 container.encoded_len.saturating_sub(phase2.encoded_len),
                 phase2.rmse,
                 phase2.decode_us,
@@ -1209,14 +1215,18 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
                 "phase1 improves RMSE vs lossy-i4"
             }
             (Some(_), Some(_)) => "phase1 does not improve RMSE vs lossy-i4",
-            _ => "missing comparison rows",
+            _ => "lossy baselines not measured",
         };
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} |\n",
             dataset.summary.group,
             dataset.summary.name,
-            smallest.map(|result| result.codec).unwrap_or("missing"),
-            best_rmse.map(|result| result.codec).unwrap_or("missing"),
+            smallest
+                .map(|result| result.codec)
+                .unwrap_or("not measured"),
+            best_rmse
+                .map(|result| result.codec)
+                .unwrap_or("not measured"),
             note
         ));
     }

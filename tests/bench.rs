@@ -338,6 +338,44 @@ fn benchmark_phase2_only_limits_report_to_gated_rows() {
 }
 
 #[test]
+fn benchmark_phase2_only_paper_summary_keeps_lossless_envelope_rows() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-phase2-only-paper-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let paper = dir.join(format!("{stem}.paper.md"));
+    let values = [0.0_f32, 0.25, -0.5, 1.0, 2.0, -4.0, 8.0, -16.0];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--paper-output")
+        .arg(&paper)
+        .arg("--input")
+        .arg(format!("phase2-only-paper:{}", input.display()))
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run phase2-only paper benchmark");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&paper).expect("read paper report");
+    assert!(report.contains("## Lossless Envelope Comparison"));
+    assert!(report.contains("phase2-only-paper"));
+    assert!(report.contains("raw-f32"));
+    assert!(report.contains("phase2-lossless ratio"));
+    assert!(!report.contains("missing comparison rows"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(paper);
+}
+
+#[test]
 fn benchmark_gate_fails_with_strict_container_threshold() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-bench-container-gate-fail-{}", std::process::id());
