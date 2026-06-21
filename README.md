@@ -309,7 +309,7 @@ assert_eq!(decoded_count, 3);
 ## External Validation
 
 QATQ does not depend on any external runtime. Historical runtime-integration
-evidence is retained under `handoff/` as optional validation provenance. New
-runtime integrations should follow
+evidence can be kept outside this repository as optional validation provenance.
+New runtime integrations should follow
 [docs/RUNTIME_ADAPTERS.md](docs/RUNTIME_ADAPTERS.md) and provide ordinary
 fixture manifests rather than runtime-specific project coupling.

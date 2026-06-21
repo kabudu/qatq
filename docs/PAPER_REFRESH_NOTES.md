@@ -13,7 +13,8 @@ Current source files:
 - Public paper table inputs: `docs/PUBLIC_PAPER_TABLES.md`
 - Public comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`
 - Public production KV gate: `docs/PUBLIC_BENCHMARK_GATE.md`
-- Optional external validation: archived runtime-integration handoff records
+- Optional external validation: independently supplied runtime fixture
+  manifests and result summaries
 
 ## Claims Supported By Current Evidence
 

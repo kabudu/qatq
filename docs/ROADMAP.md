@@ -52,7 +52,7 @@ benchmark reports as general-purpose byte-compression baselines over raw f32le.
 - [x] Add chunked exact encode/decode APIs for large KV blocks.
 - [x] Add a sequential Phase 2 chunk container for large tensor files.
 - [x] Validate the phase-2 production storage-decision API with generated public
-      fixtures and retained external runtime evidence.
+      fixtures.
 - [ ] Add random-access metadata and a true streaming container/service
       protocol.
 

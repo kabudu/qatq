@@ -41,7 +41,7 @@ Important current-state notes:
 - The `QATC` container wraps multiple Phase 2 payloads for sequential large
   tensor files. Random-access metadata and service-level streaming remain
   future work.
-- Historical external runtime evidence is archived under `handoff/`; it is not
-  required for public QATQ validation.
+- Historical external runtime evidence is intentionally kept outside the public
+  release tree; it is not required for public QATQ validation.
 - General-purpose byte compression is out of scope unless evidence shows the
   transform improves residual entropy on non-KV tensor payloads.

@@ -21,7 +21,8 @@ comparative baselines remain open.
 - Benchmark mode: `phase2-only`, `--no-synthetic`.
 - Production gate: `docs/PUBLIC_BENCHMARK_GATE.md`.
 - Comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`.
-- Optional external validation: archived runtime-integration handoff records.
+- Optional external validation: independently supplied runtime fixture
+  manifests and result summaries.
 
 ## Production Decision Behavior
 
