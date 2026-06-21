@@ -51,7 +51,7 @@ fn run() -> Result<(), String> {
     for dataset_spec in dataset_specs {
         let dataset = load_dataset(dataset_spec)?;
         let summary = dataset.summary();
-        let results = benchmark_dataset(&dataset)?;
+        let results = benchmark_dataset(&dataset, options.phase2_only)?;
         benchmarked.push(BenchmarkedDataset { summary, results });
     }
 
@@ -78,6 +78,14 @@ fn run() -> Result<(), String> {
             "enabled"
         } else {
             "disabled"
+        }
+    ));
+    report.push_str(&format!(
+        "- benchmark mode: `{}`\n",
+        if options.phase2_only {
+            "phase2-only"
+        } else {
+            "all-codecs"
         }
     ));
     report.push_str(&format!(
@@ -117,7 +125,7 @@ fn run() -> Result<(), String> {
     report.push_str("- `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.\n");
     report.push_str("- `lossy-i4` is the original PermeantOS seed baseline.\n");
     report.push_str("- `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.\n");
-    report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-RLE or byte-plane RLE first, then probes adjacent-bit delta-XOR byte-plane RLE before building the more expensive Phase 1 predictor.\n");
+    report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor.\n");
     report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
     report.push_str("- `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.\n");
     report.push_str("- Phase 1 is still lossy. The residual side channel is an experiment for lowering reconstruction error, not a bit-identical lossless design.\n");
@@ -150,11 +158,14 @@ fn parse_options() -> Result<BenchOptions, String> {
     let mut gate_output = None;
     let mut gate_require_external = false;
     let mut include_synthetic = true;
+    let mut phase2_only = false;
     let mut max_phase2_ratio = None;
     let mut max_phase2_encode_us = None;
     let mut max_phase2_decode_us = None;
+    let mut max_phase2_decode_ns_per_value = None;
     let mut max_phase2_container_ratio = None;
     let mut max_phase2_container_decode_us = None;
+    let mut max_phase2_container_decode_ns_per_value = None;
     let mut inputs = Vec::new();
     let mut manifests = Vec::new();
     let mut index = 1;
@@ -187,6 +198,9 @@ fn parse_options() -> Result<BenchOptions, String> {
             "--no-synthetic" => {
                 include_synthetic = false;
             }
+            "--phase2-only" => {
+                phase2_only = true;
+            }
             "--max-phase2-ratio" => {
                 index += 1;
                 max_phase2_ratio = Some(parse_f64_arg(args.get(index), "--max-phase2-ratio")?);
@@ -201,6 +215,13 @@ fn parse_options() -> Result<BenchOptions, String> {
                 max_phase2_decode_us =
                     Some(parse_f64_arg(args.get(index), "--max-phase2-decode-us")?);
             }
+            "--max-phase2-decode-ns-per-value" => {
+                index += 1;
+                max_phase2_decode_ns_per_value = Some(parse_f64_arg(
+                    args.get(index),
+                    "--max-phase2-decode-ns-per-value",
+                )?);
+            }
             "--max-phase2-container-ratio" => {
                 index += 1;
                 max_phase2_container_ratio = Some(parse_f64_arg(
@@ -213,6 +234,13 @@ fn parse_options() -> Result<BenchOptions, String> {
                 max_phase2_container_decode_us = Some(parse_f64_arg(
                     args.get(index),
                     "--max-phase2-container-decode-us",
+                )?);
+            }
+            "--max-phase2-container-decode-ns-per-value" => {
+                index += 1;
+                max_phase2_container_decode_ns_per_value = Some(parse_f64_arg(
+                    args.get(index),
+                    "--max-phase2-container-decode-ns-per-value",
                 )?);
             }
             "--input" => {
@@ -240,11 +268,14 @@ fn parse_options() -> Result<BenchOptions, String> {
         gate_output,
         gate_require_external,
         include_synthetic,
+        phase2_only,
         max_phase2_ratio,
         max_phase2_encode_us,
         max_phase2_decode_us,
+        max_phase2_decode_ns_per_value,
         max_phase2_container_ratio,
         max_phase2_container_decode_us,
+        max_phase2_container_decode_ns_per_value,
         inputs,
         manifests,
     })
@@ -281,7 +312,7 @@ fn parse_fixture_input(spec: &str) -> Result<FixtureInput, String> {
 }
 
 fn usage() -> String {
-    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--gate-output <path>] [--gate-require-external] [--no-synthetic] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
+    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--gate-output <path>] [--gate-require-external] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
 }
 
 struct BenchOptions {
@@ -290,11 +321,14 @@ struct BenchOptions {
     gate_output: Option<PathBuf>,
     gate_require_external: bool,
     include_synthetic: bool,
+    phase2_only: bool,
     max_phase2_ratio: Option<f64>,
     max_phase2_encode_us: Option<f64>,
     max_phase2_decode_us: Option<f64>,
+    max_phase2_decode_ns_per_value: Option<f64>,
     max_phase2_container_ratio: Option<f64>,
     max_phase2_container_decode_us: Option<f64>,
+    max_phase2_container_decode_ns_per_value: Option<f64>,
     inputs: Vec<FixtureInput>,
     manifests: Vec<PathBuf>,
 }
@@ -350,7 +384,11 @@ fn preflight_external_datasets(specs: &[DatasetSpec]) -> Result<(), String> {
     Ok(())
 }
 
-fn benchmark_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, String> {
+fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchResult>, String> {
+    if phase2_only {
+        return benchmark_phase2_dataset(dataset);
+    }
+
     let raw_encoded = encode_raw_f32le(&dataset.values);
     let raw_decoded = decode_raw_f32le(&raw_encoded)?;
     let fp8_encoded = encode_fp8_e4m3(&dataset.values);
@@ -457,6 +495,42 @@ fn benchmark_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, String> {
         &phase2_container_decoded,
     ));
     Ok(results)
+}
+
+fn benchmark_phase2_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, String> {
+    let phase2_encoded = encode_phase2_lossless(&dataset.values);
+    let phase2_decoded = decode(&phase2_encoded).map_err(|error| error.to_string())?;
+    let phase2_container_encoded =
+        encode_phase2_lossless_container(&dataset.values, CONTAINER_CHUNK_VALUES)
+            .map_err(|error| error.to_string())?;
+    let phase2_container_decoded =
+        decode(&phase2_container_encoded).map_err(|error| error.to_string())?;
+
+    Ok(vec![
+        BenchResult::new(
+            "phase2-lossless",
+            phase2_encoded.len(),
+            dataset.values.len(),
+            phase2_strategy_label(&phase2_encoded),
+            time_encode(|| encode_phase2_lossless(&dataset.values)),
+            time_decode(|| decode(&phase2_encoded).expect("phase2 decode")),
+            &dataset.values,
+            &phase2_decoded,
+        ),
+        BenchResult::new(
+            "phase2-lossless-container",
+            phase2_container_encoded.len(),
+            dataset.values.len(),
+            Some("qatc-container"),
+            time_encode(|| {
+                encode_phase2_lossless_container(&dataset.values, CONTAINER_CHUNK_VALUES)
+                    .expect("phase2 container encode")
+            }),
+            time_decode(|| decode(&phase2_container_encoded).expect("phase2 container decode")),
+            &dataset.values,
+            &phase2_container_decoded,
+        ),
+    ])
 }
 
 fn phase2_strategy_label(payload: &[u8]) -> Option<&'static str> {
@@ -873,17 +947,30 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
                 reasons.push(format!("decode {:.2}us > {:.2}us", phase2.decode_us, limit));
             }
         }
+        let phase2_decode_ns_per_value =
+            decode_ns_per_value(phase2.decode_us, dataset.summary.value_count);
+        if let Some(limit) = options.max_phase2_decode_ns_per_value {
+            if phase2_decode_ns_per_value > limit {
+                dataset_passed = false;
+                reasons.push(format!(
+                    "decode {:.4}ns/value > {:.4}ns/value",
+                    phase2_decode_ns_per_value, limit
+                ));
+            }
+        }
         if !dataset_passed {
             passed = false;
         }
         rows.push(format!(
-            "| {} / {} | phase2-lossless | {} | ratio {:.4}, encode {:.2}us, decode {:.2}us, exact_bits={}{} |",
+            "| {} / {} | phase2-lossless | {} | values {}, ratio {:.4}, encode {:.2}us, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
             dataset.summary.group,
             dataset.summary.name,
             if dataset_passed { "pass" } else { "fail" },
+            dataset.summary.value_count,
             phase2.ratio,
             phase2.encode_us,
             phase2.decode_us,
+            phase2_decode_ns_per_value,
             phase2.exact_bits,
             if reasons.is_empty() {
                 String::new()
@@ -921,16 +1008,29 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
                 ));
             }
         }
+        let container_decode_ns_per_value =
+            decode_ns_per_value(container.decode_us, dataset.summary.value_count);
+        if let Some(limit) = options.max_phase2_container_decode_ns_per_value {
+            if container_decode_ns_per_value > limit {
+                container_passed = false;
+                container_reasons.push(format!(
+                    "decode {:.4}ns/value > {:.4}ns/value",
+                    container_decode_ns_per_value, limit
+                ));
+            }
+        }
         if !container_passed {
             passed = false;
         }
         rows.push(format!(
-            "| {} / {} | phase2-lossless-container | {} | ratio {:.4}, decode {:.2}us, exact_bits={}{} |",
+            "| {} / {} | phase2-lossless-container | {} | values {}, ratio {:.4}, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
             dataset.summary.group,
             dataset.summary.name,
             if container_passed { "pass" } else { "fail" },
+            dataset.summary.value_count,
             container.ratio,
             container.decode_us,
+            container_decode_ns_per_value,
             container.exact_bits,
             if container_reasons.is_empty() {
                 String::new()
@@ -969,12 +1069,20 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
         option_f64_label(options.max_phase2_decode_us)
     ));
     report.push_str(&format!(
+        "- max phase2 decode ns/value: `{}`\n\n",
+        option_f64_label(options.max_phase2_decode_ns_per_value)
+    ));
+    report.push_str(&format!(
         "- max phase2 container ratio: `{}`\n",
         option_f64_label(options.max_phase2_container_ratio)
     ));
     report.push_str(&format!(
         "- max phase2 container decode us: `{}`\n\n",
         option_f64_label(options.max_phase2_container_decode_us)
+    ));
+    report.push_str(&format!(
+        "- max phase2 container decode ns/value: `{}`\n\n",
+        option_f64_label(options.max_phase2_container_decode_ns_per_value)
     ));
     report.push_str("| dataset | check | status | details |\n");
     report.push_str("| --- | --- | --- | --- |\n");
@@ -989,6 +1097,14 @@ fn option_f64_label(value: Option<f64>) -> String {
     value
         .map(|value| format!("{value:.4}"))
         .unwrap_or_else(|| "unset".to_string())
+}
+
+fn decode_ns_per_value(decode_us: f64, value_count: usize) -> f64 {
+    if value_count == 0 {
+        0.0
+    } else {
+        decode_us * 1000.0 / value_count as f64
+    }
 }
 
 fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
@@ -1108,7 +1224,7 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
     out.push_str("\n## Use In Paper Drafts\n\n");
     out.push_str("- Treat synthetic rows as method/debug evidence only.\n");
     out.push_str("- Use external PermeantOS/KV-cache fixture groups for claims about runtime migration or model-state compression.\n");
-    out.push_str("- Phase 1 should move to Phase 2 exact residual work only if real fixtures show lower residual/error structure worth coding.\n");
+    out.push_str("- Phase 2 exact rows are the current evidence base for lossless QATQ claims; Phase 1 lossy rows remain baseline/error-structure context.\n");
     out
 }
 

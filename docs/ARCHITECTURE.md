@@ -118,9 +118,12 @@ track therefore needs a residual:
 The `phase2-lossless` mode implements the first QATQ-family exact codec. The
 default encoder is latency-oriented: it accepts compression-positive byte-level
 or byte-plane candidates before probing delta-XOR byte-plane residuals or
-spending CPU on the QATQ predictor. The `encode_phase2_lossless_exhaustive` path
-keeps the deeper full-candidate strategy search available for research
-comparisons.
+spending CPU on the QATQ predictor. Real PermeantOS KV-cache captures exposed a
+common exact pattern where the high two f32 byte planes vary and the low two
+byte planes are all zero, so Phase 2 also has a `byte-plane-blocks` strategy
+that stores each byte plane as raw, repeated, or zero. The
+`encode_phase2_lossless_exhaustive` path keeps the deeper full-candidate
+strategy search available for research comparisons.
 
 Phase 2 can store:
 
@@ -128,6 +131,9 @@ Phase 2 can store:
 - byte-level zero/raw run coding over the original f32 bitstream;
 - byte-plane run coding, which groups the first, second, third, and fourth byte
   of each f32 into separate planes before run coding;
+- byte-plane block coding, which stores each f32 byte plane as zero, repeated,
+  or raw without run metadata when whole-plane structure is stronger than local
+  runs;
 - adjacent-bit delta-XOR byte-plane run coding, which stores the first f32 bit
   pattern followed by `current_bits ^ previous_bits` residuals in byte-plane
   order;
@@ -151,6 +157,7 @@ The Phase 2 body stores:
   - raw f32 bits;
   - byte-level run stream;
   - byte-plane run stream;
+  - byte-plane block stream;
   - adjacent-bit delta-XOR byte-plane run stream;
   - or deterministic rotation seed, residual magnitude scale, packed q4
     coordinates, packed Phase 1 residual sign bits, and run-coded XOR residuals.
@@ -159,8 +166,9 @@ This is bit-identical for f32 payloads, including signed zero, infinities, and
 NaN payload bits. Fast selection prevents the predictor path from dominating
 encode latency when a byte-plane candidate already compresses exactly.
 Exhaustive selection can still be used when smallest payload search matters more
-than encode time. Phase 2 is still not proven compression-positive on real
-KV/tensor fixtures. The `lossless-f32` mode remains the exact envelope control.
+than encode time. Phase 2 is compression-positive on the current real
+PermeantOS KV fixtures, but the fixture set is still too small for broad
+production claims. The `lossless-f32` mode remains the exact envelope control.
 
 Decoder safety bounds:
 
@@ -188,10 +196,13 @@ Decoder safety bounds:
   and predictor fallback.
 - Phase 2 byte-RLE decode writes f32 values directly from validated runs instead
   of materializing an intermediate byte stream.
-- Phase 2 byte-plane decode materializes the plane stream, then assembles f32
-  values directly without rebuilding an interleaved byte stream. A direct
-  plane-run decoder was tested and rejected for now because it regressed the
-  current synthetic decode benchmark.
+- Phase 2 byte-plane decode writes validated plane runs into a preallocated word
+  buffer and then converts those words to f32 values without rebuilding an
+  interleaved byte stream.
+- Phase 2 byte-plane block decode has direct fast paths for the common
+  `raw, raw, zero, zero` and `raw, raw, raw, raw` plane layouts; it fuses
+  checksum validation with f32 reconstruction to avoid a second pass over large
+  PermeantOS tensors.
 - QATC container decode rejects zero-chunk containers and pre-validates chunk
   lengths and declared value counts before allocating the output vector.
 - QATC container payload visiting pre-validates the complete chunk layout before
@@ -205,6 +216,11 @@ Decoder safety bounds:
 - The benchmark harness can run with `--no-synthetic` for external-fixture-only
   smoke checks, and it preflights external fixture metadata before timing work
   so missing or malformed captures fail before report replacement.
+- The benchmark harness can run with `--phase2-only` for readiness gates that
+  only need `phase2-lossless` and QATC rows.
+- Gate reports can enforce either absolute decode microsecond ceilings or
+  normalized decode ns/value ceilings. The normalized policy is a better fit
+  for comparing captures with substantially different value counts.
 
 Large real tensors can be split with `encode_phase2_lossless_chunks` and
 reassembled with `decode_phase2_lossless_chunks`, or stored as a single

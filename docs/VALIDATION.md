@@ -21,7 +21,9 @@ cargo test --test cli
 cargo test --test bench
 cargo check
 cargo test
-cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md
+cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-us 1000 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-us 1200
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 2.10 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 2.20
 cargo fmt --check
 ```
 
@@ -35,14 +37,18 @@ Results:
 - `cargo test --test bench`: passed.
 - `cargo check`: passed.
 - `cargo test`: passed.
-- `cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md`: passed.
+- `cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest`: passed.
+- absolute-latency gate: failed as expected on the two largest Phi captures; exactness, ratio, and encode checks passed.
+- throughput-normalized gate: passed for all 8 real PermeantOS captures.
 - `cargo fmt --check`: passed.
-- Tests: 79 passed, 0 failed.
-  - library tests: 57 passed.
-  - benchmark integration tests: 8 passed.
+- Tests: 82 passed, 0 failed.
+  - library tests: 59 passed.
+  - benchmark integration tests: 9 passed.
   - CLI integration tests: 14 passed.
 - Benchmark report: regenerated at [BENCHMARKS.md](BENCHMARKS.md).
 - Paper table report: regenerated at [PAPER_TABLES.md](PAPER_TABLES.md).
+- Absolute gate report: regenerated at [BENCHMARK_GATE.md](BENCHMARK_GATE.md).
+- Throughput-normalized gate report: generated at [BENCHMARK_GATE_THROUGHPUT.md](BENCHMARK_GATE_THROUGHPUT.md).
 
 Coverage added:
 
@@ -60,6 +66,8 @@ Coverage added:
   infinities, and NaN payload bits;
 - `phase2-lossless` deterministic seed/config behavior;
 - adaptive Phase 2 raw-bit, byte-RLE, and byte-plane RLE strategy selection;
+- byte-plane block strategy selection for repetitive whole-plane f32 byte
+  layouts in real PermeantOS captures;
 - adjacent-bit Phase 2 delta-XOR byte-plane RLE strategy selection for
   correlated exact bitstreams;
 - public Phase 2 strategy inspection for encoded exact payloads;
@@ -72,6 +80,8 @@ Coverage added:
   path;
 - bounded Phase 2 delta-XOR byte-plane probing for incompressible streams;
 - allocation-reduced Phase 2 byte-RLE decode and byte-plane assembly paths;
+- direct Phase 2 byte-plane block decode with fused checksum validation for
+  large exact tensors;
 - preallocated Phase 2 byte-plane run decode buffer from bounded payload
   metadata;
 - fast Phase 2 exact encoding with compression-positive byte-plane
@@ -148,6 +158,9 @@ Coverage added:
 - Benchmark harness smoke coverage for fixture manifests and `--paper-output`.
 - Benchmark gate pass/fail behavior for Phase 2 exact ratio/latency thresholds.
 - Benchmark gate pass/fail behavior for `QATC` container ratio thresholds.
+- Benchmark phase2-only mode for faster readiness gates.
+- Benchmark gate pass/fail behavior for throughput-normalized decode
+  thresholds.
 - Benchmark report, paper-table report, and gate report output preservation when
   fixture loading fails before report generation.
 - Benchmark report, paper-table report, and gate report output preservation when

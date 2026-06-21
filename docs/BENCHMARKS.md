@@ -7,45 +7,110 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 - iterations per timing sample: `200`
 - timing samples: `3`
 - timing value: `best sample mean`
-- external fixtures: `0`
-- fixture manifests: `0`
+- external fixtures: `8`
+- fixture manifests: `1`
 - synthetic controls: `enabled`
+- benchmark mode: `all-codecs`
 - target: `macos` / `aarch64`
 
 | group | dataset | values | codec | phase2 strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| synthetic | smooth-sine | 16384 | raw-f32le |  | 65536 | 1.0000 | 12.24 | 1.99 | yes | 0.000000 | 0.000000 |
-| synthetic | smooth-sine | 16384 | lossless-f32 |  | 65564 | 1.0004 | 80.27 | 64.00 | yes | 0.000000 | 0.000000 |
-| synthetic | smooth-sine | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 60.49 | 15.94 | no | 0.124957 | 0.050102 |
-| synthetic | smooth-sine | 16384 | lossy-i4 |  | 8220 | 0.1254 | 82.22 | 6.40 | no | 0.228135 | 0.126263 |
-| synthetic | smooth-sine | 16384 | phase1-q4 |  | 10288 | 0.1570 | 136.17 | 50.61 | no | 0.314044 | 0.114028 |
-| synthetic | smooth-sine | 16384 | phase2-lossless | byte-plane-rle | 54838 | 0.8368 | 225.14 | 78.17 | yes | 0.000000 | 0.000000 |
-| synthetic | smooth-sine | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 54838 | 0.8368 | 512.50 | 78.27 | yes | 0.000000 | 0.000000 |
-| synthetic | smooth-sine | 16384 | phase2-lossless-container | qatc-container | 54866 | 0.8372 | 228.67 | 79.07 | yes | 0.000000 | 0.000000 |
-| synthetic | kv-like | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.53 | 0.74 | yes | 0.000000 | 0.000000 |
-| synthetic | kv-like | 16384 | lossless-f32 |  | 65564 | 1.0004 | 65.73 | 64.28 | yes | 0.000000 | 0.000000 |
-| synthetic | kv-like | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 78.56 | 18.41 | no | 0.062459 | 0.020074 |
-| synthetic | kv-like | 16384 | lossy-i4 |  | 8220 | 0.1254 | 82.25 | 6.31 | no | 0.103843 | 0.059749 |
-| synthetic | kv-like | 16384 | phase1-q4 |  | 10288 | 0.1570 | 136.29 | 52.24 | no | 0.138686 | 0.050129 |
-| synthetic | kv-like | 16384 | phase2-lossless | byte-plane-rle | 59288 | 0.9047 | 227.23 | 80.35 | yes | 0.000000 | 0.000000 |
-| synthetic | kv-like | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 59288 | 0.9047 | 526.83 | 80.24 | yes | 0.000000 | 0.000000 |
-| synthetic | kv-like | 16384 | phase2-lossless-container | qatc-container | 59316 | 0.9051 | 226.65 | 80.89 | yes | 0.000000 | 0.000000 |
-| synthetic | spiky | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.46 | 0.68 | yes | 0.000000 | 0.000000 |
-| synthetic | spiky | 16384 | lossless-f32 |  | 65564 | 1.0004 | 65.76 | 64.35 | yes | 0.000000 | 0.000000 |
-| synthetic | spiky | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 69.41 | 18.03 | no | 0.299554 | 0.024646 |
-| synthetic | spiky | 16384 | lossy-i4 |  | 8220 | 0.1254 | 82.15 | 6.30 | no | 0.557102 | 0.371499 |
-| synthetic | spiky | 16384 | phase1-q4 |  | 10288 | 0.1570 | 136.28 | 51.58 | no | 0.450652 | 0.163320 |
-| synthetic | spiky | 16384 | phase2-lossless | byte-plane-rle | 56835 | 0.8672 | 228.32 | 79.01 | yes | 0.000000 | 0.000000 |
-| synthetic | spiky | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 56835 | 0.8672 | 518.81 | 79.13 | yes | 0.000000 | 0.000000 |
-| synthetic | spiky | 16384 | phase2-lossless-container | qatc-container | 56863 | 0.8677 | 233.06 | 79.62 | yes | 0.000000 | 0.000000 |
-| synthetic | bit-delta | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.42 | 0.68 | yes | 0.000000 | 0.000000 |
-| synthetic | bit-delta | 16384 | lossless-f32 |  | 65564 | 1.0004 | 65.67 | 64.27 | yes | 0.000000 | 0.000000 |
-| synthetic | bit-delta | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 57.73 | 15.19 | no | 0.001965 | 0.001389 |
-| synthetic | bit-delta | 16384 | lossy-i4 |  | 8220 | 0.1254 | 82.21 | 5.96 | no | 0.015893 | 0.011238 |
-| synthetic | bit-delta | 16384 | phase1-q4 |  | 10288 | 0.1570 | 136.43 | 51.52 | no | 0.040468 | 0.012896 |
-| synthetic | bit-delta | 16384 | phase2-lossless | delta-xor-byte-plane-rle | 60 | 0.0009 | 276.86 | 73.37 | yes | 0.000000 | 0.000000 |
-| synthetic | bit-delta | 16384 | phase2-lossless-exhaustive | delta-xor-byte-plane-rle | 60 | 0.0009 | 284.33 | 73.45 | yes | 0.000000 | 0.000000 |
-| synthetic | bit-delta | 16384 | phase2-lossless-container | qatc-container | 88 | 0.0013 | 281.74 | 74.40 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | raw-f32le |  | 65536 | 1.0000 | 12.31 | 2.03 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | lossless-f32 |  | 65564 | 1.0004 | 79.94 | 63.95 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 62.17 | 16.42 | no | 0.124957 | 0.050102 |
+| synthetic | smooth-sine | 16384 | lossy-i4 |  | 8220 | 0.1254 | 83.46 | 6.67 | no | 0.228135 | 0.126263 |
+| synthetic | smooth-sine | 16384 | phase1-q4 |  | 10288 | 0.1570 | 138.18 | 51.68 | no | 0.314044 | 0.114028 |
+| synthetic | smooth-sine | 16384 | phase2-lossless | byte-plane-rle | 54838 | 0.8368 | 274.37 | 95.26 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 54838 | 0.8368 | 571.43 | 93.78 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | phase2-lossless-container | qatc-container | 54866 | 0.8372 | 281.49 | 97.03 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.55 | 0.81 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | lossless-f32 |  | 65564 | 1.0004 | 65.75 | 64.25 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 80.47 | 18.89 | no | 0.062459 | 0.020074 |
+| synthetic | kv-like | 16384 | lossy-i4 |  | 8220 | 0.1254 | 83.56 | 6.28 | no | 0.103843 | 0.059749 |
+| synthetic | kv-like | 16384 | phase1-q4 |  | 10288 | 0.1570 | 139.14 | 51.44 | no | 0.138686 | 0.050129 |
+| synthetic | kv-like | 16384 | phase2-lossless | byte-plane-rle | 59288 | 0.9047 | 274.41 | 95.73 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 59288 | 0.9047 | 573.43 | 94.96 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | phase2-lossless-container | qatc-container | 59316 | 0.9051 | 281.31 | 97.72 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.56 | 0.81 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | lossless-f32 |  | 65564 | 1.0004 | 65.81 | 64.27 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 72.05 | 18.74 | no | 0.299554 | 0.024646 |
+| synthetic | spiky | 16384 | lossy-i4 |  | 8220 | 0.1254 | 83.56 | 6.70 | no | 0.557102 | 0.371499 |
+| synthetic | spiky | 16384 | phase1-q4 |  | 10288 | 0.1570 | 140.33 | 52.14 | no | 0.450652 | 0.163320 |
+| synthetic | spiky | 16384 | phase2-lossless | byte-plane-rle | 56835 | 0.8672 | 277.59 | 95.66 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 56835 | 0.8672 | 576.39 | 94.41 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | phase2-lossless-container | qatc-container | 56863 | 0.8677 | 282.01 | 97.24 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.54 | 0.72 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | lossless-f32 |  | 65564 | 1.0004 | 65.42 | 64.30 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 59.23 | 15.50 | no | 0.001965 | 0.001389 |
+| synthetic | bit-delta | 16384 | lossy-i4 |  | 8220 | 0.1254 | 83.58 | 6.78 | no | 0.015893 | 0.011238 |
+| synthetic | bit-delta | 16384 | phase1-q4 |  | 10288 | 0.1570 | 141.05 | 51.71 | no | 0.040468 | 0.012896 |
+| synthetic | bit-delta | 16384 | phase2-lossless | delta-xor-byte-plane-rle | 60 | 0.0009 | 321.64 | 101.53 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | phase2-lossless-exhaustive | delta-xor-byte-plane-rle | 60 | 0.0009 | 323.83 | 101.72 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | phase2-lossless-container | qatc-container | 88 | 0.0013 | 323.24 | 103.68 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | raw-f32le |  | 983040 | 1.0000 | 91.40 | 15.39 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | lossless-f32 |  | 983068 | 1.0000 | 999.43 | 968.62 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | fp8-e4m3 |  | 245760 | 0.2500 | 1912.07 | 413.94 | no | 4.000000 | 0.740534 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | lossy-i4 |  | 122908 | 0.1250 | 1267.58 | 104.90 | no | 9.285713 | 4.667238 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | phase1-q4 |  | 153648 | 0.1563 | 2131.78 | 800.50 | no | 13.231544 | 3.876645 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | phase2-lossless | byte-plane-blocks | 491560 | 0.5000 | 1389.43 | 447.36 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | phase2-lossless-exhaustive | byte-plane-blocks | 491560 | 0.5000 | 7678.75 | 448.02 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer0-key | 245760 | phase2-lossless-container | qatc-container | 491720 | 0.5002 | 1336.24 | 461.24 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | raw-f32le |  | 983040 | 1.0000 | 91.14 | 15.24 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | lossless-f32 |  | 983068 | 1.0000 | 993.20 | 982.57 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | fp8-e4m3 |  | 245760 | 0.2500 | 1489.56 | 347.00 | no | 0.468750 | 0.039465 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | lossy-i4 |  | 122908 | 0.1250 | 1269.14 | 105.19 | no | 0.620536 | 0.357129 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | phase1-q4 |  | 153648 | 0.1563 | 2142.38 | 806.47 | no | 0.518370 | 0.179564 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | phase2-lossless | byte-plane-blocks | 491560 | 0.5000 | 1394.73 | 449.60 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | phase2-lossless-exhaustive | byte-plane-blocks | 491560 | 0.5000 | 7354.72 | 457.42 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-05b-long-1920-layer23-value | 245760 | phase2-lossless-container | qatc-container | 491720 | 0.5002 | 1338.94 | 461.75 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | raw-f32le |  | 2031616 | 1.0000 | 189.35 | 32.03 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | lossless-f32 |  | 2031644 | 1.0000 | 2068.63 | 2011.39 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | fp8-e4m3 |  | 507904 | 0.2500 | 5454.45 | 1346.96 | no | 0.500000 | 0.036526 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | lossy-i4 |  | 253980 | 0.1250 | 2638.30 | 268.07 | no | 0.973214 | 0.472603 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | phase1-q4 |  | 317488 | 0.1563 | 4468.98 | 1798.27 | no | 0.968049 | 0.273168 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | phase2-lossless | byte-plane-blocks | 1015848 | 0.5000 | 2881.55 | 958.38 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | phase2-lossless-exhaustive | byte-plane-blocks | 1015848 | 0.5000 | 17380.96 | 958.33 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer0-key | 507904 | phase2-lossless-container | qatc-container | 1016184 | 0.5002 | 2812.83 | 955.31 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | raw-f32le |  | 2031616 | 1.0000 | 188.18 | 32.42 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | lossless-f32 |  | 2031644 | 1.0000 | 2070.37 | 2013.07 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | fp8-e4m3 |  | 507904 | 0.2500 | 3444.23 | 840.27 | no | 0.250000 | 0.018047 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | lossy-i4 |  | 253980 | 0.1250 | 2639.05 | 268.28 | no | 0.430804 | 0.239794 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | phase1-q4 |  | 317488 | 0.1563 | 4490.50 | 1810.35 | no | 0.369328 | 0.126042 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | phase2-lossless | byte-plane-blocks | 1015848 | 0.5000 | 2889.77 | 959.81 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | phase2-lossless-exhaustive | byte-plane-blocks | 1015848 | 0.5000 | 15730.77 | 965.13 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | tinyllama-11b-1984-layer21-value | 507904 | phase2-lossless-container | qatc-container | 1016184 | 0.5002 | 2822.29 | 954.81 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | raw-f32le |  | 2031616 | 1.0000 | 189.58 | 33.11 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | lossless-f32 |  | 2031644 | 1.0000 | 2069.80 | 2012.78 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | fp8-e4m3 |  | 507904 | 0.2500 | 4108.60 | 990.72 | no | 78.000000 | 6.838389 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | lossy-i4 |  | 253980 | 0.1250 | 2644.54 | 268.31 | no | 22.714279 | 6.360802 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | phase1-q4 |  | 317488 | 0.1563 | 4498.29 | 1812.83 | no | 54.578224 | 8.243290 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | phase2-lossless | byte-plane-blocks | 1015848 | 0.5000 | 2900.83 | 965.55 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | phase2-lossless-exhaustive | byte-plane-blocks | 1015848 | 0.5000 | 16538.56 | 971.54 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer0-key | 507904 | phase2-lossless-container | qatc-container | 1016184 | 0.5002 | 2822.28 | 955.98 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | raw-f32le |  | 2031616 | 1.0000 | 189.55 | 32.99 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | lossless-f32 |  | 2031644 | 1.0000 | 2076.92 | 2015.31 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | fp8-e4m3 |  | 507904 | 0.2500 | 3946.37 | 900.17 | no | 0.812500 | 0.071700 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | lossy-i4 |  | 253980 | 0.1250 | 2648.64 | 268.14 | no | 1.129464 | 0.639642 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | phase1-q4 |  | 317488 | 0.1563 | 4500.70 | 1816.67 | no | 0.939755 | 0.326317 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | phase2-lossless | byte-plane-blocks | 1015848 | 0.5000 | 2902.77 | 968.11 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | phase2-lossless-exhaustive | byte-plane-blocks | 1015848 | 0.5000 | 15651.45 | 974.49 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | qwen25-15b-1984-layer27-value | 507904 | phase2-lossless-container | qatc-container | 1016184 | 0.5002 | 2831.22 | 957.24 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | raw-f32le |  | 3145728 | 1.0000 | 293.14 | 50.80 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | lossless-f32 |  | 3145756 | 1.0000 | 3235.35 | 3147.42 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | fp8-e4m3 |  | 786432 | 0.2500 | 7438.10 | 1821.45 | no | 0.437500 | 0.021523 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | lossy-i4 |  | 393244 | 0.1250 | 4090.65 | 414.52 | no | 0.593750 | 0.331036 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | phase1-q4 |  | 491568 | 0.1563 | 6983.32 | 2815.01 | no | 0.530901 | 0.172817 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | phase2-lossless | byte-plane-blocks | 1572904 | 0.5000 | 4508.31 | 1506.02 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | phase2-lossless-exhaustive | byte-plane-blocks | 1572904 | 0.5000 | 27108.63 | 1509.89 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer0-key | 786432 | phase2-lossless-container | qatc-container | 1573416 | 0.5002 | 4505.09 | 1515.13 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | raw-f32le |  | 3145728 | 1.0000 | 293.24 | 50.89 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | lossless-f32 |  | 3145756 | 1.0000 | 3238.40 | 3149.28 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | fp8-e4m3 |  | 786432 | 0.2500 | 10624.50 | 2773.67 | no | 1.000000 | 0.023076 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | lossy-i4 |  | 393244 | 0.1250 | 4096.14 | 415.35 | no | 1.677455 | 0.722723 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | phase1-q4 |  | 491568 | 0.1563 | 6975.01 | 2814.88 | no | 1.805260 | 0.427071 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | phase2-lossless | byte-plane-blocks | 1572904 | 0.5000 | 4513.85 | 1509.67 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | phase2-lossless-exhaustive | byte-plane-blocks | 1572904 | 0.5000 | 27021.15 | 1516.64 | yes | 0.000000 | 0.000000 |
+| permeantos-kv | phi35-mini-256-layer31-value | 786432 | phase2-lossless-container | qatc-container | 1573416 | 0.5002 | 4506.62 | 1516.79 | yes | 0.000000 | 0.000000 |
 
 ## Interpretation
 
@@ -53,7 +118,7 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 - `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.
 - `lossy-i4` is the original PermeantOS seed baseline.
 - `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.
-- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-RLE or byte-plane RLE first, then probes adjacent-bit delta-XOR byte-plane RLE before building the more expensive Phase 1 predictor.
+- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor.
 - `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.
 - `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.
 - Phase 1 is still lossy. The residual side channel is an experiment for lowering reconstruction error, not a bit-identical lossless design.

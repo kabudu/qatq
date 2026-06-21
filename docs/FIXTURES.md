@@ -49,6 +49,7 @@ Run a benchmark gate with explicit readiness thresholds:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
+  --phase2-only \
   --manifest fixtures/permeantos.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
@@ -57,6 +58,21 @@ cargo run --release --bin qatq-bench -- \
   --max-phase2-decode-us 1000 \
   --max-phase2-container-ratio 0.96 \
   --max-phase2-container-decode-us 1200
+```
+
+For different tensor sizes, also run a throughput-normalized gate:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --manifest fixtures/permeantos.manifest \
+  --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md \
+  --gate-require-external \
+  --max-phase2-ratio 0.95 \
+  --max-phase2-encode-us 5000 \
+  --max-phase2-decode-ns-per-value 2.10 \
+  --max-phase2-container-ratio 0.96 \
+  --max-phase2-container-decode-ns-per-value 2.20
 ```
 
 The gate checks bit-identical `phase2-lossless` and `QATC` container

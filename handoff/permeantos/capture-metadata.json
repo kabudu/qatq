@@ -1,0 +1,165 @@
+{
+  "run_id": "permeantos-20260621",
+  "captures": [
+    {
+      "name": "qwen25-05b-long-1920-layer0-key",
+      "source": "/tmp/permeant-long-horizon-extract-smoke.json",
+      "tensor": "layer.0.key",
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "scenario": "AWS long-horizon WSS QATQ round trip",
+      "runtime_path": "local MLX source to AWS vLLM target",
+      "path": "captures/permeantos-20260621/qwen25-05b-long-1920-layer0-key.f32le",
+      "manifest_path": "captures/permeantos-20260621/qwen25-05b-long-1920-layer0-key.f32le",
+      "shape": [
+        1920,
+        2,
+        64
+      ],
+      "value_count": 245760,
+      "byte_count": 983040,
+      "sha256": "7371c81877edd34cb94c9d029bbbf5ba7b42aa0a2732068ac609514b1dd03b6b",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "qwen25-05b-long-1920-layer23-value",
+      "source": "/tmp/permeant-long-horizon-extract-smoke.json",
+      "tensor": "layer.23.value",
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "scenario": "AWS long-horizon WSS QATQ round trip",
+      "runtime_path": "local MLX source to AWS vLLM target",
+      "path": "captures/permeantos-20260621/qwen25-05b-long-1920-layer23-value.f32le",
+      "manifest_path": "captures/permeantos-20260621/qwen25-05b-long-1920-layer23-value.f32le",
+      "shape": [
+        1920,
+        2,
+        64
+      ],
+      "value_count": 245760,
+      "byte_count": 983040,
+      "sha256": "f6e4ff4bd0a3cba7f27b3d8aeacfa017296fa4346e516c14945687eadc37883c",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "tinyllama-11b-1984-layer0-key",
+      "source": "/tmp/permeant-tinyllama-extract.json",
+      "tensor": "layer.0.key",
+      "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "scenario": "AWS raw-transfer TinyLlama structural E2E proof",
+      "runtime_path": "local MLX source to AWS vLLM target",
+      "path": "captures/permeantos-20260621/tinyllama-11b-1984-layer0-key.f32le",
+      "manifest_path": "captures/permeantos-20260621/tinyllama-11b-1984-layer0-key.f32le",
+      "shape": [
+        1984,
+        4,
+        64
+      ],
+      "value_count": 507904,
+      "byte_count": 2031616,
+      "sha256": "e34bc6f4aa0d19edda4bb21eb25bb9fa7a8bb18a97e6b00db8c67a3026bfd497",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "tinyllama-11b-1984-layer21-value",
+      "source": "/tmp/permeant-tinyllama-extract.json",
+      "tensor": "layer.21.value",
+      "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "scenario": "AWS raw-transfer TinyLlama structural E2E proof",
+      "runtime_path": "local MLX source to AWS vLLM target",
+      "path": "captures/permeantos-20260621/tinyllama-11b-1984-layer21-value.f32le",
+      "manifest_path": "captures/permeantos-20260621/tinyllama-11b-1984-layer21-value.f32le",
+      "shape": [
+        1984,
+        4,
+        64
+      ],
+      "value_count": 507904,
+      "byte_count": 2031616,
+      "sha256": "7c2440639e95caf1fa0b76b77d6ee57cfb4bccf2f95ae95d949bc356568e178b",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "qwen25-15b-1984-layer0-key",
+      "source": "/tmp/permeant-qwen15-extract.json",
+      "tensor": "layer.0.key",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "scenario": "AWS Qwen2.5 1.5B raw-transfer backend compatibility capture",
+      "runtime_path": "local MLX source to AWS vLLM target",
+      "path": "captures/permeantos-20260621/qwen25-15b-1984-layer0-key.f32le",
+      "manifest_path": "captures/permeantos-20260621/qwen25-15b-1984-layer0-key.f32le",
+      "shape": [
+        1984,
+        2,
+        128
+      ],
+      "value_count": 507904,
+      "byte_count": 2031616,
+      "sha256": "73677b57d68c4f80e7e0d5a27dcc00d983d48b33b62a3235922a4244dddbe1f3",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "qwen25-15b-1984-layer27-value",
+      "source": "/tmp/permeant-qwen15-extract.json",
+      "tensor": "layer.27.value",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "scenario": "AWS Qwen2.5 1.5B raw-transfer backend compatibility capture",
+      "runtime_path": "local MLX source to AWS vLLM target",
+      "path": "captures/permeantos-20260621/qwen25-15b-1984-layer27-value.f32le",
+      "manifest_path": "captures/permeantos-20260621/qwen25-15b-1984-layer27-value.f32le",
+      "shape": [
+        1984,
+        2,
+        128
+      ],
+      "value_count": 507904,
+      "byte_count": 2031616,
+      "sha256": "1269871639a33545ad9f33d590773328367b2a508f15e7a67ffa0eeb23abcfda",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "phi35-mini-256-layer0-key",
+      "source": "/tmp/permeant-phi-extract-256.json",
+      "tensor": "layer.0.key",
+      "model": "microsoft/Phi-3.5-mini-instruct",
+      "scenario": "local MLX extraction stress capture",
+      "runtime_path": "local MLX source tensor extraction",
+      "path": "captures/permeantos-20260621/phi35-mini-256-layer0-key.f32le",
+      "manifest_path": "captures/permeantos-20260621/phi35-mini-256-layer0-key.f32le",
+      "shape": [
+        256,
+        32,
+        96
+      ],
+      "value_count": 786432,
+      "byte_count": 3145728,
+      "sha256": "8b1bd5d62f904efca2976a8b5da74dfaaad06e79855a9ba032d5792728ae00cf",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    },
+    {
+      "name": "phi35-mini-256-layer31-value",
+      "source": "/tmp/permeant-phi-extract-256.json",
+      "tensor": "layer.31.value",
+      "model": "microsoft/Phi-3.5-mini-instruct",
+      "scenario": "local MLX extraction stress capture",
+      "runtime_path": "local MLX source tensor extraction",
+      "path": "captures/permeantos-20260621/phi35-mini-256-layer31-value.f32le",
+      "manifest_path": "captures/permeantos-20260621/phi35-mini-256-layer31-value.f32le",
+      "shape": [
+        256,
+        32,
+        96
+      ],
+      "value_count": 786432,
+      "byte_count": 3145728,
+      "sha256": "d56cf00477dbfbb6027a25d7b5c4092b810f1ef37cfc40467141a4269b773378",
+      "original_dtype": "unknown",
+      "export_dtype": "f32le"
+    }
+  ]
+}

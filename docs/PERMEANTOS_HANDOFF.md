@@ -151,6 +151,7 @@ cargo run --release --bin qatq-bench -- \
 
 # 9. Run the readiness gate against real external fixtures.
 cargo run --release --bin qatq-bench -- \
+  --phase2-only \
   --manifest fixtures/permeantos.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
@@ -575,6 +576,7 @@ Run the gate with explicit thresholds:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
+  --phase2-only \
   --manifest fixtures/permeantos.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
@@ -599,10 +601,28 @@ Gate meaning:
   tensor.
 - `--max-phase2-container-decode-us 1200` requires `QATC` decode time at or
   below 1200 microseconds per benchmarked tensor on the current machine.
+- `--phase2-only` skips unrelated codec rows during readiness gates and times
+  only `phase2-lossless` plus QATC.
 - bit-exact reconstruction is mandatory.
 
 The command exits nonzero if the gate fails. Keep failed gate reports. A failed
 gate is useful evidence and should be handed back to QATQ.
+
+For captures with substantially different value counts, also run the
+throughput-normalized decode gate:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --manifest fixtures/permeantos.manifest \
+  --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md \
+  --gate-require-external \
+  --max-phase2-ratio 0.95 \
+  --max-phase2-encode-us 5000 \
+  --max-phase2-decode-ns-per-value 2.10 \
+  --max-phase2-container-ratio 0.96 \
+  --max-phase2-container-decode-ns-per-value 2.20
+```
 
 Thresholds may be adjusted only when the reason is recorded in the run notes.
 Do not silently relax thresholds and report the run as ready.
@@ -886,6 +906,7 @@ cargo run --release --bin qatq-bench -- \
   --paper-output docs/PAPER_TABLES.md \
   --manifest fixtures/permeantos.manifest
 cargo run --release --bin qatq-bench -- \
+  --phase2-only \
   --manifest fixtures/permeantos.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
