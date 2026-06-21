@@ -1,8 +1,34 @@
 # PermeantOS Handoff
 
-This is the operating runbook for handing real PermeantOS tensor captures to
-QATQ, running the current QATQ validation path, and returning enough evidence for
-codec analysis and further development.
+## Current Next Run
+
+The current PermeantOS task is no longer just fixture capture. QATQ has a
+production storage-decision API and the throughput-normalized gate now passes
+on the 50-fixture PermeantOS evidence set.
+
+Use this document for general evidence-run background, but use the current
+next-run instructions as the source of truth for the next PermeantOS execution:
+
+```text
+handoff/permeantos/NEXT_RUN_INSTRUCTIONS.md
+```
+
+That run must exercise both production paths:
+
+- `Phase2EncodeDecision::Compressed` for compression-positive bfloat16-derived
+  KV tensors;
+- `Phase2EncodeDecision::PassThroughRaw` for compression-negative float32 KV
+  tensors.
+
+The large-tensor readiness gate is now
+`docs/BENCHMARK_GATE_THROUGHPUT.md`. The fixed absolute-latency gate in
+`docs/BENCHMARK_GATE.md` remains useful for small-tensor/service-budget
+analysis, but it should not block large-tensor readiness by itself.
+
+The remaining sections are the retained evidence-capture runbook. They still
+apply when PermeantOS is producing new raw tensor fixtures, but the current
+production integration task is governed by
+`handoff/permeantos/NEXT_RUN_INSTRUCTIONS.md`.
 
 ## Direct Task For PermeantOS
 
