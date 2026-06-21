@@ -1,0 +1,371 @@
+use std::{
+    fs,
+    process::{Command, Stdio},
+};
+
+#[test]
+fn benchmark_accepts_external_f32le_fixture() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let output = dir.join(format!("{stem}.md"));
+    let values = [0.25_f32, -0.5, 1.0, 2.0, -3.5, 0.125, 0.75, -1.25];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--output")
+        .arg(&output)
+        .arg("--input")
+        .arg(format!("tiny:{}", input.display()))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&output).expect("read benchmark report");
+    assert!(report.contains("fixture"));
+    assert!(report.contains("tiny"));
+    assert!(report.contains("phase1-q4"));
+    assert!(report.contains("phase2 strategy"));
+    assert!(report.contains("bit-delta"));
+    assert!(report.contains("delta-xor-byte-plane-rle"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(output);
+}
+
+#[test]
+fn benchmark_accepts_manifest_and_writes_paper_summary() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-manifest-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let manifest = dir.join(format!("{stem}.manifest"));
+    let output = dir.join(format!("{stem}.md"));
+    let paper_output = dir.join(format!("{stem}.paper.md"));
+    let values = [0.125_f32, -0.25, 0.5, -1.0, 2.0, -4.0, 0.75, 1.25];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+    fs::write(
+        &manifest,
+        format!(
+            "[fixture]\nname = tiny-kv\ngroup = permeantos-kv\npath = \"{}\"\nshape = \"[1, 8]\"\nnotes = \"test fixture\"\n",
+            input.file_name().unwrap().to_string_lossy()
+        ),
+    )
+    .expect("write manifest");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--output")
+        .arg(&output)
+        .arg("--paper-output")
+        .arg(&paper_output)
+        .arg("--no-synthetic")
+        .arg("--manifest")
+        .arg(&manifest)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&output).expect("read benchmark report");
+    assert!(report.contains("permeantos-kv"));
+    assert!(report.contains("tiny-kv"));
+
+    let paper = fs::read_to_string(&paper_output).expect("read paper report");
+    assert!(paper.contains("# Paper Tables"));
+    assert!(paper.contains("Phase 1 Versus Seed Baseline"));
+    assert!(paper.contains("permeantos-kv"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(manifest);
+    let _ = fs::remove_file(output);
+    let _ = fs::remove_file(paper_output);
+}
+
+#[test]
+fn benchmark_failed_input_does_not_overwrite_existing_reports() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-failed-input-{}", std::process::id());
+    let missing = dir.join(format!("{stem}.missing.f32le"));
+    let output = dir.join(format!("{stem}.md"));
+    let paper_output = dir.join(format!("{stem}.paper.md"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let output_sentinel = b"keep-existing-benchmark-report";
+    let paper_sentinel = b"keep-existing-paper-report";
+    let gate_sentinel = b"keep-existing-gate-report";
+    fs::write(&output, output_sentinel).expect("write output sentinel");
+    fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
+    fs::write(&gate, gate_sentinel).expect("write gate sentinel");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--output")
+        .arg(&output)
+        .arg("--paper-output")
+        .arg(&paper_output)
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--input")
+        .arg(format!("missing:{}", missing.display()))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark");
+    assert!(!status.success());
+
+    assert_eq!(fs::read(&output).expect("read output"), output_sentinel);
+    assert_eq!(
+        fs::read(&paper_output).expect("read paper output"),
+        paper_sentinel
+    );
+    assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
+
+    let _ = fs::remove_file(output);
+    let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-malformed-input-{}", std::process::id());
+    let input = dir.join(format!("{stem}.bad"));
+    let output = dir.join(format!("{stem}.md"));
+    let paper_output = dir.join(format!("{stem}.paper.md"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    fs::write(&input, [1_u8, 2, 3]).expect("write malformed input");
+    let output_sentinel = b"keep-existing-benchmark-report";
+    let paper_sentinel = b"keep-existing-paper-report";
+    let gate_sentinel = b"keep-existing-gate-report";
+    fs::write(&output, output_sentinel).expect("write output sentinel");
+    fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
+    fs::write(&gate, gate_sentinel).expect("write gate sentinel");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--output")
+        .arg(&output)
+        .arg("--paper-output")
+        .arg(&paper_output)
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--input")
+        .arg(format!("malformed:{}", input.display()))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark");
+    assert!(!status.success());
+
+    assert_eq!(fs::read(&output).expect("read output"), output_sentinel);
+    assert_eq!(
+        fs::read(&paper_output).expect("read paper output"),
+        paper_sentinel
+    );
+    assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(output);
+    let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_manifest_failure_after_partial_work_preserves_reports() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-partial-manifest-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let missing = dir.join(format!("{stem}.missing.f32le"));
+    let manifest = dir.join(format!("{stem}.manifest"));
+    let output = dir.join(format!("{stem}.md"));
+    let paper_output = dir.join(format!("{stem}.paper.md"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let values = [0.125_f32, -0.25, 0.5, -1.0, 2.0, -4.0, 0.75, 1.25];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+    fs::write(
+        &manifest,
+        format!(
+            "[fixture]\nname = valid-first\ngroup = permeantos-kv\npath = \"{}\"\n\n[fixture]\nname = missing-second\ngroup = permeantos-kv\npath = \"{}\"\n",
+            input.file_name().unwrap().to_string_lossy(),
+            missing.file_name().unwrap().to_string_lossy()
+        ),
+    )
+    .expect("write manifest");
+    let output_sentinel = b"keep-existing-benchmark-report";
+    let paper_sentinel = b"keep-existing-paper-report";
+    let gate_sentinel = b"keep-existing-gate-report";
+    fs::write(&output, output_sentinel).expect("write output sentinel");
+    fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
+    fs::write(&gate, gate_sentinel).expect("write gate sentinel");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--output")
+        .arg(&output)
+        .arg("--paper-output")
+        .arg(&paper_output)
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--manifest")
+        .arg(&manifest)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark");
+    assert!(!status.success());
+
+    assert_eq!(fs::read(&output).expect("read output"), output_sentinel);
+    assert_eq!(
+        fs::read(&paper_output).expect("read paper output"),
+        paper_sentinel
+    );
+    assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(manifest);
+    let _ = fs::remove_file(output);
+    let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_gate_passes_with_loose_thresholds() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-gate-pass-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let values = [0.0_f32, 0.25, -0.5, 1.0, 2.0, -4.0, 8.0, -16.0];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("gate-pass:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--gate-require-external")
+        .arg("--max-phase2-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-encode-us")
+        .arg("1000000")
+        .arg("--max-phase2-decode-us")
+        .arg("1000000")
+        .arg("--max-phase2-container-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-container-decode-us")
+        .arg("1000000")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark gate");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `pass`"));
+    assert!(report.contains("gate-pass"));
+    assert!(report.contains("phase2-lossless-container"));
+    assert!(report.contains("exact_bits=true"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_gate_fails_with_strict_container_threshold() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-container-gate-fail-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let values = [1.0_f32, 2.0, 3.0, 4.0];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("container-gate-fail:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--max-phase2-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-container-ratio")
+        .arg("0.01")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark gate");
+    assert!(!status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `fail`"));
+    assert!(report.contains("container-gate-fail"));
+    assert!(report.contains("phase2-lossless-container"));
+    assert!(report.contains("ratio"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_gate_fails_with_strict_ratio_threshold() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-gate-fail-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let values = [1.0_f32, 2.0, 3.0, 4.0];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("gate-fail:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--max-phase2-ratio")
+        .arg("0.01")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run benchmark gate");
+    assert!(!status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `fail`"));
+    assert!(report.contains("gate-fail"));
+    assert!(report.contains("ratio"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}

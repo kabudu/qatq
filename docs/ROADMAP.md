@@ -10,25 +10,39 @@
 
 ## Phase 1 - Paper-Faithful Training-Free QATQ
 
-- [ ] Implement quaternion grouping and Hamilton product rotation.
-- [ ] Add deterministic rotation seed/configuration handling.
-- [ ] Implement TurboQuant-style scalar quantization.
-- [ ] Add QJL/residual side-channel experiments.
-- [ ] Benchmark against raw, FP8, and existing PermeantOS lossy int4.
+- [x] Implement quaternion grouping and Hamilton product rotation.
+- [x] Add deterministic rotation seed/configuration handling.
+- [x] Implement TurboQuant-style scalar quantization.
+- [x] Add QJL/residual side-channel experiments.
+- [x] Benchmark against raw, FP8, and existing PermeantOS lossy int4.
+
+Phase 1 is implemented as the `phase1-q4` mode. The QJL/residual side channel is
+currently a compact global residual-magnitude plus per-coordinate sign-bit
+experiment. It is useful for measurement but does not claim lossless
+reconstruction.
 
 ## Phase 2 - Lossless QATQ-Family Mode
 
-- [ ] Define exact reconstruction semantics.
-- [ ] Implement residual generation from QATQ reconstruction.
-- [ ] Entropy-code residuals and compare against zstd/lz4 baselines.
-- [ ] Add property tests for bit-identical f32 reconstruction.
+- [x] Define exact reconstruction semantics.
+- [x] Implement residual generation from QATQ reconstruction.
+- [x] Entropy-code residuals and compare against the exact f32 envelope.
+- [x] Add tests for bit-identical f32 reconstruction.
+
+Phase 2 is implemented as `phase2-lossless`. It adaptively stores raw f32 bits,
+byte-RLE, byte-plane RLE, adjacent-bit delta-XOR byte-plane residuals, or the
+Phase 1 predictor plus run-coded XOR residuals and verifies final reconstruction
+with the payload checksum. zstd/lz4 comparison remains pending until external
+dependencies or fixture tooling are added.
 
 ## Phase 3 - Runtime and Service Integration
 
 - [ ] Publish a Rust crate API suitable for PermeantOS.
 - [ ] Add a standalone codec service binary.
 - [ ] Add MLX, vLLM, and llama.cpp adapter examples.
-- [ ] Add streaming encode/decode APIs for large KV blocks.
+- [x] Add chunked exact encode/decode APIs for large KV blocks.
+- [x] Add a sequential Phase 2 chunk container for large tensor files.
+- [ ] Add random-access metadata and a true streaming container/service
+      protocol.
 
 ## Phase 4 - Open Release
 
@@ -36,4 +50,3 @@
 - [ ] Add CI, coverage, fuzzing, and supply-chain checks.
 - [ ] Publish to crates.io when the API is stable.
 - [ ] Cut GitHub Releases with binaries once the CLI is useful standalone.
-

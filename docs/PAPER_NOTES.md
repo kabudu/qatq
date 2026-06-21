@@ -26,3 +26,29 @@ variant:
 The PermeantOS seed implementation did not perform this full pipeline; it used
 a deterministic signed-int4 approximation to validate real migration plumbing.
 
+## Current Implementation Notes
+
+The `phase1-q4` mode implements the training-free pipeline as a deterministic
+codec mode:
+
+- four-coordinate quaternion lanes with zero padding on the final partial lane;
+- per-lane deterministic unit-quaternion rotation derived from a stored seed;
+- Hamilton-product forward and inverse rotation;
+- global symmetric signed q4 scalar quantization;
+- QJL-inspired residual experiment using one residual sign bit per rotated
+  coordinate plus one global mean absolute residual magnitude.
+
+This is suitable for codec-level experiments and white-paper measurements, but
+it is not yet a model-quality result.
+
+The `phase2-lossless` mode is the current exact QATQ-family path. It uses Phase
+1 prediction plus run-coded XOR residuals when that wins, adjacent-bit
+delta-XOR byte-plane residuals for correlated exact streams, and otherwise falls
+back to exact raw-bit, byte-RLE, or byte-plane RLE strategies. It is
+bit-identical for `f32` payloads, including signed zero, infinities, and NaN
+payload bits. The `QATC` container carries large tensors as sequential Phase 2
+chunks for CLI and PermeantOS handoff use.
+
+The next paper-refresh step is to test Phase 1, Phase 2, and the exact controls
+on real KV-cache tensors and PermeantOS migration paths, then replace synthetic
+tables with fixture-backed evidence.
