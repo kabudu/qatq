@@ -66,3 +66,13 @@ cmp captures/permeantos-20260621-expanded/microsoft-phi-3-5-mini-instruct-seq512
 cargo run --bin qatq -- encode-chunked --max-values-per-chunk 65536 captures/permeantos-20260621-expanded/gpt2-seq512-layer0-key.f32le /tmp/gpt2-seq512-layer0-key.qatc
 cargo run --bin qatq -- decode /tmp/gpt2-seq512-layer0-key.qatc /tmp/gpt2-seq512-layer0-key.restored.f32le
 cmp captures/permeantos-20260621-expanded/gpt2-seq512-layer0-key.f32le /tmp/gpt2-seq512-layer0-key.restored.f32le
+
+# QATQ no-compress bypass policy update
+cargo test --test bench -- --nocapture
+# Result: passed, 11 benchmark integration tests.
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest
+# Result: passed, reports regenerated with raw-bits/no-compress evidence rows.
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-us 1000 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-us 1200
+# Result: failed; GPT-2 raw-bits rows pass as no-compress bypasses, remaining failures are large fixed-latency Phi rows.
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 2.10 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 2.20
+# Result: failed; GPT-2 raw-bits rows pass as no-compress bypasses, remaining failures are Phi seq512 direct encode rows over 5000us.

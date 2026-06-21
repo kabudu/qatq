@@ -74,8 +74,10 @@ This is therefore a useful QATQ engineering handoff, not a production readiness 
 - Phase2-only benchmark report: generated in `docs/BENCHMARKS.md`
 - Phase2 paper table draft: generated in `docs/PAPER_TABLES.md`
 - Full all-codec benchmark: interrupted after an extended CPU-active run; phase2-only report was generated instead because this handoff evaluates `phase2-lossless` and QATC readiness
-- Fixed absolute-latency gate: failed
-- Throughput-normalized gate: failed
+- Fixed absolute-latency gate: failed on large compressible Phi latency budgets;
+  GPT-2 float32 rows now pass as explicit no-compress bypasses
+- Throughput-normalized gate: failed only on large Phi seq512 direct encode
+  exceeding the fixed `5000us` encode cap
 
 ## Exactness Spot Checks
 
@@ -100,10 +102,11 @@ evidence that the current byte-plane strategy handles many bfloat16-derived KV
 captures well.
 
 The new GPT-2 captures are different: they export from `mlx.core.float32` and
-remain effectively incompressible under the current phase2 strategy, with ratios
-around `1.0000-1.0003` and decode throughput around `4.0-4.3ns/value`. These
-rows fail both ratio and throughput gate thresholds while still reconstructing
-bit-for-bit.
+remain effectively incompressible under the current phase2 strategy. QATQ now
+classifies their selected `raw-bits` strategy as an explicit no-compress bypass:
+the rows remain exact and are retained for evidence, but ratio and latency
+thresholds are not counted as compression failures because production should
+store or move those tensors without QATQ compression.
 
 The Phi 512-token captures remain compressible and exact, but direct encode time
 is roughly `9ms`, exceeding the current `5000us` encode cap. QATC container
@@ -111,13 +114,18 @@ decode throughput passes for those large Phi rows in the throughput gate.
 
 ## Recommendation Back To QATQ
 
-Keep the run as `analysis-only` and use it to guide codec engineering:
+Keep the run as `analysis-only` and use it to guide the next policy/performance
+decision:
 
 1. Preserve the current exact/QATC paths; integrity is holding across all 50 real fixtures.
-2. Add strategy detection or a bypass policy for float32-style GPT-2 KV tensors where phase2 adds size and latency instead of compression.
-3. Consider readiness policy as a matrix, not a single global threshold: bfloat16-derived KV can use ratio and ns/value targets; float32 KV needs either a different strategy or an explicit no-compress decision.
+2. Keep the no-compress bypass policy for float32-style GPT-2 KV tensors where
+   phase2 adds size and latency instead of compression.
+3. Consider readiness policy as a matrix, not a single global threshold:
+   bfloat16-derived KV can use ratio and ns/value targets; float32 KV should use
+   exact pass-through unless a later float32 strategy proves worthwhile.
 4. Treat fixed absolute latency as a small-tensor service budget, not the universal readiness gate for large tensors.
-5. Re-run after QATQ adds a better float32 strategy, skip/bypass heuristic, or per-runtime profile thresholds.
+5. Re-run after QATQ either optimizes large Phi seq512 direct encode or accepts
+   an encode-throughput budget instead of a fixed `5000us` cap.
 
 ## Handoff Files
 

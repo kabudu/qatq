@@ -376,6 +376,47 @@ fn benchmark_phase2_only_paper_summary_keeps_lossless_envelope_rows() {
 }
 
 #[test]
+fn benchmark_gate_treats_raw_bits_as_no_compress_bypass() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-no-compress-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let mut input_bytes = Vec::new();
+    for index in 0..128_u32 {
+        let bits = index.wrapping_mul(0x9e37_79b9).rotate_left(index % 31) ^ 0x1357_2468;
+        input_bytes.extend_from_slice(&f32::from_bits(bits).to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("no-compress:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .arg("--max-phase2-ratio")
+        .arg("0.01")
+        .arg("--max-phase2-container-ratio")
+        .arg("0.01")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run no-compress benchmark gate");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `pass`"));
+    assert!(report.contains("raw-bits"));
+    assert!(report.contains("no-compress bypass selected"));
+    assert!(report.contains("exact_bits=true"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
 fn benchmark_gate_fails_with_strict_container_threshold() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-bench-container-gate-fail-{}", std::process::id());
@@ -421,7 +462,7 @@ fn benchmark_gate_fails_with_strict_ratio_threshold() {
     let stem = format!("qatq-bench-gate-fail-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
     let gate = dir.join(format!("{stem}.gate.md"));
-    let values = [1.0_f32, 2.0, 3.0, 4.0];
+    let values = vec![0.0_f32; 128];
     let mut input_bytes = Vec::new();
     for value in values {
         input_bytes.extend_from_slice(&value.to_le_bytes());

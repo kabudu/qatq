@@ -125,7 +125,7 @@ fn run() -> Result<(), String> {
     report.push_str("- `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.\n");
     report.push_str("- `lossy-i4` is the original PermeantOS seed baseline.\n");
     report.push_str("- `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.\n");
-    report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor.\n");
+    report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.\n");
     report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
     report.push_str("- `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.\n");
     report.push_str("- Phase 1 is still lossy. The residual side channel is an experiment for lowering reconstruction error, not a bit-identical lossless design.\n");
@@ -925,48 +925,56 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
         };
         let mut dataset_passed = true;
         let mut reasons = Vec::new();
+        let phase2_no_compress = is_phase2_no_compress(phase2);
         if !phase2.exact_bits {
             dataset_passed = false;
             reasons.push("phase2 was not bit-identical".to_string());
         }
-        if let Some(limit) = options.max_phase2_ratio {
-            if phase2.ratio > limit {
-                dataset_passed = false;
-                reasons.push(format!("ratio {:.4} > {:.4}", phase2.ratio, limit));
+        if phase2_no_compress {
+            reasons.push("no-compress bypass selected".to_string());
+        } else {
+            if let Some(limit) = options.max_phase2_ratio {
+                if phase2.ratio > limit {
+                    dataset_passed = false;
+                    reasons.push(format!("ratio {:.4} > {:.4}", phase2.ratio, limit));
+                }
             }
-        }
-        if let Some(limit) = options.max_phase2_encode_us {
-            if phase2.encode_us > limit {
-                dataset_passed = false;
-                reasons.push(format!("encode {:.2}us > {:.2}us", phase2.encode_us, limit));
+            if let Some(limit) = options.max_phase2_encode_us {
+                if phase2.encode_us > limit {
+                    dataset_passed = false;
+                    reasons.push(format!("encode {:.2}us > {:.2}us", phase2.encode_us, limit));
+                }
             }
-        }
-        if let Some(limit) = options.max_phase2_decode_us {
-            if phase2.decode_us > limit {
-                dataset_passed = false;
-                reasons.push(format!("decode {:.2}us > {:.2}us", phase2.decode_us, limit));
+            if let Some(limit) = options.max_phase2_decode_us {
+                if phase2.decode_us > limit {
+                    dataset_passed = false;
+                    reasons.push(format!("decode {:.2}us > {:.2}us", phase2.decode_us, limit));
+                }
             }
         }
         let phase2_decode_ns_per_value =
             decode_ns_per_value(phase2.decode_us, dataset.summary.value_count);
-        if let Some(limit) = options.max_phase2_decode_ns_per_value {
-            if phase2_decode_ns_per_value > limit {
-                dataset_passed = false;
-                reasons.push(format!(
-                    "decode {:.4}ns/value > {:.4}ns/value",
-                    phase2_decode_ns_per_value, limit
-                ));
+        if !phase2_no_compress {
+            if let Some(limit) = options.max_phase2_decode_ns_per_value {
+                if phase2_decode_ns_per_value > limit {
+                    dataset_passed = false;
+                    reasons.push(format!(
+                        "decode {:.4}ns/value > {:.4}ns/value",
+                        phase2_decode_ns_per_value, limit
+                    ));
+                }
             }
         }
         if !dataset_passed {
             passed = false;
         }
         rows.push(format!(
-            "| {} / {} | phase2-lossless | {} | values {}, ratio {:.4}, encode {:.2}us, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
+            "| {} / {} | phase2-lossless | {} | values {}, strategy {}, ratio {:.4}, encode {:.2}us, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
             dataset.summary.group,
             dataset.summary.name,
             if dataset_passed { "pass" } else { "fail" },
             dataset.summary.value_count,
+            phase2.phase2_strategy.unwrap_or(""),
             phase2.ratio,
             phase2.encode_us,
             phase2.decode_us,
@@ -993,30 +1001,36 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
             container_passed = false;
             container_reasons.push("container was not bit-identical".to_string());
         }
-        if let Some(limit) = options.max_phase2_container_ratio {
-            if container.ratio > limit {
-                container_passed = false;
-                container_reasons.push(format!("ratio {:.4} > {:.4}", container.ratio, limit));
+        if phase2_no_compress {
+            container_reasons.push("no-compress bypass selected".to_string());
+        } else {
+            if let Some(limit) = options.max_phase2_container_ratio {
+                if container.ratio > limit {
+                    container_passed = false;
+                    container_reasons.push(format!("ratio {:.4} > {:.4}", container.ratio, limit));
+                }
             }
-        }
-        if let Some(limit) = options.max_phase2_container_decode_us {
-            if container.decode_us > limit {
-                container_passed = false;
-                container_reasons.push(format!(
-                    "decode {:.2}us > {:.2}us",
-                    container.decode_us, limit
-                ));
+            if let Some(limit) = options.max_phase2_container_decode_us {
+                if container.decode_us > limit {
+                    container_passed = false;
+                    container_reasons.push(format!(
+                        "decode {:.2}us > {:.2}us",
+                        container.decode_us, limit
+                    ));
+                }
             }
         }
         let container_decode_ns_per_value =
             decode_ns_per_value(container.decode_us, dataset.summary.value_count);
-        if let Some(limit) = options.max_phase2_container_decode_ns_per_value {
-            if container_decode_ns_per_value > limit {
-                container_passed = false;
-                container_reasons.push(format!(
-                    "decode {:.4}ns/value > {:.4}ns/value",
-                    container_decode_ns_per_value, limit
-                ));
+        if !phase2_no_compress {
+            if let Some(limit) = options.max_phase2_container_decode_ns_per_value {
+                if container_decode_ns_per_value > limit {
+                    container_passed = false;
+                    container_reasons.push(format!(
+                        "decode {:.4}ns/value > {:.4}ns/value",
+                        container_decode_ns_per_value, limit
+                    ));
+                }
             }
         }
         if !container_passed {
@@ -1097,6 +1111,10 @@ fn option_f64_label(value: Option<f64>) -> String {
     value
         .map(|value| format!("{value:.4}"))
         .unwrap_or_else(|| "unset".to_string())
+}
+
+fn is_phase2_no_compress(result: &BenchResult) -> bool {
+    result.codec == "phase2-lossless" && result.phase2_strategy == Some("raw-bits")
 }
 
 fn decode_ns_per_value(decode_us: f64, value_count: usize) -> f64 {
