@@ -695,11 +695,21 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
 }
 
 fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> {
-    let raw_bits = encode_f32_bits_be(values);
-    let raw_body_len = PHASE2_PREFIX_LEN + raw_bits.len();
-    let byte_plane_blocks = encode_byte_plane_blocks_bounded(&raw_bits, raw_bits.len());
+    let raw_bits_len = values.len() * 4;
+    let raw_body_len = PHASE2_PREFIX_LEN + raw_bits_len;
+    if let Some((byte_plane_blocks, checksum)) =
+        encode_two_high_raw_two_low_zero_blocks_bounded(values, raw_bits_len)
+    {
+        return write_phase2_byte_candidate(
+            values.len(),
+            checksum,
+            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS,
+            &byte_plane_blocks,
+        );
+    }
+    let (byte_plane_blocks, checksum) =
+        encode_byte_plane_blocks_from_f32_bounded(values, raw_bits_len);
     let byte_plane_blocks_body_len = candidate_body_len(byte_plane_blocks.as_ref());
-    let checksum = checksum_f32_bits(values);
     if byte_plane_blocks_body_len < raw_body_len {
         return write_phase2_byte_candidate(
             values.len(),
@@ -710,6 +720,7 @@ fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> 
                 .expect("selected byte-plane block candidate"),
         );
     }
+    let raw_bits = encode_f32_bits_be(values);
     let byte_rle = encode_byte_runs_bounded(&raw_bits, raw_bits.len());
     let byte_rle_body_len = candidate_body_len(byte_rle.as_ref());
     let byte_plane = encode_byte_plane_runs_bounded(&raw_bits, raw_bits.len());
@@ -1711,6 +1722,108 @@ fn encode_byte_plane_blocks_bounded(bytes: &[u8], max_encoded_len: usize) -> Opt
         }
     }
     Some(out)
+}
+
+fn encode_two_high_raw_two_low_zero_blocks_bounded(
+    values: &[f32],
+    max_encoded_len: usize,
+) -> Option<(Vec<u8>, u64)> {
+    let value_count = values.len();
+    let encoded_len = value_count.checked_mul(2)?.checked_add(4)?;
+    if value_count < 2 || encoded_len > max_encoded_len {
+        return None;
+    }
+
+    let second_plane_tag = value_count + 1;
+    let second_plane_start = second_plane_tag + 1;
+    let low_zero_start = second_plane_start + value_count;
+    let mut out = vec![0_u8; encoded_len];
+    out[0] = BYTE_PLANE_BLOCK_RAW;
+    out[second_plane_tag] = BYTE_PLANE_BLOCK_RAW;
+    out[low_zero_start] = BYTE_PLANE_BLOCK_ZERO;
+    out[low_zero_start + 1] = BYTE_PLANE_BLOCK_ZERO;
+
+    let mut checksum = FNV_OFFSET;
+    let mut first_high = [0_u8; 2];
+    let mut high_same = [true; 2];
+    for (value_index, value) in values.iter().enumerate() {
+        let bytes = value.to_bits().to_be_bytes();
+        if bytes[2] != 0 || bytes[3] != 0 {
+            return None;
+        }
+        checksum = checksum_two_high_bytes_update(checksum, bytes[0], bytes[1]);
+        if value_index == 0 {
+            first_high = [bytes[0], bytes[1]];
+        } else {
+            high_same[0] &= bytes[0] == first_high[0];
+            high_same[1] &= bytes[1] == first_high[1];
+        }
+        out[1 + value_index] = bytes[0];
+        out[second_plane_start + value_index] = bytes[1];
+    }
+
+    if high_same[0] || high_same[1] {
+        return None;
+    }
+    Some((out, checksum))
+}
+
+fn encode_byte_plane_blocks_from_f32_bounded(
+    values: &[f32],
+    max_encoded_len: usize,
+) -> (Option<Vec<u8>>, u64) {
+    let value_count = values.len();
+    let mut checksum = FNV_OFFSET;
+    let mut first = [0_u8; 4];
+    let mut raw_planes: [Option<Vec<u8>>; 4] = std::array::from_fn(|_| None);
+
+    for (value_index, value) in values.iter().enumerate() {
+        let bytes = value.to_bits().to_be_bytes();
+        checksum = checksum_four_bytes_update(checksum, bytes[0], bytes[1], bytes[2], bytes[3]);
+        if value_index == 0 {
+            first = bytes;
+            continue;
+        }
+
+        for plane in 0..4 {
+            if let Some(raw) = raw_planes[plane].as_mut() {
+                raw.push(bytes[plane]);
+            } else if bytes[plane] != first[plane] {
+                let mut raw = Vec::with_capacity(value_count);
+                raw.resize(value_index, first[plane]);
+                raw.push(bytes[plane]);
+                raw_planes[plane] = Some(raw);
+            }
+        }
+    }
+
+    let encoded_len = raw_planes
+        .iter()
+        .enumerate()
+        .map(|(plane, raw)| match raw {
+            Some(raw) => 1 + raw.len(),
+            None if first[plane] == 0 => 1,
+            None => 2,
+        })
+        .sum::<usize>();
+    if encoded_len > max_encoded_len {
+        return (None, checksum);
+    }
+
+    let mut out = Vec::with_capacity(encoded_len);
+    for plane in 0..4 {
+        if let Some(raw) = &raw_planes[plane] {
+            debug_assert_eq!(raw.len(), value_count);
+            out.push(BYTE_PLANE_BLOCK_RAW);
+            out.extend_from_slice(raw);
+        } else if first[plane] == 0 {
+            out.push(BYTE_PLANE_BLOCK_ZERO);
+        } else {
+            out.push(BYTE_PLANE_BLOCK_REPEAT);
+            out.push(first[plane]);
+        }
+    }
+    (Some(out), checksum)
 }
 
 fn encode_delta_xor_byte_plane_runs_bounded(
@@ -3270,6 +3383,58 @@ mod tests {
                 .unwrap();
 
         assert_eq!(f32_bits(&decoded), f32_bits(&values));
+        assert_eq!(checksum, checksum_f32_bits(&values));
+    }
+
+    #[test]
+    fn direct_f32_byte_plane_blocks_matches_materialized_encoder() {
+        let values = [
+            0.0_f32,
+            -0.0,
+            1.0,
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1111_1111),
+            f32::from_bits(0x7fc0_1234),
+        ];
+        let raw = encode_f32_bits_be(&values);
+        let materialized = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (direct, checksum) = encode_byte_plane_blocks_from_f32_bounded(&values, usize::MAX);
+
+        assert_eq!(direct.as_deref(), Some(materialized.as_slice()));
+        assert_eq!(checksum, checksum_f32_bits(&values));
+    }
+
+    #[test]
+    fn direct_f32_byte_plane_blocks_preserves_phi_like_planes() {
+        let values: Vec<f32> = (0..512)
+            .map(|index| f32::from_bits(((index as u32) << 16) | 0x3f00_0000))
+            .collect();
+        let raw = encode_f32_bits_be(&values);
+        let materialized = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (direct, checksum) = encode_byte_plane_blocks_from_f32_bounded(&values, usize::MAX);
+        let encoded = direct.expect("direct byte-plane-block candidate");
+        let (decoded, decoded_checksum) =
+            decode_byte_plane_blocks_to_f32_and_checksum(&encoded, raw.len(), values.len())
+                .unwrap();
+
+        assert_eq!(encoded, materialized);
+        assert_eq!(checksum, checksum_f32_bits(&values));
+        assert_eq!(decoded_checksum, checksum);
+        assert_eq!(f32_bits(&decoded), f32_bits(&values));
+    }
+
+    #[test]
+    fn specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks() {
+        let values: Vec<f32> = (0..512)
+            .map(|index| f32::from_bits(((index as u32) << 24) | (((511 - index) as u32) << 16)))
+            .collect();
+        let raw = encode_f32_bits_be(&values);
+        let materialized = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (specialized, checksum) =
+            encode_two_high_raw_two_low_zero_blocks_bounded(&values, usize::MAX)
+                .expect("specialized byte-plane-block candidate");
+
+        assert_eq!(specialized, materialized);
         assert_eq!(checksum, checksum_f32_bits(&values));
     }
 

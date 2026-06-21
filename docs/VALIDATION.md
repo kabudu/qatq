@@ -18,6 +18,8 @@ cargo test rejects_nonzero_reserved_header_bytes
 cargo test byte_plane
 cargo test phase2_lossless_container
 cargo test phase2_decision
+cargo test byte_plane_blocks
+cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks
 cargo test --test cli
 cargo test --test bench
 cargo check
@@ -35,16 +37,18 @@ Results:
 - `cargo test byte_plane`: passed.
 - `cargo test phase2_lossless_container`: passed.
 - `cargo test phase2_decision`: passed.
+- `cargo test byte_plane_blocks`: passed.
+- `cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks`: passed.
 - `cargo test --test cli`: passed.
 - `cargo test --test bench`: passed.
 - `cargo check`: passed.
 - `cargo test`: passed.
 - `cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest`: passed.
-- absolute-latency gate: failed as expected on the two largest Phi captures; exactness, ratio, and encode checks passed.
-- throughput-normalized gate: passed for all 8 real PermeantOS captures.
+- absolute-latency gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed.
+- throughput-normalized gate: passed for all 50 real PermeantOS captures after the byte-plane-block encode fast path.
 - `cargo fmt --check`: passed.
-- Tests: 86 passed, 0 failed.
-  - library tests: 61 passed.
+- Tests: 89 passed, 0 failed.
+  - library tests: 64 passed.
   - benchmark integration tests: 11 passed.
   - CLI integration tests: 14 passed.
 - Benchmark report: regenerated at [BENCHMARKS.md](BENCHMARKS.md).
@@ -87,6 +91,9 @@ Coverage added:
 - allocation-reduced Phase 2 byte-RLE decode and byte-plane assembly paths;
 - direct Phase 2 byte-plane block decode with fused checksum validation for
   large exact tensors;
+- direct Phase 2 byte-plane block encode for the common
+  `raw, raw, zero, zero` bfloat16-derived KV layout, with fused checksum
+  calculation and byte-for-byte equivalence against the general block encoder;
 - preallocated Phase 2 byte-plane run decode buffer from bounded payload
   metadata;
 - fast Phase 2 exact encoding with compression-positive byte-plane

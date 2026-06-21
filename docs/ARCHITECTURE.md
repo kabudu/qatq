@@ -219,6 +219,10 @@ Decoder safety bounds:
   `raw, raw, zero, zero` and `raw, raw, raw, raw` plane layouts; it fuses
   checksum validation with f32 reconstruction to avoid a second pass over large
   PermeantOS tensors.
+- Phase 2 byte-plane block encode has a direct fast path for the common
+  `raw, raw, zero, zero` layout seen in bfloat16-derived PermeantOS KV
+  captures. It builds the two raw high-byte planes directly from f32 values and
+  fuses checksum calculation, avoiding the full raw-bit staging buffer.
 - QATC container decode rejects zero-chunk containers and pre-validates chunk
   lengths and declared value counts before allocating the output vector.
 - QATC container payload visiting pre-validates the complete chunk layout before

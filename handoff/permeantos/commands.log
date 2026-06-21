@@ -76,3 +76,15 @@ cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest 
 # Result: failed; GPT-2 raw-bits rows pass as no-compress bypasses, remaining failures are large fixed-latency Phi rows.
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 2.10 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 2.20
 # Result: failed; GPT-2 raw-bits rows pass as no-compress bypasses, remaining failures are Phi seq512 direct encode rows over 5000us.
+
+# QATQ byte-plane-block encode fast path update
+cargo test byte_plane_blocks
+# Result: passed, 4 targeted byte-plane-block tests.
+cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks
+# Result: passed, specialized two-high-raw/two-low-zero encoder matched general byte-plane-block payloads.
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE_THROUGHPUT.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 2.10 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-ns-per-value 2.20
+# Result: passed; large Phi seq512 direct encode dropped to about 3.16-3.17ms and all 50 external fixtures passed the throughput-normalized gate.
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/BENCHMARKS.md --paper-output docs/PAPER_TABLES.md --manifest fixtures/permeantos.manifest
+# Result: passed, benchmark and paper reports regenerated.
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/permeantos.manifest --gate-output docs/BENCHMARK_GATE.md --gate-require-external --max-phase2-ratio 0.95 --max-phase2-encode-us 5000 --max-phase2-decode-us 1000 --max-phase2-container-ratio 0.96 --max-phase2-container-decode-us 1200
+# Result: failed as expected; remaining failures are fixed absolute decode-us ceilings on large tensors, not encode throughput or exactness.

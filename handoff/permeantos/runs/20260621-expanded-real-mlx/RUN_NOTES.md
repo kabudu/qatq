@@ -4,10 +4,12 @@
 
 `analysis-only`
 
-This run produced a broader real PermeantOS tensor evidence bundle against QATQ commit
-`69695c7f0cc3e14246d3bf2fda420f4597e42aed`. The expanded manifest contains 50
-real KV fixtures: the previous 8 AWS/MLX-vLLM or local MLX captures plus 42 new
-live local MLX captures from GPT-2, Phi-3.5 mini, and Qwen2.5 7B.
+This run produced a broader real PermeantOS tensor evidence bundle against QATQ
+commit `69695c7f0cc3e14246d3bf2fda420f4597e42aed`, then QATQ follow-up commits
+added no-compress policy, production storage decisions, and a direct
+byte-plane-block encode fast path. The expanded manifest contains 50 real KV
+fixtures: the previous 8 AWS/MLX-vLLM or local MLX captures plus 42 new live
+local MLX captures from GPT-2, Phi-3.5 mini, and Qwen2.5 7B.
 
 The important result is nuanced:
 
@@ -15,14 +17,18 @@ The important result is nuanced:
 - every benchmark row reported `exact_bits=true`;
 - direct `phase2-lossless` byte-for-byte spot checks passed for GPT-2 and large Phi captures;
 - QATC container byte-for-byte spot checks passed for large GPT-2 and large Phi captures;
-- both readiness gates failed on performance/compression criteria, not integrity.
+- the throughput-normalized readiness gate now passes;
+- the fixed absolute-latency gate still fails on large-tensor decode ceilings,
+  not integrity or encode throughput.
 
 This is therefore a useful QATQ engineering handoff, not a production readiness claim.
 
 ## Identifiers
 
 - QATQ branch: `permeantos-evidence-20260621`
-- QATQ commit: `69695c7f0cc3e14246d3bf2fda420f4597e42aed`
+- QATQ evidence commit: `69695c7f0cc3e14246d3bf2fda420f4597e42aed`
+- QATQ latest analyzed state: includes `c3e4faf` plus the byte-plane encode
+  optimization in this handoff update
 - PermeantOS branch: `codex/pytorch-target-runtime-adapter`
 - PermeantOS commit: `e36fec97c79e3ee1a4fb504c37a53f39633f39ec`
 - Capture date: `2026-06-21`
@@ -69,15 +75,15 @@ This is therefore a useful QATQ engineering handoff, not a production readiness 
 
 - `cargo fmt --check`: passed
 - `cargo check`: passed
-- `cargo test`: passed, 82 tests total across unit/integration/doc suites
+- `cargo test`: passed, 89 tests total across unit/integration/doc suites
 - Fixture audit: passed for 50 external PermeantOS fixtures
 - Phase2-only benchmark report: generated in `docs/BENCHMARKS.md`
 - Phase2 paper table draft: generated in `docs/PAPER_TABLES.md`
 - Full all-codec benchmark: interrupted after an extended CPU-active run; phase2-only report was generated instead because this handoff evaluates `phase2-lossless` and QATC readiness
-- Fixed absolute-latency gate: failed on large compressible Phi latency budgets;
-  GPT-2 float32 rows now pass as explicit no-compress bypasses
-- Throughput-normalized gate: failed only on large Phi seq512 direct encode
-  exceeding the fixed `5000us` encode cap
+- Fixed absolute-latency gate: still fails on large compressible tensor decode
+  budgets; GPT-2 float32 rows pass as explicit no-compress bypasses
+- Throughput-normalized gate: passed for all 50 external fixtures after the
+  byte-plane-block encode fast path
 
 ## Exactness Spot Checks
 
@@ -108,9 +114,12 @@ the rows remain exact and are retained for evidence, but ratio and latency
 thresholds are not counted as compression failures because production should
 store or move those tensors without QATQ compression.
 
-The Phi 512-token captures remain compressible and exact, but direct encode time
-is roughly `9ms`, exceeding the current `5000us` encode cap. QATC container
-decode throughput passes for those large Phi rows in the throughput gate.
+The Phi 512-token captures remain compressible and exact. Direct encode time is
+now roughly `3.16-3.21ms`, below the current `5000us` encode cap. QATC
+container decode throughput also passes for those large Phi rows in the
+throughput-normalized gate. The remaining failing gate is the fixed
+absolute-latency gate, where large tensors exceed `1000us` direct decode and
+`1200us` container decode ceilings despite staying around `1.9ns/value`.
 
 ## Recommendation Back To QATQ
 
@@ -124,8 +133,9 @@ decision:
    bfloat16-derived KV can use ratio and ns/value targets; float32 KV should use
    exact pass-through unless a later float32 strategy proves worthwhile.
 4. Treat fixed absolute latency as a small-tensor service budget, not the universal readiness gate for large tensors.
-5. Re-run after QATQ either optimizes large Phi seq512 direct encode or accepts
-   an encode-throughput budget instead of a fixed `5000us` cap.
+5. Treat the throughput-normalized gate as the current readiness signal for
+   large tensors; reserve the fixed absolute-latency gate for small-tensor or
+   service-budget analysis.
 
 ## Handoff Files
 
