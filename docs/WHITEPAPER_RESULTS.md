@@ -59,7 +59,10 @@ size.
 `docs/PUBLIC_COMPARATIVE_BASELINES.md` contains the public all-codec comparison
 against raw f32, software FP8 e4m3, seed lossy-i4, phase1-q4, phase2-lossless,
 phase2 exhaustive, and QATC container rows. These are codec-level baselines, not
-runtime-native hardware comparisons.
+runtime-native hardware comparisons. The comparison now includes zstd/lz4
+raw-f32le byte-compression rows and a `turboquant-q4` base reference row. The
+`turboquant-q4` row is a QATQ reference comparator, not an official Google
+implementation and not a full query-side QJL estimator implementation.
 
 ## Gate Policy
 
@@ -89,10 +92,9 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
 
 ## Remaining Work Before A Public Claim
 
-- Compare against standard TurboQuant implementations and runtime-native
-  quantization baselines.
-- Add zstd/lz4 or other byte-compression baselines where licensing and
-  dependency policy permit.
+- Add the full TurboQuant QJL query-side inner-product estimator before making
+  query-quality claims against Google's TurboQuant paper.
+- Compare against runtime-native quantization baselines.
 - Add model-quality or task-quality evaluation for lossy Phase 1.
 - Expand fuzzing duration in CI and add coverage/supply-chain checks.
 - Define a random-access or streaming container/service format if runtime

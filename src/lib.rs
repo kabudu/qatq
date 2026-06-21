@@ -7,8 +7,10 @@ const HEADER_LEN: usize = 28;
 const CONTAINER_HEADER_LEN: usize = 24;
 const CONTAINER_CHUNK_LEN: usize = 4;
 const PHASE1_BODY_MAGIC: &[u8; 4] = b"P1Q4";
+const TURBOQUANT_BODY_MAGIC: &[u8; 4] = b"TQ4R";
 const PHASE2_BODY_MAGIC: &[u8; 4] = b"P2L1";
 const PHASE1_METADATA_LEN: usize = 20;
+const TURBOQUANT_METADATA_LEN: usize = 20;
 const PHASE2_PREFIX_LEN: usize = 8;
 const PHASE2_PREDICTOR_METADATA_LEN: usize = 12;
 const DEFAULT_PHASE1_SEED: u64 = 0x5141_5451_c0de_0001;
@@ -35,6 +37,7 @@ pub enum CodecMode {
     LosslessF32,
     Phase1Q4,
     Phase2Lossless,
+    TurboQuantQ4,
 }
 
 impl CodecMode {
@@ -44,6 +47,7 @@ impl CodecMode {
             Self::LosslessF32 => 2,
             Self::Phase1Q4 => 3,
             Self::Phase2Lossless => 4,
+            Self::TurboQuantQ4 => 5,
         }
     }
 
@@ -53,6 +57,7 @@ impl CodecMode {
             2 => Ok(Self::LosslessF32),
             3 => Ok(Self::Phase1Q4),
             4 => Ok(Self::Phase2Lossless),
+            5 => Ok(Self::TurboQuantQ4),
             other => Err(QatqError::UnsupportedMode(other)),
         }
     }
@@ -125,6 +130,7 @@ pub fn parse_mode(mode: &str) -> Result<CodecMode, QatqError> {
         "" => Err(QatqError::EmptyMode),
         "lossy-i4" | "i4" | "qatq-i4" => Ok(CodecMode::LossyI4),
         "lossless-f32" | "f32" | "exact-f32" => Ok(CodecMode::LosslessF32),
+        "turboquant-q4" | "standard-turboquant-q4" | "tq-q4" => Ok(CodecMode::TurboQuantQ4),
         "phase1-q4" | "qatq-phase1" | "qatq-q4" | "quaternion-q4" => Ok(CodecMode::Phase1Q4),
         "phase2-lossless" | "qatq-lossless" | "lossless-qatq" | "qres-lossless" => {
             Ok(CodecMode::Phase2Lossless)
@@ -153,6 +159,7 @@ fn encode_unchecked(values: &[f32], mode: CodecMode) -> Vec<u8> {
     match mode {
         CodecMode::LossyI4 => encode_lossy_i4_unchecked(values),
         CodecMode::LosslessF32 => encode_lossless_f32_unchecked(values),
+        CodecMode::TurboQuantQ4 => encode_turboquant_q4_unchecked(values, Phase1Config::default()),
         CodecMode::Phase1Q4 => encode_phase1_q4_unchecked(values, Phase1Config::default()),
         CodecMode::Phase2Lossless => {
             encode_phase2_lossless_unchecked(values, Phase1Config::default())
@@ -168,6 +175,7 @@ pub fn decode(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     match header.mode {
         CodecMode::LossyI4 => decode_lossy_i4(payload),
         CodecMode::LosslessF32 => decode_lossless_f32(payload),
+        CodecMode::TurboQuantQ4 => decode_turboquant_q4(payload),
         CodecMode::Phase1Q4 => decode_phase1_q4(payload),
         CodecMode::Phase2Lossless => decode_phase2_lossless(payload),
     }
@@ -419,6 +427,69 @@ impl Default for Phase1Config {
             seed: DEFAULT_PHASE1_SEED,
         }
     }
+}
+
+pub fn encode_turboquant_q4(values: &[f32]) -> Vec<u8> {
+    encode_turboquant_q4_with_config(values, Phase1Config::default())
+}
+
+pub fn encode_turboquant_q4_with_config(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    try_encode_turboquant_q4_with_config(values, config)
+        .expect("value count exceeds single-payload bound; use chunked APIs")
+}
+
+pub fn try_encode_turboquant_q4_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Result<Vec<u8>, QatqError> {
+    validate_single_payload_value_count(values.len())?;
+    Ok(encode_turboquant_q4_unchecked(values, config))
+}
+
+fn encode_turboquant_q4_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    let parts = build_turboquant_parts(values, config);
+    let checksum = checksum_f32_bits(values);
+    let quantized_len = parts.coord_count.div_ceil(2);
+    let mut out = Vec::with_capacity(HEADER_LEN + TURBOQUANT_METADATA_LEN + quantized_len);
+    write_header(
+        &mut out,
+        CodecMode::TurboQuantQ4,
+        values.len(),
+        parts.scale,
+        checksum,
+    );
+    write_turboquant_metadata_and_payload(&mut out, &parts);
+    out
+}
+
+pub fn decode_turboquant_q4(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
+    let header = Header::parse_for_mode(payload, CodecMode::TurboQuantQ4)?;
+    let coord_count = checked_turboquant_coordinate_count(header.value_count)?;
+    let quantized_len = coord_count.div_ceil(2);
+    let expected_payload_len = TURBOQUANT_METADATA_LEN + quantized_len;
+    let body = &payload[HEADER_LEN..];
+    if body.len() != expected_payload_len {
+        return Err(QatqError::LengthMismatch {
+            expected: expected_payload_len,
+            actual: body.len(),
+        });
+    }
+    if &body[0..4] != TURBOQUANT_BODY_MAGIC {
+        return Err(QatqError::InvalidPhase1Body);
+    }
+    if body[16..20] != [0, 0, 0, 0] {
+        return Err(QatqError::InvalidPhase1Body);
+    }
+
+    let seed = u64::from_be_bytes(body[4..12].try_into().expect("fixed turboquant seed"));
+    let quantized = unpack_i4_nibbles(&body[TURBOQUANT_METADATA_LEN..], coord_count);
+    let mut rotated = Vec::with_capacity(coord_count);
+    for index in quantized {
+        rotated.push(dequantize_i4_nibble(index, header.scale));
+    }
+    let mut values = random_hadamard_rotate(&rotated, seed, RotationDirection::Inverse);
+    values.truncate(header.value_count);
+    Ok(values)
 }
 
 pub fn encode_phase1_q4(values: &[f32]) -> Vec<u8> {
@@ -1662,6 +1733,32 @@ struct PhaseParts {
     residual_signs: Vec<bool>,
 }
 
+struct TurboQuantParts {
+    seed: u64,
+    scale: f32,
+    coord_count: usize,
+    quantized: Vec<u8>,
+}
+
+fn build_turboquant_parts(values: &[f32], config: Phase1Config) -> TurboQuantParts {
+    let coord_count = turboquant_coordinate_count(values.len());
+    let mut padded = finite_predictor_values(values);
+    padded.resize(coord_count, 0.0);
+    let rotated = random_hadamard_rotate(&padded, config.seed, RotationDirection::Forward);
+    let scale = compute_i4_scale(&rotated);
+    let quantized = rotated
+        .iter()
+        .map(|value| quantize_i4_nibble(*value, scale))
+        .collect();
+
+    TurboQuantParts {
+        seed: config.seed,
+        scale,
+        coord_count,
+        quantized,
+    }
+}
+
 fn build_phase1_parts(values: &[f32], config: Phase1Config) -> PhaseParts {
     let predictor_values = finite_predictor_values(values);
     let rotated = rotate_values(&predictor_values, config.seed, RotationDirection::Forward);
@@ -2211,6 +2308,13 @@ fn write_phase_metadata_and_payload(out: &mut Vec<u8>, magic: &[u8; 4], parts: &
     pack_residual_signs(&parts.residual_signs, out);
 }
 
+fn write_turboquant_metadata_and_payload(out: &mut Vec<u8>, parts: &TurboQuantParts) {
+    out.extend_from_slice(TURBOQUANT_BODY_MAGIC);
+    out.extend_from_slice(&parts.seed.to_be_bytes());
+    out.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    pack_i4_nibbles(&parts.quantized, out);
+}
+
 fn write_phase2_prefix(out: &mut Vec<u8>, strategy: u8) {
     out.extend_from_slice(PHASE2_BODY_MAGIC);
     out.push(strategy);
@@ -2414,6 +2518,23 @@ fn checked_phase1_coordinate_count(value_count: usize) -> Result<usize, QatqErro
         .ok_or(QatqError::ValueCountTooLarge(value_count))
 }
 
+fn turboquant_coordinate_count(value_count: usize) -> usize {
+    if value_count <= 1 {
+        value_count
+    } else {
+        value_count.next_power_of_two()
+    }
+}
+
+fn checked_turboquant_coordinate_count(value_count: usize) -> Result<usize, QatqError> {
+    if value_count <= 1 {
+        return Ok(value_count);
+    }
+    value_count
+        .checked_next_power_of_two()
+        .ok_or(QatqError::ValueCountTooLarge(value_count))
+}
+
 fn checked_value_byte_len(value_count: usize) -> Result<usize, QatqError> {
     value_count
         .checked_mul(4)
@@ -2487,6 +2608,61 @@ fn rotate_values(values: &[f32], seed: u64, direction: RotationDirection) -> Vec
         rotated.extend_from_slice(&output.to_array());
     }
     rotated
+}
+
+fn random_hadamard_rotate(values: &[f32], seed: u64, direction: RotationDirection) -> Vec<f32> {
+    if values.is_empty() {
+        return Vec::new();
+    }
+    debug_assert!(values.len().is_power_of_two());
+    let mut out = values.to_vec();
+    match direction {
+        RotationDirection::Forward => {
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0001);
+            walsh_hadamard_transform(&mut out);
+            normalize_hadamard(&mut out);
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0002);
+        }
+        RotationDirection::Inverse => {
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0002);
+            walsh_hadamard_transform(&mut out);
+            normalize_hadamard(&mut out);
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0001);
+        }
+    }
+    out
+}
+
+fn apply_rademacher_signs(values: &mut [f32], seed: u64, stream: u64) {
+    for (index, value) in values.iter_mut().enumerate() {
+        let mixed = splitmix64(seed ^ stream ^ (index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+        if mixed & 1 == 1 {
+            *value = -*value;
+        }
+    }
+}
+
+fn walsh_hadamard_transform(values: &mut [f32]) {
+    let mut width = 1;
+    while width < values.len() {
+        let step = width * 2;
+        for start in (0..values.len()).step_by(step) {
+            for offset in 0..width {
+                let left = values[start + offset];
+                let right = values[start + offset + width];
+                values[start + offset] = left + right;
+                values[start + offset + width] = left - right;
+            }
+        }
+        width = step;
+    }
+}
+
+fn normalize_hadamard(values: &mut [f32]) {
+    let scale = (values.len() as f32).sqrt().recip();
+    for value in values {
+        *value *= scale;
+    }
 }
 
 fn deterministic_unit_quaternion(seed: u64, lane: u64) -> Quaternion {
@@ -2795,6 +2971,42 @@ mod tests {
     }
 
     #[test]
+    fn turboquant_q4_roundtrip_preserves_shape_and_compresses() {
+        let values: Vec<f32> = (0..1025)
+            .map(|index| {
+                let x = index as f32;
+                (x * 0.03125).sin() * 2.5 + (x * 0.0078125).cos() * 0.75
+            })
+            .collect();
+
+        let encoded = encode_turboquant_q4(&values);
+        let decoded = decode_turboquant_q4(&encoded).unwrap();
+
+        assert_eq!(decoded.len(), values.len());
+        assert!(encoded.len() < values.len() * 4);
+        assert!(compression_ratio(encoded.len(), values.len()) < 0.7);
+        let max_abs = max_abs_error(&values, &decoded);
+        assert!(max_abs < 0.8, "max_abs={max_abs}");
+    }
+
+    #[test]
+    fn turboquant_q4_seed_is_deterministic_and_changes_payload() {
+        let values: Vec<f32> = (0..128)
+            .map(|index| ((index as f32) * 0.21).sin())
+            .collect();
+        let first = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 7 });
+        let second = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 7 });
+        let third = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 8 });
+
+        assert_eq!(first, second);
+        assert_ne!(first, third);
+        assert_eq!(
+            decode_turboquant_q4(&first).unwrap().len(),
+            decode_turboquant_q4(&third).unwrap().len()
+        );
+    }
+
+    #[test]
     fn phase1_q4_seed_is_deterministic_and_changes_payload() {
         let values: Vec<f32> = (0..128)
             .map(|index| ((index as f32) * 0.21).sin())
@@ -2986,6 +3198,7 @@ mod tests {
         let modes = [
             CodecMode::LossyI4,
             CodecMode::LosslessF32,
+            CodecMode::TurboQuantQ4,
             CodecMode::Phase1Q4,
             CodecMode::Phase2Lossless,
         ];

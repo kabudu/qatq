@@ -7,7 +7,7 @@ use std::{
 use qatq::{
     decode, decode_phase2_lossless, for_each_phase2_lossless_container_payload, parse_mode,
     try_encode, try_encode_phase1_q4_with_config, try_encode_phase2_lossless_with_config,
-    CodecMode, Phase1Config, MAX_VALUES_PER_PAYLOAD,
+    try_encode_turboquant_q4_with_config, CodecMode, Phase1Config, MAX_VALUES_PER_PAYLOAD,
 };
 
 const QATC_MAGIC: &[u8; 4] = b"QATC";
@@ -54,8 +54,14 @@ fn encode_command(args: &[String]) -> Result<(), String> {
             print_usage();
             return Err("optional encode configuration must be --seed <u64>".to_string());
         }
-        if mode != CodecMode::Phase1Q4 && mode != CodecMode::Phase2Lossless {
-            return Err("--seed is only supported with phase1-q4 and phase2-lossless".to_string());
+        if mode != CodecMode::TurboQuantQ4
+            && mode != CodecMode::Phase1Q4
+            && mode != CodecMode::Phase2Lossless
+        {
+            return Err(
+                "--seed is only supported with turboquant-q4, phase1-q4, and phase2-lossless"
+                    .to_string(),
+            );
         }
         (Some(parse_seed(&args[3])?), &args[4], &args[5])
     } else {
@@ -65,6 +71,10 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     let payload = match (mode, seed) {
         (CodecMode::Phase1Q4, Some(seed)) => {
             try_encode_phase1_q4_with_config(&values, Phase1Config { seed })
+                .map_err(|error| error.to_string())?
+        }
+        (CodecMode::TurboQuantQ4, Some(seed)) => {
+            try_encode_turboquant_q4_with_config(&values, Phase1Config { seed })
                 .map_err(|error| error.to_string())?
         }
         (CodecMode::Phase2Lossless, Some(seed)) => {
@@ -941,7 +951,7 @@ fn parse_seed(value: &str) -> Result<u64, String> {
 fn print_usage() {
     eprintln!("usage:");
     eprintln!(
-        "  qatq encode --mode <lossy-i4|lossless-f32|phase1-q4|phase2-lossless> [--seed <u64>] <input.f32le> <output.qatq>"
+        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|phase2-lossless> [--seed <u64>] <input.f32le> <output.qatq>"
     );
     eprintln!(
         "  qatq encode-chunked --max-values-per-chunk <usize> [--seed <u64>] <input.f32le> <output.qatc>"

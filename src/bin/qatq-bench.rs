@@ -7,9 +7,10 @@ use std::{
 };
 
 use qatq::{
-    compression_ratio, decode, decode_lossy_i4, decode_phase1_q4, encode_lossless_f32,
-    encode_lossy_i4, encode_phase1_q4, encode_phase2_lossless, encode_phase2_lossless_container,
-    encode_phase2_lossless_exhaustive, phase2_lossless_strategy,
+    compression_ratio, decode, decode_lossy_i4, decode_phase1_q4, decode_turboquant_q4,
+    encode_lossless_f32, encode_lossy_i4, encode_phase1_q4, encode_phase2_lossless,
+    encode_phase2_lossless_container, encode_phase2_lossless_exhaustive, encode_turboquant_q4,
+    phase2_lossless_strategy,
 };
 
 const ITERATIONS: usize = 200;
@@ -122,8 +123,10 @@ fn run() -> Result<(), String> {
     report.push_str(
         "- `raw-f32le` is a transport-size and copy-cost control, not a compression codec.\n",
     );
+    report.push_str("- `zstd-raw-f32le` and `lz4-raw-f32le` are general-purpose byte-compression baselines over the raw little-endian f32 payload.\n");
     report.push_str("- `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.\n");
     report.push_str("- `lossy-i4` is the original seed baseline.\n");
+    report.push_str("- `turboquant-q4` is QATQ's reference base TurboQuant-style q4 path: deterministic data-oblivious orthogonal rotation plus scalar q4 quantization, without the quaternion overlay.\n");
     report.push_str("- `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.\n");
     report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.\n");
     report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
@@ -439,10 +442,17 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
 
     let raw_encoded = encode_raw_f32le(&dataset.values);
     let raw_decoded = decode_raw_f32le(&raw_encoded)?;
+    let zstd_encoded = encode_zstd_raw_f32le(&dataset.values)?;
+    let zstd_decoded = decode_zstd_raw_f32le(&zstd_encoded)?;
+    let lz4_encoded = encode_lz4_raw_f32le(&dataset.values);
+    let lz4_decoded = decode_lz4_raw_f32le(&lz4_encoded)?;
     let fp8_encoded = encode_fp8_e4m3(&dataset.values);
     let fp8_decoded = decode_fp8_e4m3(&fp8_encoded);
     let lossy_encoded = encode_lossy_i4(&dataset.values);
     let lossy_decoded = decode_lossy_i4(&lossy_encoded).map_err(|error| error.to_string())?;
+    let turboquant_encoded = encode_turboquant_q4(&dataset.values);
+    let turboquant_decoded =
+        decode_turboquant_q4(&turboquant_encoded).map_err(|error| error.to_string())?;
     let lossless_encoded = encode_lossless_f32(&dataset.values);
     let lossless_decoded = decode(&lossless_encoded).map_err(|error| error.to_string())?;
     let phase1_encoded = encode_phase1_q4(&dataset.values);
@@ -480,6 +490,26 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
         &lossless_decoded,
     ));
     results.push(BenchResult::new(
+        "zstd-raw-f32le",
+        zstd_encoded.len(),
+        dataset.values.len(),
+        None,
+        time_encode(|| encode_zstd_raw_f32le(&dataset.values).expect("zstd encode")),
+        time_decode(|| decode_zstd_raw_f32le(&zstd_encoded).expect("zstd decode")),
+        &dataset.values,
+        &zstd_decoded,
+    ));
+    results.push(BenchResult::new(
+        "lz4-raw-f32le",
+        lz4_encoded.len(),
+        dataset.values.len(),
+        None,
+        time_encode(|| encode_lz4_raw_f32le(&dataset.values)),
+        time_decode(|| decode_lz4_raw_f32le(&lz4_encoded).expect("lz4 decode")),
+        &dataset.values,
+        &lz4_decoded,
+    ));
+    results.push(BenchResult::new(
         "fp8-e4m3",
         fp8_encoded.len(),
         dataset.values.len(),
@@ -498,6 +528,16 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
         time_decode(|| decode_lossy_i4(&lossy_encoded).expect("lossy decode")),
         &dataset.values,
         &lossy_decoded,
+    ));
+    results.push(BenchResult::new(
+        "turboquant-q4",
+        turboquant_encoded.len(),
+        dataset.values.len(),
+        None,
+        time_encode(|| encode_turboquant_q4(&dataset.values)),
+        time_decode(|| decode_turboquant_q4(&turboquant_encoded).expect("turboquant decode")),
+        &dataset.values,
+        &turboquant_decoded,
     ));
     results.push(BenchResult::new(
         "phase1-q4",
@@ -1220,25 +1260,30 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
         ));
     }
 
-    out.push_str("\n## Phase 1 Versus Seed Baseline\n\n");
-    out.push_str("| group | dataset | lossy-i4 ratio | phase1-q4 ratio | ratio delta | lossy-i4 RMSE | phase1-q4 RMSE | RMSE delta | lossy-i4 decode us | phase1-q4 decode us |\n");
-    out.push_str("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+    out.push_str("\n## Base TurboQuant Reference Versus Quaternion Overlay\n\n");
+    out.push_str("| group | dataset | lossy-i4 ratio | turboquant-q4 ratio | phase1-q4 ratio | phase1 vs turbo ratio delta | lossy-i4 RMSE | turboquant-q4 RMSE | phase1-q4 RMSE | phase1 vs turbo RMSE delta | turboquant decode us | phase1 decode us |\n");
+    out.push_str(
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+    );
     for dataset in benchmarked {
-        if let (Some(lossy), Some(phase1)) = (
+        if let (Some(lossy), Some(turboquant), Some(phase1)) = (
             find_result(&dataset.results, "lossy-i4"),
+            find_result(&dataset.results, "turboquant-q4"),
             find_result(&dataset.results, "phase1-q4"),
         ) {
             out.push_str(&format!(
-                "| {} | {} | {:.4} | {:.4} | {:+.4} | {:.6} | {:.6} | {:+.6} | {:.2} | {:.2} |\n",
+                "| {} | {} | {:.4} | {:.4} | {:.4} | {:+.4} | {:.6} | {:.6} | {:.6} | {:+.6} | {:.2} | {:.2} |\n",
                 dataset.summary.group,
                 dataset.summary.name,
                 lossy.ratio,
+                turboquant.ratio,
                 phase1.ratio,
-                phase1.ratio - lossy.ratio,
+                phase1.ratio - turboquant.ratio,
                 lossy.rmse,
+                turboquant.rmse,
                 phase1.rmse,
-                phase1.rmse - lossy.rmse,
-                lossy.decode_us,
+                phase1.rmse - turboquant.rmse,
+                turboquant.decode_us,
                 phase1.decode_us
             ));
         }
@@ -1276,6 +1321,32 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
         }
     }
 
+    out.push_str("\n## General-Purpose Byte Compression Baselines\n\n");
+    out.push_str("| group | dataset | raw f32 ratio | zstd raw ratio | lz4 raw ratio | zstd exact | lz4 exact | zstd encode us | zstd decode us | lz4 encode us | lz4 decode us |\n");
+    out.push_str("| --- | --- | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |\n");
+    for dataset in benchmarked {
+        if let (Some(raw), Some(zstd), Some(lz4)) = (
+            find_result(&dataset.results, "raw-f32le"),
+            find_result(&dataset.results, "zstd-raw-f32le"),
+            find_result(&dataset.results, "lz4-raw-f32le"),
+        ) {
+            out.push_str(&format!(
+                "| {} | {} | {:.4} | {:.4} | {:.4} | {} | {} | {:.2} | {:.2} | {:.2} | {:.2} |\n",
+                dataset.summary.group,
+                dataset.summary.name,
+                raw.ratio,
+                zstd.ratio,
+                lz4.ratio,
+                if zstd.exact_bits { "yes" } else { "no" },
+                if lz4.exact_bits { "yes" } else { "no" },
+                zstd.encode_us,
+                zstd.decode_us,
+                lz4.encode_us,
+                lz4.decode_us
+            ));
+        }
+    }
+
     out.push_str("\n## Codec Leaderboard By Dataset\n\n");
     out.push_str("| group | dataset | smallest lossy codec | best RMSE lossy codec | phase1 RMSE rank note |\n");
     out.push_str("| --- | --- | --- | --- | --- |\n");
@@ -1286,6 +1357,8 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
             .filter(|result| {
                 result.codec != "raw-f32le"
                     && result.codec != "lossless-f32"
+                    && result.codec != "zstd-raw-f32le"
+                    && result.codec != "lz4-raw-f32le"
                     && result.codec != "phase2-lossless"
                     && result.codec != "phase2-lossless-exhaustive"
                     && result.codec != "phase2-lossless-container"
@@ -1298,13 +1371,13 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
             .iter()
             .min_by(|left, right| left.rmse.total_cmp(&right.rmse));
         let note = match (
-            find_result(&dataset.results, "lossy-i4"),
+            find_result(&dataset.results, "turboquant-q4"),
             find_result(&dataset.results, "phase1-q4"),
         ) {
-            (Some(lossy), Some(phase1)) if phase1.rmse < lossy.rmse => {
-                "phase1 improves RMSE vs lossy-i4"
+            (Some(turboquant), Some(phase1)) if phase1.rmse < turboquant.rmse => {
+                "phase1 improves RMSE vs turboquant-q4"
             }
-            (Some(_), Some(_)) => "phase1 does not improve RMSE vs lossy-i4",
+            (Some(_), Some(_)) => "phase1 does not improve RMSE vs turboquant-q4",
             _ => "lossy baselines not measured",
         };
         out.push_str(&format!(
@@ -1424,6 +1497,27 @@ fn decode_raw_f32le(bytes: &[u8]) -> Result<Vec<f32>, String> {
         .chunks_exact(4)
         .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunk size checked")))
         .collect())
+}
+
+fn encode_zstd_raw_f32le(values: &[f32]) -> Result<Vec<u8>, String> {
+    zstd::stream::encode_all(encode_raw_f32le(values).as_slice(), 3)
+        .map_err(|error| format!("zstd encode failed: {error}"))
+}
+
+fn decode_zstd_raw_f32le(bytes: &[u8]) -> Result<Vec<f32>, String> {
+    let raw =
+        zstd::stream::decode_all(bytes).map_err(|error| format!("zstd decode failed: {error}"))?;
+    decode_raw_f32le(&raw)
+}
+
+fn encode_lz4_raw_f32le(values: &[f32]) -> Vec<u8> {
+    lz4_flex::compress_prepend_size(&encode_raw_f32le(values))
+}
+
+fn decode_lz4_raw_f32le(bytes: &[u8]) -> Result<Vec<f32>, String> {
+    let raw = lz4_flex::decompress_size_prepended(bytes)
+        .map_err(|error| format!("lz4 decode failed: {error}"))?;
+    decode_raw_f32le(&raw)
 }
 
 fn encode_fp8_e4m3(values: &[f32]) -> Vec<u8> {

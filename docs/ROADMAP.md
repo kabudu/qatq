@@ -13,13 +13,20 @@
 - [x] Implement quaternion grouping and Hamilton product rotation.
 - [x] Add deterministic rotation seed/configuration handling.
 - [x] Implement TurboQuant-style scalar quantization.
+- [x] Add a base `turboquant-q4` comparator before the quaternion overlay.
 - [x] Add QJL/residual side-channel experiments.
-- [x] Benchmark against raw, FP8, and the seed lossy int4 baseline.
+- [x] Benchmark against raw, zstd, lz4, FP8, base TurboQuant-style q4, and the
+      seed lossy int4 baseline.
 
 Phase 1 is implemented as the `phase1-q4` mode. The QJL/residual side channel is
 currently a compact global residual-magnitude plus per-coordinate sign-bit
 experiment. It is useful for measurement but does not claim lossless
 reconstruction.
+
+The `turboquant-q4` mode is the current base reference path: deterministic
+data-oblivious orthogonal rotation plus scalar q4 quantization. It is included
+so the quaternion overlay can be measured against a non-quaternion baseline.
+Full query-side QJL inner-product estimator support remains future work.
 
 ## Phase 2 - Lossless QATQ-Family Mode
 
@@ -31,8 +38,8 @@ reconstruction.
 Phase 2 is implemented as `phase2-lossless`. It adaptively stores raw f32 bits,
 byte-RLE, byte-plane RLE, adjacent-bit delta-XOR byte-plane residuals, or the
 Phase 1 predictor plus run-coded XOR residuals and verifies final reconstruction
-with the payload checksum. zstd/lz4 comparison remains pending until external
-dependencies or fixture tooling are added.
+with the payload checksum. zstd/lz4 comparison rows are included in all-codec
+benchmark reports as general-purpose byte-compression baselines over raw f32le.
 
 ## Phase 3 - Runtime and Service Integration
 

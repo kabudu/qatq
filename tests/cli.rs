@@ -6,6 +6,53 @@ use std::{
 use qatq::MAX_VALUES_PER_PAYLOAD;
 
 #[test]
+fn cli_encodes_and_decodes_turboquant_q4_with_seed() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-turboquant-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let encoded = dir.join(format!("{stem}.qatq"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+    let values = [0.25_f32, -0.5, 1.0, 2.0, -3.5, 0.125];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode")
+        .arg("--mode")
+        .arg("turboquant-q4")
+        .arg("--seed")
+        .arg("0x51415451")
+        .arg(&input)
+        .arg(&encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run encode");
+    assert!(encode_status.success());
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes.len(), values.len() * 4);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
 fn cli_encodes_and_decodes_phase1_q4_with_seed() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-cli-{}", std::process::id());

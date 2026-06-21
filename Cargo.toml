@@ -19,6 +19,7 @@ include = [
     "examples/**",
     "tests/**",
     "docs/ARCHITECTURE.md",
+    "docs/CREDITS.md",
     "docs/FIXTURES.md",
     "docs/PUBLIC_*.md",
     "docs/PUBLIC_COMPARATIVE_*.md",
@@ -38,3 +39,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "qatq"
 path = "src/main.rs"
+
+[dependencies]
+lz4_flex = "0.13.1"
+zstd = "0.13.3"

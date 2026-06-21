@@ -15,20 +15,22 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 
 | group | dataset | values | codec | phase2 strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless | byte-plane-blocks | 16424 | 0.5012 | 17.15 | 16.91 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-container | qatc-container | 16452 | 0.5021 | 18.02 | 17.42 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless | byte-plane-blocks | 32808 | 0.5006 | 35.47 | 33.83 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-container | qatc-container | 32836 | 0.5010 | 36.01 | 36.44 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless | raw-bits | 49188 | 1.0007 | 419.95 | 54.30 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-container | qatc-container | 49216 | 1.0013 | 422.89 | 54.93 | yes | 0.000000 | 0.000000 |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless | raw-bits | 16420 | 1.0022 | 110.23 | 18.24 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-container | qatc-container | 16448 | 1.0039 | 111.02 | 18.54 | yes | 0.000000 | NaN |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless | byte-plane-blocks | 16424 | 0.5012 | 16.83 | 17.25 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-container | qatc-container | 16452 | 0.5021 | 17.15 | 16.92 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless | byte-plane-blocks | 32808 | 0.5006 | 34.93 | 33.36 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-container | qatc-container | 32836 | 0.5010 | 35.73 | 33.85 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless | raw-bits | 49188 | 1.0007 | 410.89 | 69.15 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-container | qatc-container | 49216 | 1.0013 | 493.62 | 57.69 | yes | 0.000000 | 0.000000 |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless | raw-bits | 16420 | 1.0022 | 153.22 | 19.26 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-container | qatc-container | 16448 | 1.0039 | 114.31 | 21.47 | yes | 0.000000 | NaN |
 
 ## Interpretation
 
 - `raw-f32le` is a transport-size and copy-cost control, not a compression codec.
+- `zstd-raw-f32le` and `lz4-raw-f32le` are general-purpose byte-compression baselines over the raw little-endian f32 payload.
 - `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.
 - `lossy-i4` is the original seed baseline.
+- `turboquant-q4` is QATQ's reference base TurboQuant-style q4 path: deterministic data-oblivious orthogonal rotation plus scalar q4 quantization, without the quaternion overlay.
 - `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.
 - `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.
 - `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.

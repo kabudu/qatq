@@ -10,6 +10,13 @@ The proposal combines ideas from:
 - quaternion-valued representation: treating groups of four channels as a
   quaternion so cross-component structure can be transformed jointly.
 
+Credit TurboQuant to the Google Research / Google DeepMind / NYU work by Amir
+Zandieh, Majid Daliri, Majid Hadian, and Vahab Mirrokni. Credit the mathematical
+quaternion/Hamilton-product foundation to William Rowan Hamilton, and credit
+the neural-network framing of quaternion entities to prior quaternion neural
+network work, including Parcollet, Ravanelli, Morchid, Linarès, Trabelsi, De
+Mori, and Bengio. Keep `docs/CREDITS.md` aligned with the paper bibliography.
+
 ## Implementation Target
 
 The first paper-faithful implementation should support the training-free
@@ -25,6 +32,11 @@ variant:
 
 The original seed implementation did not perform this full pipeline; it used a
 deterministic signed-int4 approximation to validate migration-style plumbing.
+
+The `turboquant-q4` mode is now the base TurboQuant-style comparator. It uses
+deterministic data-oblivious orthogonal rotation plus scalar q4 quantization
+without the quaternion overlay. It is not an official Google implementation and
+does not yet expose the full QJL query-side inner-product estimator.
 
 ## Current Implementation Notes
 

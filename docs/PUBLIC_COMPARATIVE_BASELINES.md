@@ -15,44 +15,58 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 
 | group | dataset | values | codec | phase2 strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | raw-f32le |  | 32768 | 1.0000 | 2.30 | 0.35 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lossless-f32 |  | 32796 | 1.0009 | 37.88 | 36.61 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | fp8-e4m3 |  | 8192 | 0.2500 | 41.27 | 13.00 | no | 0.058594 | 0.012594 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lossy-i4 |  | 4124 | 0.1259 | 57.63 | 3.55 | no | 0.071150 | 0.041249 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase1-q4 |  | 5168 | 0.1577 | 78.69 | 28.70 | no | 0.079879 | 0.029562 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless | byte-plane-blocks | 16424 | 0.5012 | 17.28 | 16.77 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-exhaustive | byte-plane-blocks | 16424 | 0.5012 | 249.68 | 16.71 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-container | qatc-container | 16452 | 0.5021 | 17.60 | 16.92 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.68 | 0.80 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lossless-f32 |  | 65564 | 1.0004 | 74.60 | 75.53 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 72.21 | 18.13 | no | 0.031250 | 0.010679 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lossy-i4 |  | 8220 | 0.1254 | 95.49 | 7.07 | no | 0.044364 | 0.025540 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase1-q4 |  | 10288 | 0.1570 | 154.66 | 56.69 | no | 0.062251 | 0.022336 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless | byte-plane-blocks | 32808 | 0.5006 | 34.39 | 32.82 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 20446 | 0.3120 | 461.88 | 86.04 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-container | qatc-container | 32836 | 0.5010 | 36.41 | 34.77 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | raw-f32le |  | 49152 | 1.0000 | 3.48 | 0.95 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lossless-f32 |  | 49180 | 1.0006 | 55.88 | 53.74 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | fp8-e4m3 |  | 12288 | 0.2500 | 71.49 | 17.53 | no | 0.494900 | 0.078174 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lossy-i4 |  | 6172 | 0.1256 | 70.93 | 5.35 | no | 0.570994 | 0.331989 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase1-q4 |  | 7728 | 0.1572 | 116.41 | 42.52 | no | 0.613088 | 0.220032 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless | raw-bits | 49188 | 1.0007 | 421.04 | 53.70 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-exhaustive | raw-bits | 49188 | 1.0007 | 438.29 | 54.95 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-container | qatc-container | 49216 | 1.0013 | 417.40 | 55.65 | yes | 0.000000 | 0.000000 |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | raw-f32le |  | 16384 | 1.0000 | 1.13 | 0.16 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | lossless-f32 |  | 16412 | 1.0017 | 18.28 | 17.55 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | fp8-e4m3 |  | 4096 | 0.2500 | 8.61 | 2.45 | no | 0.015625 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | lossy-i4 |  | 2076 | 0.1267 | 23.22 | 1.74 | no | 0.000030 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase1-q4 |  | 2608 | 0.1592 | 38.39 | 13.95 | no | 0.122551 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless | raw-bits | 16420 | 1.0022 | 110.75 | 18.25 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-exhaustive | raw-bits | 16420 | 1.0022 | 117.93 | 18.28 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-container | qatc-container | 16448 | 1.0039 | 111.56 | 18.36 | yes | 0.000000 | NaN |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | raw-f32le |  | 32768 | 1.0000 | 2.28 | 0.44 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lossless-f32 |  | 32796 | 1.0009 | 37.06 | 36.20 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | zstd-raw-f32le |  | 15285 | 0.4665 | 93.00 | 29.12 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lz4-raw-f32le |  | 22614 | 0.6901 | 42.82 | 10.60 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | fp8-e4m3 |  | 8192 | 0.2500 | 36.54 | 12.26 | no | 0.058594 | 0.012594 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lossy-i4 |  | 4124 | 0.1259 | 46.20 | 3.48 | no | 0.071150 | 0.041249 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | turboquant-q4 |  | 4144 | 0.1265 | 94.95 | 57.48 | no | 0.301846 | 0.071778 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase1-q4 |  | 5168 | 0.1577 | 87.52 | 28.84 | no | 0.079879 | 0.029562 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless | byte-plane-blocks | 16424 | 0.5012 | 17.38 | 17.44 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-exhaustive | byte-plane-blocks | 16424 | 0.5012 | 247.77 | 16.67 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | phase2-lossless-container | qatc-container | 16452 | 0.5021 | 17.26 | 17.00 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | raw-f32le |  | 65536 | 1.0000 | 4.70 | 1.02 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lossless-f32 |  | 65564 | 1.0004 | 75.91 | 74.86 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | zstd-raw-f32le |  | 19003 | 0.2900 | 125.59 | 40.25 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lz4-raw-f32le |  | 30757 | 0.4693 | 61.46 | 15.58 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 73.59 | 18.25 | no | 0.031250 | 0.010679 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lossy-i4 |  | 8220 | 0.1254 | 92.43 | 6.98 | no | 0.044364 | 0.025540 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | turboquant-q4 |  | 8240 | 0.1257 | 234.17 | 149.26 | no | 0.262185 | 0.066187 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase1-q4 |  | 10288 | 0.1570 | 153.25 | 55.07 | no | 0.062251 | 0.022336 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless | byte-plane-blocks | 32808 | 0.5006 | 34.44 | 32.70 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-exhaustive | byte-plane-rle | 20446 | 0.3120 | 454.59 | 85.16 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | phase2-lossless-container | qatc-container | 32836 | 0.5010 | 35.05 | 33.95 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | raw-f32le |  | 49152 | 1.0000 | 3.42 | 0.89 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lossless-f32 |  | 49180 | 1.0006 | 54.56 | 53.06 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | zstd-raw-f32le |  | 44539 | 0.9061 | 43.34 | 35.61 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lz4-raw-f32le |  | 49350 | 1.0040 | 6.27 | 1.90 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | fp8-e4m3 |  | 12288 | 0.2500 | 79.03 | 17.70 | no | 0.494900 | 0.078174 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lossy-i4 |  | 6172 | 0.1256 | 68.89 | 5.21 | no | 0.570994 | 0.331989 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | turboquant-q4 |  | 8240 | 0.1676 | 213.74 | 148.17 | no | 1.599947 | 0.448471 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase1-q4 |  | 7728 | 0.1572 | 113.97 | 41.77 | no | 0.613088 | 0.220032 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless | raw-bits | 49188 | 1.0007 | 415.09 | 53.97 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-exhaustive | raw-bits | 49188 | 1.0007 | 426.39 | 54.18 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | phase2-lossless-container | qatc-container | 49216 | 1.0013 | 408.98 | 54.72 | yes | 0.000000 | 0.000000 |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | raw-f32le |  | 16384 | 1.0000 | 1.13 | 0.30 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | lossless-f32 |  | 16412 | 1.0017 | 18.11 | 17.50 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | zstd-raw-f32le |  | 676 | 0.0413 | 13.79 | 3.22 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | lz4-raw-f32le |  | 1103 | 0.0673 | 2.22 | 0.64 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | fp8-e4m3 |  | 4096 | 0.2500 | 9.02 | 2.38 | no | 0.015625 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | lossy-i4 |  | 2076 | 0.1267 | 23.05 | 1.75 | no | 0.000030 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | turboquant-q4 |  | 2096 | 0.1279 | 40.86 | 24.15 | no | 0.619420 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase1-q4 |  | 2608 | 0.1592 | 37.79 | 13.69 | no | 0.122551 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless | raw-bits | 16420 | 1.0022 | 108.43 | 17.86 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-exhaustive | raw-bits | 16420 | 1.0022 | 113.76 | 17.77 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | phase2-lossless-container | qatc-container | 16448 | 1.0039 | 108.35 | 18.07 | yes | 0.000000 | NaN |
 
 ## Interpretation
 
 - `raw-f32le` is a transport-size and copy-cost control, not a compression codec.
+- `zstd-raw-f32le` and `lz4-raw-f32le` are general-purpose byte-compression baselines over the raw little-endian f32 payload.
 - `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.
 - `lossy-i4` is the original seed baseline.
+- `turboquant-q4` is QATQ's reference base TurboQuant-style q4 path: deterministic data-oblivious orthogonal rotation plus scalar q4 quantization, without the quaternion overlay.
 - `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.
 - `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.
 - `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.

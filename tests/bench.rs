@@ -31,6 +31,9 @@ fn benchmark_accepts_external_f32le_fixture() {
     let report = fs::read_to_string(&output).expect("read benchmark report");
     assert!(report.contains("fixture"));
     assert!(report.contains("tiny"));
+    assert!(report.contains("zstd-raw-f32le"));
+    assert!(report.contains("lz4-raw-f32le"));
+    assert!(report.contains("turboquant-q4"));
     assert!(report.contains("phase1-q4"));
     assert!(report.contains("phase2 strategy"));
     assert!(report.contains("bit-delta"));
@@ -84,7 +87,7 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
 
     let paper = fs::read_to_string(&paper_output).expect("read paper report");
     assert!(paper.contains("# Paper Tables"));
-    assert!(paper.contains("Phase 1 Versus Seed Baseline"));
+    assert!(paper.contains("Base TurboQuant Reference Versus Quaternion Overlay"));
     assert!(paper.contains("runtime-kv"));
 
     let _ = fs::remove_file(input);

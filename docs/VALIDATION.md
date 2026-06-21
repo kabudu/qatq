@@ -59,10 +59,10 @@ Results:
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
 - `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
 - `cargo package --list --allow-dirty`: passed.
-- Tests: 95 passed, 0 failed.
-  - library tests: 67 passed.
+- Tests: 98 passed, 0 failed.
+  - library tests: 69 passed.
   - benchmark integration tests: 13 passed.
-  - CLI integration tests: 15 passed.
+  - CLI integration tests: 16 passed.
 - Public benchmark report: regenerated at [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md).
 - Public paper table report: regenerated at [PUBLIC_PAPER_TABLES.md](PUBLIC_PAPER_TABLES.md).
 - Public production KV throughput gate report: regenerated at [PUBLIC_BENCHMARK_GATE.md](PUBLIC_BENCHMARK_GATE.md).
@@ -73,12 +73,16 @@ Coverage added:
 - top-level `QATQ` reserved header byte rejection;
 - exact `lossless-f32` bit preservation and corruption detection;
 - `phase1-q4` round trip shape preservation and compression ratio;
+- `turboquant-q4` reference baseline round trip shape preservation and
+  compression ratio;
+- `turboquant-q4` deterministic seed/config behavior;
 - deterministic Phase 1 seed/config behavior;
 - empty Phase 1 tensor handling;
 - partial quaternion-lane handling;
 - Phase 1 body magic validation;
 - Phase 1 truncated-body validation.
 - CLI encode/decode smoke coverage for `phase1-q4 --seed`.
+- CLI encode/decode smoke coverage for `turboquant-q4 --seed`.
 - `phase2-lossless` bit-identical reconstruction including signed zero,
   infinities, and NaN payload bits;
 - `phase2-lossless` deterministic seed/config behavior;

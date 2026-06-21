@@ -28,6 +28,8 @@ The current implementation provides:
   tensors through the CLI;
 - an exhaustive Phase 2 encoder variant for research comparisons when payload
   size search is more important than encode latency;
+- a `turboquant-q4` reference baseline for measuring the base random-rotation
+  scalar quantization path before the quaternion overlay;
 - an exact `lossless-f32` envelope for bit-identical f32 transport while the
   residual-compression design is developed;
 - a small CLI for encoding, chunked encoding, and decoding raw f32
@@ -44,6 +46,15 @@ The generated public fixtures are the default reproducible evidence set. Larger
 or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` f32 values each; larger tensors
 should use the Phase 2 `QATC` chunk container.
+
+## Attribution
+
+QATQ is an independent project. TurboQuant should be credited to the Google
+Research / Google DeepMind / NYU work by Amir Zandieh, Majid Daliri, Majid
+Hadian, and Vahab Mirrokni. The quaternion/Hamilton-product foundation traces
+to William Rowan Hamilton, with modern neural-network motivation from prior
+quaternion neural-network work such as Parcollet, Ravanelli, Morchid, Linarès,
+Trabelsi, De Mori, and Bengio. See [docs/CREDITS.md](docs/CREDITS.md).
 
 ## What QATQ Is For
 
@@ -79,6 +90,12 @@ Use exact f32 transport:
 
 ```sh
 cargo run -- encode --mode lossless-f32 input.f32le output.qatq
+```
+
+Use the reference base TurboQuant-style q4 path:
+
+```sh
+cargo run -- encode --mode turboquant-q4 input.f32le output.qatq
 ```
 
 Use QATQ-family exact reconstruction:
