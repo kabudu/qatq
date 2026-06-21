@@ -1,0 +1,19 @@
+[package]
+name = "qatq"
+version = "0.1.0"
+edition = "2021"
+description = "Quaternion-Augmented TurboQuant research codec for KV cache and tensor migration"
+license = "Apache-2.0"
+repository = "https://github.com/kabudu/qatq"
+readme = "README.md"
+keywords = ["quantization", "kv-cache", "llm", "compression", "quaternion"]
+categories = ["compression", "science"]
+
+[lib]
+name = "qatq"
+path = "src/lib.rs"
+
+[[bin]]
+name = "qatq"
+path = "src/main.rs"
+
