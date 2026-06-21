@@ -26,6 +26,10 @@ cargo run --release --bin qatq-bench -- \
   --paper-output docs/PUBLIC_PAPER_TABLES.md \
   --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- \
+  --no-synthetic \
+  --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
+  --manifest fixtures/public.manifest
+cargo run --release --bin qatq-bench -- \
   --phase2-only \
   --no-synthetic \
   --manifest fixtures/public.manifest \

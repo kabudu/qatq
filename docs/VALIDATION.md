@@ -29,6 +29,7 @@ cargo run --bin qatq -- fixture generate --manifest fixtures/public.manifest --d
 cargo run --bin qatq -- fixture verify --manifest fixtures/public.manifest --output docs/PUBLIC_FIXTURE_AUDIT.md
 cargo run --release --bin qatq-bench -- --no-synthetic --output docs/PUBLIC_COMPARATIVE_BASELINES.md --paper-output docs/PUBLIC_COMPARATIVE_TABLES.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/PUBLIC_BENCHMARKS.md --paper-output docs/PUBLIC_PAPER_TABLES.md --manifest fixtures/public.manifest
+cargo run --release --bin qatq-bench -- --no-synthetic --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.96 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 50.00 --max-phase2-container-ratio 0.97 --max-phase2-container-decode-ns-per-value 50.00
 cargo fmt --check
 cargo check --manifest-path fuzz/Cargo.toml
@@ -53,6 +54,7 @@ Results:
 - public fixture generation and audit: passed.
 - public comparative baseline report: passed.
 - public benchmark and paper reports: passed.
+- public quality-proxy report: passed.
 - latency-budget gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed. This gate is service-budget analysis, not the large-tensor production readiness signal.
 - public production KV throughput gate: passed with the split `production-kv` policy and portable `50.00 ns/value` direct/container decode ceilings.
 - `cargo fmt --check`: passed.

@@ -12,6 +12,7 @@ Current source files:
 - Public benchmark table: `docs/PUBLIC_BENCHMARKS.md`
 - Public paper table inputs: `docs/PUBLIC_PAPER_TABLES.md`
 - Public comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`
+- Public quality-proxy experiments: `docs/PUBLIC_QUALITY_EXPERIMENTS.md`
 - Public production KV gate: `docs/PUBLIC_BENCHMARK_GATE.md`
 - Optional external validation: independently supplied runtime fixture
   manifests and result summaries
@@ -27,6 +28,8 @@ The following claims are supported by the current QATQ repository evidence:
 - Compression-negative generated float32/stress fixtures are correctly passed
   through rather than being counted as failed compression.
 - The public production KV throughput gate passes on the generated corpus.
+- `turboquant-q4` and `phase1-q4` now have deterministic codec-level
+  inner-product preservation probes over the generated public corpus.
 
 The following claims are not yet supported and should not appear as conclusions:
 
@@ -79,13 +82,14 @@ described as a random-access service container.
 
 ## Table Plan
 
-Use `docs/PUBLIC_PAPER_TABLES.md` as the raw table source and derive four compact
-tables for the refreshed paper:
+Use `docs/PUBLIC_PAPER_TABLES.md` and `docs/PUBLIC_QUALITY_EXPERIMENTS.md` as
+raw table sources and derive five compact tables for the refreshed paper:
 
 - fixture inventory by generated pattern and dtype;
 - raw/fp8/lossy/phase1/phase2 comparative baseline rows;
 - phase-2 compressed versus pass-through decision counts;
 - lossless size ratio and decode throughput for compressed real KV tensors;
+- TurboQuant QJL versus quaternion-overlay inner-product proxy error;
 - optional external runtime evidence for compressed and pass-through paths.
 
 Keep the full 50-row benchmark table in the companion white-paper or appendix

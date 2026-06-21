@@ -159,6 +159,15 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/public.manifest
 ```
 
+Run the public quality-proxy report:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --no-synthetic \
+  --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
+  --manifest fixtures/public.manifest
+```
+
 Add optional raw f32 little-endian fixtures from any runtime:
 
 ```sh
@@ -173,6 +182,7 @@ Use a fixture manifest and generate paper-ready summary tables:
 cargo run --release --bin qatq-bench -- \
   --output docs/BENCHMARKS.md \
   --paper-output docs/PAPER_TABLES.md \
+  --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
   --manifest fixtures/public.manifest
 ```
 
