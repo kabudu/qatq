@@ -1,67 +1,91 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: QATQ Adapter <qatq@example.invalid>
-Date: Mon, 22 Jun 2026 00:00:00 +0100
-Subject: [PATCH] llama.cpp: add QATQ raw KV tensor export hook
-
-Target llama.cpp commit: 7992aa7c8, reported by Homebrew llama-cli build 8640.
-
-This patch adds a narrow public export hook for QATQ experiments. It does not
-change model execution. It copies active KV-cache tensor bytes into raw
-little-endian `.f16le`, `.bf16le`, or `.f32le` files plus a small manifest.
-
-Runtime guidance:
-
-  llama.cpp should be run CPU-readable for the first evidence pass, for example
-  with `--device none --gpu-layers 0 --no-kv-offload --cache-type-k f16
-  --cache-type-v f16`. GPU-resident KV export can be added later once the
-  backend copy path is validated for the target backend.
-
+diff --git a/examples/simple/simple.cpp b/examples/simple/simple.cpp
+index 9f0a25d71..07567446c 100644
+--- a/examples/simple/simple.cpp
++++ b/examples/simple/simple.cpp
+@@ -7,7 +7,7 @@
+ 
+ static void print_usage(int, char ** argv) {
+     printf("\nexample usage:\n");
+-    printf("\n    %s -m model.gguf [-n n_predict] [-ngl n_gpu_layers] [prompt]\n", argv[0]);
++    printf("\n    %s -m model.gguf [-n n_predict] [-ngl n_gpu_layers] [--qatq-kv-export-dir dir] [prompt]\n", argv[0]);
+     printf("\n");
+ }
+ 
+@@ -22,6 +22,8 @@ int main(int argc, char ** argv) {
+     int ngl = 99;
+     // number of tokens to predict
+     int n_predict = 32;
++    // directory for raw active KV tensor export after prompt prefill
++    std::string qatq_kv_export_dir;
+ 
+     // parse command line arguments
+ 
+@@ -59,6 +61,13 @@ int main(int argc, char ** argv) {
+                     print_usage(argc, argv);
+                     return 1;
+                 }
++            } else if (strcmp(argv[i], "--qatq-kv-export-dir") == 0) {
++                if (i + 1 < argc) {
++                    qatq_kv_export_dir = argv[++i];
++                } else {
++                    print_usage(argc, argv);
++                    return 1;
++                }
+             } else {
+                 // prompt starts here
+                 break;
+@@ -177,6 +186,15 @@ int main(int argc, char ** argv) {
+ 
+         n_pos += batch.n_tokens;
+ 
++        if (!qatq_kv_export_dir.empty()) {
++            if (!llama_qatq_export_kv_cache(ctx, qatq_kv_export_dir.c_str(), 0)) {
++                fprintf(stderr, "%s: error: failed to export QATQ KV tensors to %s\n", __func__, qatq_kv_export_dir.c_str());
++                return 1;
++            }
++            fprintf(stderr, "%s: exported QATQ KV tensors to %s\n", __func__, qatq_kv_export_dir.c_str());
++            qatq_kv_export_dir.clear();
++        }
++
+         // sample the next token
+         {
+             new_token_id = llama_sampler_sample(smpl, ctx, -1);
 diff --git a/include/llama.h b/include/llama.h
-index 0000000000..0000000000 100644
+index a940f9d64..71980a2ee 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@
-     LLAMA_API int32_t llama_state_seq_load_file(
-             struct llama_context * ctx,
-                      const char * path_session,
-                      llama_seq_id   seq_id,
-                          int32_t * n_token_count_out);
-+
+@@ -877,6 +877,15 @@ extern "C" {
+                           size_t   n_token_capacity,
+                           size_t * n_token_count_out);
+ 
 +    // Experimental QATQ adapter hook.
 +    //
 +    // Exports active internal KV tensors for `seq_id` as raw typed little-endian
 +    // files in `dir`. Supported KV cache dtypes are f16, bf16, and f32.
-+    // Returns false when the current context does not use llama_kv_cache, the
-+    // dtype is unsupported, or a filesystem/backend copy error occurs.
 +    LLAMA_API bool llama_qatq_export_kv_cache(
 +            struct llama_context * ctx,
 +                     const char * dir,
 +                   llama_seq_id   seq_id);
- 
- #ifdef __cplusplus
- }
-diff --git a/src/llama-context.h b/src/llama-context.h
-index 0000000000..0000000000 100644
---- a/src/llama-context.h
-+++ b/src/llama-context.h
-@@
-     uint32_t get_ctx_train() const;
- 
-     int32_t get_n_threads()       const;
-     int32_t get_n_threads_batch() const;
 +
-+    bool qatq_export_kv_cache(const char * dir, llama_seq_id seq_id) const;
+ // for backwards-compat
+ #define LLAMA_STATE_SEQ_FLAGS_SWA_ONLY 1
  
-     bool has_encoder() const;
-     bool has_decoder() const;
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 0000000000..0000000000 100644
+index a808e3e45..739fe9f11 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@
- #include "llama-context.h"
+@@ -4,6 +4,7 @@
+ #include "llama-impl.h"
+ #include "llama-batch.h"
+ #include "llama-io.h"
 +#include "llama-kv-cache.h"
-@@
+ #include "llama-memory.h"
+ #include "llama-mmap.h"
+ #include "llama-model.h"
+@@ -2541,6 +2542,19 @@ size_t llama_context::state_seq_save_file(llama_seq_id seq_id, const char * file
+     return res;
+ }
+ 
 +bool llama_context::qatq_export_kv_cache(const char * dir, llama_seq_id seq_id) const {
 +    if (dir == nullptr || dir[0] == '\0') {
 +        return false;
@@ -75,46 +99,51 @@ index 0000000000..0000000000 100644
 +    return kv->export_qatq_tensors(dir, seq_id);
 +}
 +
-diff --git a/src/llama.cpp b/src/llama.cpp
-index 0000000000..0000000000 100644
---- a/src/llama.cpp
-+++ b/src/llama.cpp
-@@
-+bool llama_qatq_export_kv_cache(struct llama_context * ctx, const char * dir, llama_seq_id seq_id) {
+ size_t llama_context::state_write_data(llama_io_write_i & io) {
+     LLAMA_LOG_DEBUG("%s: writing state\n", __func__);
+ 
+@@ -3416,6 +3430,15 @@ size_t llama_state_seq_load_file(llama_context * ctx, const char * filepath, lla
+     }
+ }
+ 
++bool llama_qatq_export_kv_cache(llama_context * ctx, const char * dir, llama_seq_id seq_id) {
 +    if (ctx == nullptr) {
 +        return false;
 +    }
++
++    ctx->synchronize();
 +    return ctx->qatq_export_kv_cache(dir, seq_id);
 +}
 +
-diff --git a/src/llama-kv-cache.h b/src/llama-kv-cache.h
-index 0000000000..0000000000 100644
---- a/src/llama-kv-cache.h
-+++ b/src/llama-kv-cache.h
-@@
- #include <cstdint>
- #include <memory>
-+#include <string>
- #include <vector>
-@@
-     ggml_type type_v;
+ ///
  
-     bool v_trans = true;
+ int32_t llama_encode(
+diff --git a/src/llama-context.h b/src/llama-context.h
+index e0d0085c1..afe1486cf 100644
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -165,6 +165,8 @@ struct llama_context {
+      const llama_token * tokens,
+                 size_t   n_token_count);
  
-+    bool export_qatq_tensors(const std::string & dir, llama_seq_id seq_id) const;
++    bool qatq_export_kv_cache(const char * dir, llama_seq_id seq_id) const;
 +
- private:
-     struct kv_layer {
-         uint32_t il;
+     //
+     // perf
+     //
 diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
-index 0000000000..0000000000 100644
+index 3e0fd3107..984dbbd9a 100644
 --- a/src/llama-kv-cache.cpp
 +++ b/src/llama-kv-cache.cpp
-@@
- #include "llama-kv-cache.h"
- 
+@@ -9,9 +9,33 @@
+ #include <cassert>
+ #include <cmath>
+ #include <cstring>
 +#include <filesystem>
 +#include <fstream>
+ #include <limits>
+ #include <map>
+ #include <stdexcept>
 +#include <string>
 +#include <vector>
 +
@@ -137,10 +166,21 @@ index 0000000000..0000000000 100644
 +}
 +
 +} // namespace
-+
+ 
+ static bool ggml_is_power_of_2(int n) {
+     return (n & (n - 1)) == 0;
+@@ -1829,6 +1853,134 @@ ggml_cgraph * llama_kv_cache::build_graph_shift(llm_graph_result * res, llama_co
+     return gf;
+ }
+ 
 +bool llama_kv_cache::export_qatq_tensors(const std::string & dir, llama_seq_id seq_id) const {
-+    const char * k_suffix = qatq_dtype_suffix(type_k);
-+    const char * v_suffix = qatq_dtype_suffix(type_v);
++    if (seq_id < 0) {
++        LLAMA_LOG_ERROR("%s: seq_id must be non-negative\n", __func__);
++        return false;
++    }
++
++    const char * k_suffix = qatq_dtype_suffix(type_k());
++    const char * v_suffix = qatq_dtype_suffix(type_v());
 +    if (k_suffix == nullptr || v_suffix == nullptr) {
 +        LLAMA_LOG_ERROR("%s: QATQ export supports only f16, bf16, and f32 KV cache types\n", __func__);
 +        return false;
@@ -163,58 +203,71 @@ index 0000000000..0000000000 100644
 +    manifest << "{\n";
 +    manifest << "  \"format\": \"qatq-llama-cpp-kv-v1\",\n";
 +    manifest << "  \"seq_id\": " << seq_id << ",\n";
++    manifest << "  \"kv_size\": " << get_size() << ",\n";
++    manifest << "  \"streams\": " << get_n_stream() << ",\n";
 +    manifest << "  \"tensors\": [\n";
 +
 +    bool first_manifest = true;
-+    for (size_t s = 0; s < v_cells.size(); ++s) {
++    for (uint32_t s = 0; s < v_cells.size(); ++s) {
 +        const auto & cells = v_cells[s];
++
 +        std::vector<uint32_t> active;
 +        active.reserve(cells.size());
 +        for (uint32_t i = 0; i < cells.size(); ++i) {
-+            if (cells.seq_has(i, seq_id)) {
++            if (!cells.is_empty(i) && cells.seq_has(i, seq_id)) {
 +                active.push_back(i);
 +            }
 +        }
++
 +        if (active.empty()) {
 +            continue;
 +        }
 +
 +        for (const auto & layer : layers) {
++            const uint32_t il = layer.il;
++
 +            if (layer.k != nullptr) {
 +                const auto * k = layer.k_stream[s];
++                const uint32_t n_embd_k_gqa = hparams.n_embd_k_gqa(il);
 +                const size_t k_row_size = ggml_row_size(k->type, n_embd_k_gqa);
-+                const std::string filename = "cache_k_l" + std::to_string(layer.il) + "_s" + std::to_string(s) + "." + k_suffix;
++                const std::string filename = "cache_k_l" + std::to_string(il) + "_s" + std::to_string(s) + "." + k_suffix;
 +                std::ofstream out(out_dir / filename, std::ios::binary);
 +                if (!out) {
 +                    return false;
 +                }
++
 +                for (uint32_t cell : active) {
 +                    if (!qatq_write_tensor_slice(out, k, cell * k_row_size, k_row_size)) {
 +                        return false;
 +                    }
 +                }
-+                if (!first_manifest) manifest << ",\n";
++
++                if (!first_manifest) {
++                    manifest << ",\n";
++                }
 +                first_manifest = false;
-+                manifest << "    {\"name\":\"cache_k_l" << layer.il << "\",\"stream\":" << s
++                manifest << "    {\"name\":\"cache_k_l" << il << "\",\"kind\":\"k\",\"stream\":" << s
 +                         << ",\"file\":\"" << filename << "\",\"dtype\":\"" << k_suffix
 +                         << "\",\"active_cells\":" << active.size()
++                         << ",\"embedding\":" << n_embd_k_gqa
 +                         << ",\"row_bytes\":" << k_row_size << "}";
 +            }
 +
 +            if (layer.v != nullptr) {
 +                const auto * v = layer.v_stream[s];
++                const uint32_t n_embd_v_gqa = hparams.n_embd_v_gqa(il);
 +                const size_t v_el_size = ggml_type_size(v->type);
 +                const size_t v_row_size = ggml_row_size(v->type, n_embd_v_gqa);
-+                const std::string filename = "cache_v_l" + std::to_string(layer.il) + "_s" + std::to_string(s) + "." + v_suffix;
++                const std::string filename = "cache_v_l" + std::to_string(il) + "_s" + std::to_string(s) + "." + v_suffix;
 +                std::ofstream out(out_dir / filename, std::ios::binary);
 +                if (!out) {
 +                    return false;
 +                }
 +
 +                if (v_trans) {
-+                    for (size_t j = 0; j < n_embd_v_gqa; ++j) {
++                    for (uint32_t j = 0; j < n_embd_v_gqa; ++j) {
 +                        for (uint32_t cell : active) {
-+                            const size_t offset = (cell + j * kv_size) * v_el_size;
++                            const size_t offset = (cell + j * cells.size()) * v_el_size;
 +                            if (!qatq_write_tensor_slice(out, v, offset, v_el_size)) {
 +                                return false;
 +                            }
@@ -228,11 +281,14 @@ index 0000000000..0000000000 100644
 +                    }
 +                }
 +
-+                if (!first_manifest) manifest << ",\n";
++                if (!first_manifest) {
++                    manifest << ",\n";
++                }
 +                first_manifest = false;
-+                manifest << "    {\"name\":\"cache_v_l" << layer.il << "\",\"stream\":" << s
++                manifest << "    {\"name\":\"cache_v_l" << il << "\",\"kind\":\"v\",\"stream\":" << s
 +                         << ",\"file\":\"" << filename << "\",\"dtype\":\"" << v_suffix
 +                         << "\",\"active_cells\":" << active.size()
++                         << ",\"embedding\":" << n_embd_v_gqa
 +                         << ",\"row_bytes\":" << v_row_size
 +                         << ",\"transposed\":" << (v_trans ? "true" : "false") << "}";
 +            }
@@ -241,5 +297,31 @@ index 0000000000..0000000000 100644
 +
 +    manifest << "\n  ]\n";
 +    manifest << "}\n";
++
 +    return manifest.good();
 +}
++
+ void llama_kv_cache::state_write(llama_io_write_i & io, llama_seq_id seq_id, llama_state_seq_flags flags) const {
+     GGML_UNUSED(flags);
+ 
+diff --git a/src/llama-kv-cache.h b/src/llama-kv-cache.h
+index d4569a06f..1ca3a175e 100644
+--- a/src/llama-kv-cache.h
++++ b/src/llama-kv-cache.h
+@@ -6,6 +6,7 @@
+ #include "llama-memory.h"
+ 
+ #include <unordered_map>
++#include <string>
+ #include <vector>
+ 
+ struct llama_cparams;
+@@ -155,6 +156,8 @@ public:
+     ggml_type type_k() const;
+     ggml_type type_v() const;
+ 
++    bool export_qatq_tensors(const std::string & dir, llama_seq_id seq_id) const;
++
+     //
+     // graph_build API
+     //

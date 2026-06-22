@@ -83,6 +83,13 @@ python3 scripts/llama_cpp_runtime_kv.py \
   --kv-dir captures/llama-kv
 ```
 
+The first direct capture proof is recorded in
+[`docs/LLAMA_CPP_KV_COMPRESSION_REPORT.md`](LLAMA_CPP_KV_COMPRESSION_REPORT.md).
+It uses a patched llama.cpp `llama-simple` runner against local Qwen2.5 1.5B,
+exports native f16 K/V tensors, verifies exact QATQ/zstd/lz4 decode equality,
+and shows QATQ beating zstd/lz4 on packed K, packed V, and packed all-KV
+bundles.
+
 ## Evidence To Add
 
 Once a patched llama.cpp exporter is available, add a runtime evidence bundle:
