@@ -8,9 +8,9 @@ use std::{
 
 use qatq::{
     compression_ratio, decode, decode_lossy_i4, decode_phase1_q4, decode_turboquant_q4,
-    encode_lossless_f32, encode_lossy_i4, encode_phase1_q4, encode_phase2_lossless,
-    encode_phase2_lossless_container, encode_phase2_lossless_exhaustive, encode_turboquant_q4,
-    estimate_turboquant_q4_inner_product, phase2_lossless_strategy,
+    encode_lossless_f32, encode_lossy_i4, encode_phase1_q4, encode_qatq_exact,
+    encode_qatq_exact_container, encode_qatq_exact_exhaustive, encode_turboquant_q4,
+    estimate_turboquant_q4_inner_product, qatq_exact_strategy,
 };
 
 const ITERATIONS: usize = 200;
@@ -71,7 +71,7 @@ fn run() -> Result<(), String> {
         }
         if should_benchmark {
             let summary = dataset.summary();
-            let results = benchmark_dataset(&dataset, options.phase2_only)?;
+            let results = benchmark_dataset(&dataset, options.exact_only)?;
             benchmarked.push(BenchmarkedDataset { summary, results });
         }
     }
@@ -116,14 +116,14 @@ fn parse_options() -> Result<BenchOptions, String> {
     let mut gate_require_external = false;
     let mut gate_policy = GatePolicy::Custom;
     let mut include_synthetic = true;
-    let mut phase2_only = false;
-    let mut max_phase2_ratio = None;
-    let mut max_phase2_encode_us = None;
-    let mut max_phase2_decode_us = None;
-    let mut max_phase2_decode_ns_per_value = None;
-    let mut max_phase2_container_ratio = None;
-    let mut max_phase2_container_decode_us = None;
-    let mut max_phase2_container_decode_ns_per_value = None;
+    let mut exact_only = false;
+    let mut max_exact_ratio = None;
+    let mut max_exact_encode_us = None;
+    let mut max_exact_decode_us = None;
+    let mut max_exact_decode_ns_per_value = None;
+    let mut max_exact_container_ratio = None;
+    let mut max_exact_container_decode_us = None;
+    let mut max_exact_container_decode_ns_per_value = None;
     let mut inputs = Vec::new();
     let mut manifests = Vec::new();
     let mut index = 1;
@@ -174,49 +174,49 @@ fn parse_options() -> Result<BenchOptions, String> {
             "--no-synthetic" => {
                 include_synthetic = false;
             }
-            "--phase2-only" => {
-                phase2_only = true;
+            "--exact-only" => {
+                exact_only = true;
             }
-            "--max-phase2-ratio" => {
+            "--max-exact-ratio" => {
                 index += 1;
-                max_phase2_ratio = Some(parse_f64_arg(args.get(index), "--max-phase2-ratio")?);
+                max_exact_ratio = Some(parse_f64_arg(args.get(index), "--max-exact-ratio")?);
             }
-            "--max-phase2-encode-us" => {
+            "--max-exact-encode-us" => {
                 index += 1;
-                max_phase2_encode_us =
-                    Some(parse_f64_arg(args.get(index), "--max-phase2-encode-us")?);
+                max_exact_encode_us =
+                    Some(parse_f64_arg(args.get(index), "--max-exact-encode-us")?);
             }
-            "--max-phase2-decode-us" => {
+            "--max-exact-decode-us" => {
                 index += 1;
-                max_phase2_decode_us =
-                    Some(parse_f64_arg(args.get(index), "--max-phase2-decode-us")?);
+                max_exact_decode_us =
+                    Some(parse_f64_arg(args.get(index), "--max-exact-decode-us")?);
             }
-            "--max-phase2-decode-ns-per-value" => {
+            "--max-exact-decode-ns-per-value" => {
                 index += 1;
-                max_phase2_decode_ns_per_value = Some(parse_f64_arg(
+                max_exact_decode_ns_per_value = Some(parse_f64_arg(
                     args.get(index),
-                    "--max-phase2-decode-ns-per-value",
+                    "--max-exact-decode-ns-per-value",
                 )?);
             }
-            "--max-phase2-container-ratio" => {
+            "--max-exact-container-ratio" => {
                 index += 1;
-                max_phase2_container_ratio = Some(parse_f64_arg(
+                max_exact_container_ratio = Some(parse_f64_arg(
                     args.get(index),
-                    "--max-phase2-container-ratio",
+                    "--max-exact-container-ratio",
                 )?);
             }
-            "--max-phase2-container-decode-us" => {
+            "--max-exact-container-decode-us" => {
                 index += 1;
-                max_phase2_container_decode_us = Some(parse_f64_arg(
+                max_exact_container_decode_us = Some(parse_f64_arg(
                     args.get(index),
-                    "--max-phase2-container-decode-us",
+                    "--max-exact-container-decode-us",
                 )?);
             }
-            "--max-phase2-container-decode-ns-per-value" => {
+            "--max-exact-container-decode-ns-per-value" => {
                 index += 1;
-                max_phase2_container_decode_ns_per_value = Some(parse_f64_arg(
+                max_exact_container_decode_ns_per_value = Some(parse_f64_arg(
                     args.get(index),
-                    "--max-phase2-container-decode-ns-per-value",
+                    "--max-exact-container-decode-ns-per-value",
                 )?);
             }
             "--input" => {
@@ -247,14 +247,14 @@ fn parse_options() -> Result<BenchOptions, String> {
         gate_require_external,
         gate_policy,
         include_synthetic,
-        phase2_only,
-        max_phase2_ratio,
-        max_phase2_encode_us,
-        max_phase2_decode_us,
-        max_phase2_decode_ns_per_value,
-        max_phase2_container_ratio,
-        max_phase2_container_decode_us,
-        max_phase2_container_decode_ns_per_value,
+        exact_only,
+        max_exact_ratio,
+        max_exact_encode_us,
+        max_exact_decode_us,
+        max_exact_decode_ns_per_value,
+        max_exact_container_ratio,
+        max_exact_container_decode_us,
+        max_exact_container_decode_ns_per_value,
         inputs,
         manifests,
     })
@@ -291,7 +291,7 @@ fn parse_fixture_input(spec: &str) -> Result<FixtureInput, String> {
 }
 
 fn usage() -> String {
-    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--quality-output <path>] [--task-quality-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget|competitive-compression] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
+    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--quality-output <path>] [--task-quality-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget|competitive-compression] [--no-synthetic] [--exact-only] [--max-exact-ratio <f64>] [--max-exact-encode-us <f64>] [--max-exact-decode-us <f64>] [--max-exact-decode-ns-per-value <f64>] [--max-exact-container-ratio <f64>] [--max-exact-container-decode-us <f64>] [--max-exact-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
 }
 
 struct BenchOptions {
@@ -303,14 +303,14 @@ struct BenchOptions {
     gate_require_external: bool,
     gate_policy: GatePolicy,
     include_synthetic: bool,
-    phase2_only: bool,
-    max_phase2_ratio: Option<f64>,
-    max_phase2_encode_us: Option<f64>,
-    max_phase2_decode_us: Option<f64>,
-    max_phase2_decode_ns_per_value: Option<f64>,
-    max_phase2_container_ratio: Option<f64>,
-    max_phase2_container_decode_us: Option<f64>,
-    max_phase2_container_decode_ns_per_value: Option<f64>,
+    exact_only: bool,
+    max_exact_ratio: Option<f64>,
+    max_exact_encode_us: Option<f64>,
+    max_exact_decode_us: Option<f64>,
+    max_exact_decode_ns_per_value: Option<f64>,
+    max_exact_container_ratio: Option<f64>,
+    max_exact_container_decode_us: Option<f64>,
+    max_exact_container_decode_ns_per_value: Option<f64>,
     inputs: Vec<FixtureInput>,
     manifests: Vec<PathBuf>,
 }
@@ -343,7 +343,7 @@ impl GatePolicy {
                 "service-budget analysis; fixed absolute microsecond ceilings are not the large-tensor production readiness gate"
             }
             GatePolicy::CompetitiveCompression => {
-                "competitive compression regression gate; compression-positive Phase 2 rows must beat zstd/lz4 raw-f32le baselines"
+                "competitive compression regression gate; compression-positive QATQ exact rows must beat zstd/lz4 raw-f32le baselines"
             }
         }
     }
@@ -413,9 +413,9 @@ fn preflight_external_datasets(specs: &[DatasetSpec]) -> Result<(), String> {
     Ok(())
 }
 
-fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchResult>, String> {
-    if phase2_only {
-        return benchmark_phase2_dataset(dataset);
+fn benchmark_dataset(dataset: &Dataset, exact_only: bool) -> Result<Vec<BenchResult>, String> {
+    if exact_only {
+        return benchmark_exact_dataset(dataset);
     }
 
     let raw_encoded = encode_raw_f32le(&dataset.values);
@@ -435,16 +435,16 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
     let lossless_decoded = decode(&lossless_encoded).map_err(|error| error.to_string())?;
     let phase1_encoded = encode_phase1_q4(&dataset.values);
     let phase1_decoded = decode_phase1_q4(&phase1_encoded).map_err(|error| error.to_string())?;
-    let phase2_encoded = encode_phase2_lossless(&dataset.values);
-    let phase2_decoded = decode(&phase2_encoded).map_err(|error| error.to_string())?;
-    let phase2_exhaustive_encoded = encode_phase2_lossless_exhaustive(&dataset.values);
-    let phase2_exhaustive_decoded =
-        decode(&phase2_exhaustive_encoded).map_err(|error| error.to_string())?;
-    let phase2_container_encoded =
-        encode_phase2_lossless_container(&dataset.values, CONTAINER_CHUNK_VALUES)
+    let exact_encoded = encode_qatq_exact(&dataset.values);
+    let exact_decoded = decode(&exact_encoded).map_err(|error| error.to_string())?;
+    let exact_exhaustive_encoded = encode_qatq_exact_exhaustive(&dataset.values);
+    let exact_exhaustive_decoded =
+        decode(&exact_exhaustive_encoded).map_err(|error| error.to_string())?;
+    let exact_container_encoded =
+        encode_qatq_exact_container(&dataset.values, CONTAINER_CHUNK_VALUES)
             .map_err(|error| error.to_string())?;
-    let phase2_container_decoded =
-        decode(&phase2_container_encoded).map_err(|error| error.to_string())?;
+    let exact_container_decoded =
+        decode(&exact_container_encoded).map_err(|error| error.to_string())?;
 
     let mut results = Vec::new();
     results.push(BenchResult::new(
@@ -528,53 +528,53 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
         &phase1_decoded,
     ));
     results.push(BenchResult::new(
-        "phase2-lossless",
-        phase2_encoded.len(),
+        "qatq-exact",
+        exact_encoded.len(),
         dataset.values.len(),
-        phase2_strategy_label(&phase2_encoded),
-        time_encode(|| encode_phase2_lossless(&dataset.values)),
-        time_decode(|| decode(&phase2_encoded).expect("phase2 decode")),
+        exact_strategy_label(&exact_encoded),
+        time_encode(|| encode_qatq_exact(&dataset.values)),
+        time_decode(|| decode(&exact_encoded).expect("exact decode")),
         &dataset.values,
-        &phase2_decoded,
+        &exact_decoded,
     ));
     results.push(BenchResult::new(
-        "phase2-lossless-exhaustive",
-        phase2_exhaustive_encoded.len(),
+        "qatq-exact-exhaustive",
+        exact_exhaustive_encoded.len(),
         dataset.values.len(),
-        phase2_strategy_label(&phase2_exhaustive_encoded),
-        time_encode(|| encode_phase2_lossless_exhaustive(&dataset.values)),
-        time_decode(|| decode(&phase2_exhaustive_encoded).expect("phase2 exhaustive decode")),
+        exact_strategy_label(&exact_exhaustive_encoded),
+        time_encode(|| encode_qatq_exact_exhaustive(&dataset.values)),
+        time_decode(|| decode(&exact_exhaustive_encoded).expect("exact exhaustive decode")),
         &dataset.values,
-        &phase2_exhaustive_decoded,
+        &exact_exhaustive_decoded,
     ));
     results.push(BenchResult::new(
-        "phase2-lossless-container",
-        phase2_container_encoded.len(),
+        "qatq-exact-container",
+        exact_container_encoded.len(),
         dataset.values.len(),
         Some("qatc-container"),
         time_encode(|| {
-            encode_phase2_lossless_container(&dataset.values, CONTAINER_CHUNK_VALUES)
-                .expect("phase2 container encode")
+            encode_qatq_exact_container(&dataset.values, CONTAINER_CHUNK_VALUES)
+                .expect("exact container encode")
         }),
-        time_decode(|| decode(&phase2_container_encoded).expect("phase2 container decode")),
+        time_decode(|| decode(&exact_container_encoded).expect("exact container decode")),
         &dataset.values,
-        &phase2_container_decoded,
+        &exact_container_decoded,
     ));
     Ok(results)
 }
 
-fn benchmark_phase2_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, String> {
+fn benchmark_exact_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, String> {
     let zstd_encoded = encode_zstd_raw_f32le(&dataset.values)?;
     let zstd_decoded = decode_zstd_raw_f32le(&zstd_encoded).map_err(|error| error.to_string())?;
     let lz4_encoded = encode_lz4_raw_f32le(&dataset.values);
     let lz4_decoded = decode_lz4_raw_f32le(&lz4_encoded).map_err(|error| error.to_string())?;
-    let phase2_encoded = encode_phase2_lossless(&dataset.values);
-    let phase2_decoded = decode(&phase2_encoded).map_err(|error| error.to_string())?;
-    let phase2_container_encoded =
-        encode_phase2_lossless_container(&dataset.values, CONTAINER_CHUNK_VALUES)
+    let exact_encoded = encode_qatq_exact(&dataset.values);
+    let exact_decoded = decode(&exact_encoded).map_err(|error| error.to_string())?;
+    let exact_container_encoded =
+        encode_qatq_exact_container(&dataset.values, CONTAINER_CHUNK_VALUES)
             .map_err(|error| error.to_string())?;
-    let phase2_container_decoded =
-        decode(&phase2_container_encoded).map_err(|error| error.to_string())?;
+    let exact_container_decoded =
+        decode(&exact_container_encoded).map_err(|error| error.to_string())?;
 
     Ok(vec![
         BenchResult::new(
@@ -598,33 +598,33 @@ fn benchmark_phase2_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, Strin
             &lz4_decoded,
         ),
         BenchResult::new(
-            "phase2-lossless",
-            phase2_encoded.len(),
+            "qatq-exact",
+            exact_encoded.len(),
             dataset.values.len(),
-            phase2_strategy_label(&phase2_encoded),
-            time_encode(|| encode_phase2_lossless(&dataset.values)),
-            time_decode(|| decode(&phase2_encoded).expect("phase2 decode")),
+            exact_strategy_label(&exact_encoded),
+            time_encode(|| encode_qatq_exact(&dataset.values)),
+            time_decode(|| decode(&exact_encoded).expect("exact decode")),
             &dataset.values,
-            &phase2_decoded,
+            &exact_decoded,
         ),
         BenchResult::new(
-            "phase2-lossless-container",
-            phase2_container_encoded.len(),
+            "qatq-exact-container",
+            exact_container_encoded.len(),
             dataset.values.len(),
             Some("qatc-container"),
             time_encode(|| {
-                encode_phase2_lossless_container(&dataset.values, CONTAINER_CHUNK_VALUES)
-                    .expect("phase2 container encode")
+                encode_qatq_exact_container(&dataset.values, CONTAINER_CHUNK_VALUES)
+                    .expect("exact container encode")
             }),
-            time_decode(|| decode(&phase2_container_encoded).expect("phase2 container decode")),
+            time_decode(|| decode(&exact_container_encoded).expect("exact container decode")),
             &dataset.values,
-            &phase2_container_decoded,
+            &exact_container_decoded,
         ),
     ])
 }
 
-fn phase2_strategy_label(payload: &[u8]) -> Option<&'static str> {
-    phase2_lossless_strategy(payload)
+fn exact_strategy_label(payload: &[u8]) -> Option<&'static str> {
+    qatq_exact_strategy(payload)
         .ok()
         .map(|strategy| strategy.as_str())
 }
@@ -718,7 +718,7 @@ enum DatasetSource {
 #[derive(Clone, Debug)]
 struct BenchResult {
     codec: &'static str,
-    phase2_strategy: Option<&'static str>,
+    exact_strategy: Option<&'static str>,
     encoded_len: usize,
     ratio: f64,
     encode_us: f64,
@@ -733,7 +733,7 @@ impl BenchResult {
         codec: &'static str,
         encoded_len: usize,
         value_count: usize,
-        phase2_strategy: Option<&'static str>,
+        exact_strategy: Option<&'static str>,
         encode_us: f64,
         decode_us: f64,
         before: &[f32],
@@ -743,7 +743,7 @@ impl BenchResult {
         let exact_bits = exact_f32_bits(before, after);
         Self {
             codec,
-            phase2_strategy,
+            exact_strategy,
             encoded_len,
             ratio: compression_ratio(encoded_len, value_count),
             encode_us,
@@ -851,8 +851,8 @@ fn task_quality_dataset(dataset: &Dataset) -> Result<TaskQualityDataset, String>
     let task_values = &finite_values[..record_count * RECORD_DIM];
     let query_indices = task_query_indices(record_count);
 
-    let phase2_encoded = encode_phase2_lossless(task_values);
-    let phase2_decoded = decode(&phase2_encoded).map_err(|error| error.to_string())?;
+    let exact_encoded = encode_qatq_exact(task_values);
+    let exact_decoded = decode(&exact_encoded).map_err(|error| error.to_string())?;
     let turboquant_encoded = encode_turboquant_q4(task_values);
     let turboquant_decoded =
         decode_turboquant_q4(&turboquant_encoded).map_err(|error| error.to_string())?;
@@ -861,10 +861,10 @@ fn task_quality_dataset(dataset: &Dataset) -> Result<TaskQualityDataset, String>
 
     let rows = vec![
         task_quality_row(
-            "phase2-lossless",
-            compression_ratio(phase2_encoded.len(), task_values.len()),
+            "qatq-exact",
+            compression_ratio(exact_encoded.len(), task_values.len()),
             task_values,
-            &phase2_decoded,
+            &exact_decoded,
             RECORD_DIM,
             &query_indices,
         ),
@@ -1326,10 +1326,10 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
     }
 
     if options.gate_policy == GatePolicy::ProductionKv {
-        if options.max_phase2_decode_us.is_some()
-            || options.max_phase2_container_decode_us.is_some()
-            || options.max_phase2_decode_ns_per_value.is_none()
-            || options.max_phase2_container_decode_ns_per_value.is_none()
+        if options.max_exact_decode_us.is_some()
+            || options.max_exact_container_decode_us.is_some()
+            || options.max_exact_decode_ns_per_value.is_none()
+            || options.max_exact_container_decode_ns_per_value.is_none()
         {
             passed = false;
             rows.push("| gate | production-kv policy | fail | production KV readiness requires decode ns/value ceilings and must not use fixed decode-us ceilings |".to_string());
@@ -1337,8 +1337,8 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
     }
 
     if options.gate_policy == GatePolicy::LatencyBudget
-        && options.max_phase2_decode_us.is_none()
-        && options.max_phase2_container_decode_us.is_none()
+        && options.max_exact_decode_us.is_none()
+        && options.max_exact_container_decode_us.is_none()
     {
         passed = false;
         rows.push("| gate | latency-budget policy | fail | latency-budget analysis requires at least one fixed decode-us ceiling |".to_string());
@@ -1348,73 +1348,79 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
         if evaluate_external_only && dataset.summary.source != DatasetSource::External {
             continue;
         }
-        let Some(phase2) = find_result(&dataset.results, "phase2-lossless") else {
+        let Some(qatq_exact) = find_result(&dataset.results, "qatq-exact") else {
             passed = false;
             rows.push(format!(
-                "| {} / {} | phase2-lossless row | fail | missing benchmark row |",
+                "| {} / {} | qatq-exact row | fail | missing benchmark row |",
                 dataset.summary.group, dataset.summary.name
             ));
             continue;
         };
         let mut dataset_passed = true;
         let mut reasons = Vec::new();
-        let phase2_no_compress = is_phase2_no_compress(phase2);
-        if !phase2.exact_bits {
+        let exact_no_compress = is_exact_no_compress(qatq_exact);
+        if !qatq_exact.exact_bits {
             dataset_passed = false;
-            reasons.push("phase2 was not bit-identical".to_string());
+            reasons.push("exact was not bit-identical".to_string());
         }
-        if phase2_no_compress {
+        if exact_no_compress {
             reasons.push("no-compress bypass selected".to_string());
         } else {
-            if let Some(limit) = options.max_phase2_ratio {
-                if phase2.ratio > limit {
+            if let Some(limit) = options.max_exact_ratio {
+                if qatq_exact.ratio > limit {
                     dataset_passed = false;
-                    reasons.push(format!("ratio {:.4} > {:.4}", phase2.ratio, limit));
+                    reasons.push(format!("ratio {:.4} > {:.4}", qatq_exact.ratio, limit));
                 }
             }
-            if let Some(limit) = options.max_phase2_encode_us {
-                if phase2.encode_us > limit {
-                    dataset_passed = false;
-                    reasons.push(format!("encode {:.2}us > {:.2}us", phase2.encode_us, limit));
-                }
-            }
-            if let Some(limit) = options.max_phase2_decode_us {
-                if phase2.decode_us > limit {
-                    dataset_passed = false;
-                    reasons.push(format!("decode {:.2}us > {:.2}us", phase2.decode_us, limit));
-                }
-            }
-        }
-        let phase2_decode_ns_per_value =
-            decode_ns_per_value(phase2.decode_us, dataset.summary.value_count);
-        if !phase2_no_compress {
-            if let Some(limit) = options.max_phase2_decode_ns_per_value {
-                if phase2_decode_ns_per_value > limit {
+            if let Some(limit) = options.max_exact_encode_us {
+                if qatq_exact.encode_us > limit {
                     dataset_passed = false;
                     reasons.push(format!(
-                        "decode {:.4}ns/value > {:.4}ns/value",
-                        phase2_decode_ns_per_value, limit
+                        "encode {:.2}us > {:.2}us",
+                        qatq_exact.encode_us, limit
+                    ));
+                }
+            }
+            if let Some(limit) = options.max_exact_decode_us {
+                if qatq_exact.decode_us > limit {
+                    dataset_passed = false;
+                    reasons.push(format!(
+                        "decode {:.2}us > {:.2}us",
+                        qatq_exact.decode_us, limit
                     ));
                 }
             }
         }
-        if options.gate_policy == GatePolicy::CompetitiveCompression && !phase2_no_compress {
+        let exact_decode_ns_per_value =
+            decode_ns_per_value(qatq_exact.decode_us, dataset.summary.value_count);
+        if !exact_no_compress {
+            if let Some(limit) = options.max_exact_decode_ns_per_value {
+                if exact_decode_ns_per_value > limit {
+                    dataset_passed = false;
+                    reasons.push(format!(
+                        "decode {:.4}ns/value > {:.4}ns/value",
+                        exact_decode_ns_per_value, limit
+                    ));
+                }
+            }
+        }
+        if options.gate_policy == GatePolicy::CompetitiveCompression && !exact_no_compress {
             match (
                 find_result(&dataset.results, "zstd-raw-f32le"),
                 find_result(&dataset.results, "lz4-raw-f32le"),
             ) {
                 (Some(zstd), Some(lz4)) => {
                     let best_baseline = zstd.ratio.min(lz4.ratio);
-                    if phase2.ratio > best_baseline {
+                    if qatq_exact.ratio > best_baseline {
                         dataset_passed = false;
                         reasons.push(format!(
                             "competitive ratio {:.4} > best(zstd {:.4}, lz4 {:.4})",
-                            phase2.ratio, zstd.ratio, lz4.ratio
+                            qatq_exact.ratio, zstd.ratio, lz4.ratio
                         ));
                     } else {
                         reasons.push(format!(
                             "competitive ratio {:.4} <= best(zstd {:.4}, lz4 {:.4})",
-                            phase2.ratio, zstd.ratio, lz4.ratio
+                            qatq_exact.ratio, zstd.ratio, lz4.ratio
                         ));
                     }
                 }
@@ -1428,17 +1434,17 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
             passed = false;
         }
         rows.push(format!(
-            "| {} / {} | phase2-lossless | {} | values {}, strategy {}, ratio {:.4}, encode {:.2}us, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
+            "| {} / {} | qatq-exact | {} | values {}, strategy {}, ratio {:.4}, encode {:.2}us, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
             dataset.summary.group,
             dataset.summary.name,
             if dataset_passed { "pass" } else { "fail" },
             dataset.summary.value_count,
-            phase2.phase2_strategy.unwrap_or(""),
-            phase2.ratio,
-            phase2.encode_us,
-            phase2.decode_us,
-            phase2_decode_ns_per_value,
-            phase2.exact_bits,
+            qatq_exact.exact_strategy.unwrap_or(""),
+            qatq_exact.ratio,
+            qatq_exact.encode_us,
+            qatq_exact.decode_us,
+            exact_decode_ns_per_value,
+            qatq_exact.exact_bits,
             if reasons.is_empty() {
                 String::new()
             } else {
@@ -1446,10 +1452,10 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
             }
         ));
 
-        let Some(container) = find_result(&dataset.results, "phase2-lossless-container") else {
+        let Some(container) = find_result(&dataset.results, "qatq-exact-container") else {
             passed = false;
             rows.push(format!(
-                "| {} / {} | phase2-lossless-container row | fail | missing benchmark row |",
+                "| {} / {} | qatq-exact-container row | fail | missing benchmark row |",
                 dataset.summary.group, dataset.summary.name
             ));
             continue;
@@ -1460,16 +1466,16 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
             container_passed = false;
             container_reasons.push("container was not bit-identical".to_string());
         }
-        if phase2_no_compress {
+        if exact_no_compress {
             container_reasons.push("no-compress bypass selected".to_string());
         } else {
-            if let Some(limit) = options.max_phase2_container_ratio {
+            if let Some(limit) = options.max_exact_container_ratio {
                 if container.ratio > limit {
                     container_passed = false;
                     container_reasons.push(format!("ratio {:.4} > {:.4}", container.ratio, limit));
                 }
             }
-            if let Some(limit) = options.max_phase2_container_decode_us {
+            if let Some(limit) = options.max_exact_container_decode_us {
                 if container.decode_us > limit {
                     container_passed = false;
                     container_reasons.push(format!(
@@ -1481,8 +1487,8 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
         }
         let container_decode_ns_per_value =
             decode_ns_per_value(container.decode_us, dataset.summary.value_count);
-        if !phase2_no_compress {
-            if let Some(limit) = options.max_phase2_container_decode_ns_per_value {
+        if !exact_no_compress {
+            if let Some(limit) = options.max_exact_container_decode_ns_per_value {
                 if container_decode_ns_per_value > limit {
                     container_passed = false;
                     container_reasons.push(format!(
@@ -1496,7 +1502,7 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
             passed = false;
         }
         rows.push(format!(
-            "| {} / {} | phase2-lossless-container | {} | values {}, ratio {:.4}, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
+            "| {} / {} | qatq-exact-container | {} | values {}, ratio {:.4}, decode {:.2}us ({:.4}ns/value), exact_bits={}{} |",
             dataset.summary.group,
             dataset.summary.name,
             if container_passed { "pass" } else { "fail" },
@@ -1535,32 +1541,32 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
         }
     ));
     report.push_str(&format!(
-        "- max phase2 ratio: `{}`\n",
-        option_f64_label(options.max_phase2_ratio)
+        "- max exact ratio: `{}`\n",
+        option_f64_label(options.max_exact_ratio)
     ));
     report.push_str(&format!(
-        "- max phase2 encode us: `{}`\n",
-        option_f64_label(options.max_phase2_encode_us)
+        "- max exact encode us: `{}`\n",
+        option_f64_label(options.max_exact_encode_us)
     ));
     report.push_str(&format!(
-        "- max phase2 decode us: `{}`\n\n",
-        option_f64_label(options.max_phase2_decode_us)
+        "- max exact decode us: `{}`\n\n",
+        option_f64_label(options.max_exact_decode_us)
     ));
     report.push_str(&format!(
-        "- max phase2 decode ns/value: `{}`\n\n",
-        option_f64_label(options.max_phase2_decode_ns_per_value)
+        "- max exact decode ns/value: `{}`\n\n",
+        option_f64_label(options.max_exact_decode_ns_per_value)
     ));
     report.push_str(&format!(
-        "- max phase2 container ratio: `{}`\n",
-        option_f64_label(options.max_phase2_container_ratio)
+        "- max exact container ratio: `{}`\n",
+        option_f64_label(options.max_exact_container_ratio)
     ));
     report.push_str(&format!(
-        "- max phase2 container decode us: `{}`\n\n",
-        option_f64_label(options.max_phase2_container_decode_us)
+        "- max exact container decode us: `{}`\n\n",
+        option_f64_label(options.max_exact_container_decode_us)
     ));
     report.push_str(&format!(
-        "- max phase2 container decode ns/value: `{}`\n\n",
-        option_f64_label(options.max_phase2_container_decode_ns_per_value)
+        "- max exact container decode ns/value: `{}`\n\n",
+        option_f64_label(options.max_exact_container_decode_ns_per_value)
     ));
     report.push_str("| dataset | check | status | details |\n");
     report.push_str("| --- | --- | --- | --- |\n");
@@ -1577,8 +1583,8 @@ fn option_f64_label(value: Option<f64>) -> String {
         .unwrap_or_else(|| "unset".to_string())
 }
 
-fn is_phase2_no_compress(result: &BenchResult) -> bool {
-    result.codec == "phase2-lossless" && result.phase2_strategy == Some("raw-bits")
+fn is_exact_no_compress(result: &BenchResult) -> bool {
+    result.codec == "qatq-exact" && result.exact_strategy == Some("raw-bits")
 }
 
 fn decode_ns_per_value(decode_us: f64, value_count: usize) -> f64 {
@@ -1617,8 +1623,8 @@ fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOp
     ));
     report.push_str(&format!(
         "- benchmark mode: `{}`\n",
-        if options.phase2_only {
-            "phase2-only"
+        if options.exact_only {
+            "exact-only"
         } else {
             "all-codecs"
         }
@@ -1628,7 +1634,7 @@ fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOp
         env::consts::OS,
         env::consts::ARCH
     ));
-    report.push_str("| group | dataset | values | codec | phase2 strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |\n");
+    report.push_str("| group | dataset | values | codec | exact strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |\n");
     report.push_str(
         "| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |\n",
     );
@@ -1641,7 +1647,7 @@ fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOp
                 benchmarked_dataset.summary.name,
                 benchmarked_dataset.summary.value_count,
                 result.codec,
-                result.phase2_strategy.unwrap_or(""),
+                result.exact_strategy.unwrap_or(""),
                 result.encoded_len,
                 result.ratio,
                 result.encode_us,
@@ -1662,10 +1668,10 @@ fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOp
     report.push_str("- `lossy-i4` is the original seed baseline.\n");
     report.push_str("- `turboquant-q4` is QATQ's local reference TurboQuant-style q4 comparator: deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual signs for inner-product estimation, without the quaternion overlay. It is not an official Google implementation.\n");
     report.push_str("- `phase1-q4` is a lossy training-free quaternion predictor/comparator path with a compact 1-bit residual-sign side channel.\n");
-    report.push_str("- `phase2-lossless` is the primary QATQ exact path: it selects the smallest bit-identical Phase 2 candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, and the Phase 1 predictor residual path.\n");
-    report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
-    report.push_str("- `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.\n");
-    report.push_str("- Lossless QATQ claims are scoped to `phase2-lossless` and `phase2-lossless-container`; Phase 1 and TurboQuant-style rows are lossy comparator context.\n");
+    report.push_str("- `qatq-exact` is the primary QATQ exact path: it selects the smallest bit-identical QATQ exact candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, and the Phase 1 predictor residual path.\n");
+    report.push_str("- `qatq-exact-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
+    report.push_str("- `qatq-exact-container` wraps exact QATQ exact payloads in the sequential `QATC` large-tensor file container.\n");
+    report.push_str("- Lossless QATQ claims are scoped to `qatq-exact` and `qatq-exact-container`; Phase 1 and TurboQuant-style rows are lossy comparator context.\n");
     report.push_str("- Runtime KV-cache results should be added as external fixtures and kept separate from synthetic rows in paper tables.\n");
     report.push_str("- External fixture values are loaded and benchmarked one dataset at a time; reports keep only metadata and result rows so multiple large captures do not remain resident together.\n");
     report
@@ -1742,12 +1748,12 @@ fn render_task_quality_summary(task_quality: &[TaskQualityDataset]) -> String {
     let mut out = String::new();
     out.push_str("# QATQ Task Quality Experiments\n\n");
     out.push_str("Generated by `qatq-bench --task-quality-output`. This report runs a deterministic offline retrieval task over the selected fixture corpus: raw f32 values are grouped into 16-value records, several records are used as queries, and each codec is evaluated by whether top-1 cosine retrieval matches the original f32 corpus.\n\n");
-    out.push_str("This is an end-to-end task proxy, not a language-model perplexity or downstream benchmark. It is included to verify that Phase 2 exact transport preserves task decisions and to keep lossy reference paths visibly separate from QATQ's exact product surface.\n\n");
+    out.push_str("This is an end-to-end task proxy, not a language-model perplexity or downstream benchmark. It is included to verify that QATQ exact transport preserves task decisions and to keep lossy reference paths visibly separate from QATQ's exact product surface.\n\n");
 
     out.push_str("## Method\n\n");
     out.push_str("- Non-finite source values are masked to zero for this task proxy so exactness stress fixtures can be ranked with cosine similarity.\n");
     out.push_str("- Query records are selected deterministically from the start, quartiles, midpoint, and end of each fixture.\n");
-    out.push_str("- `phase2-lossless` is expected to preserve top-1 decisions exactly because it reconstructs the original f32 bits for finite values.\n");
+    out.push_str("- `qatq-exact` is expected to preserve top-1 decisions exactly because it reconstructs the original f32 bits for finite values.\n");
     out.push_str("- `turboquant-q4` and `phase1-q4` are lossy reference paths and are reported only as quality/task comparators.\n\n");
 
     out.push_str("## Retrieval Top-1 Agreement\n\n");
@@ -1783,7 +1789,7 @@ fn render_task_quality_summary(task_quality: &[TaskQualityDataset]) -> String {
     }
 
     out.push_str("\n## Use In Paper Drafts\n\n");
-    out.push_str("- Use Phase 2 rows as evidence that exact QATQ transport preserves this retrieval task on the public fixture corpus.\n");
+    out.push_str("- Use QATQ exact rows as evidence that exact QATQ transport preserves this retrieval task on the public fixture corpus.\n");
     out.push_str(
         "- Do not use lossy `phase1-q4` or `turboquant-q4` rows as lossless QATQ claims.\n",
     );
@@ -1844,14 +1850,14 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
     }
 
     out.push_str("\n## Lossless Envelope Comparison\n\n");
-    out.push_str("| group | dataset | phase2 strategy | exact baseline | exact baseline ratio | phase2-lossless ratio | container ratio | ratio delta | container overhead bytes | phase2 exact RMSE | phase2 decode us | container decode us |\n");
+    out.push_str("| group | dataset | exact strategy | exact baseline | exact baseline ratio | qatq-exact ratio | container ratio | ratio delta | container overhead bytes | QATQ exact RMSE | exact decode us | container decode us |\n");
     out.push_str(
         "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
     );
     for dataset in benchmarked {
-        if let (Some(phase2), Some(container)) = (
-            find_result(&dataset.results, "phase2-lossless"),
-            find_result(&dataset.results, "phase2-lossless-container"),
+        if let (Some(qatq_exact), Some(container)) = (
+            find_result(&dataset.results, "qatq-exact"),
+            find_result(&dataset.results, "qatq-exact-container"),
         ) {
             let exact = find_result(&dataset.results, "lossless-f32");
             let (exact_label, exact_ratio) = exact
@@ -1861,15 +1867,15 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
                 "| {} | {} | {} | {} | {:.4} | {:.4} | {:.4} | {:+.4} | {} | {:.6} | {:.2} | {:.2} |\n",
                 dataset.summary.group,
                 dataset.summary.name,
-                phase2.phase2_strategy.unwrap_or(""),
+                qatq_exact.exact_strategy.unwrap_or(""),
                 exact_label,
                 exact_ratio,
-                phase2.ratio,
+                qatq_exact.ratio,
                 container.ratio,
-                phase2.ratio - exact_ratio,
-                container.encoded_len.saturating_sub(phase2.encoded_len),
-                phase2.rmse,
-                phase2.decode_us,
+                qatq_exact.ratio - exact_ratio,
+                container.encoded_len.saturating_sub(qatq_exact.encoded_len),
+                qatq_exact.rmse,
+                qatq_exact.decode_us,
                 container.decode_us
             ));
         }
@@ -1913,9 +1919,9 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
                     && result.codec != "lossless-f32"
                     && result.codec != "zstd-raw-f32le"
                     && result.codec != "lz4-raw-f32le"
-                    && result.codec != "phase2-lossless"
-                    && result.codec != "phase2-lossless-exhaustive"
-                    && result.codec != "phase2-lossless-container"
+                    && result.codec != "qatq-exact"
+                    && result.codec != "qatq-exact-exhaustive"
+                    && result.codec != "qatq-exact-container"
             })
             .collect();
         let smallest = lossy_results
@@ -1951,7 +1957,7 @@ fn render_paper_summary(benchmarked: &[BenchmarkedDataset]) -> String {
     out.push_str("\n## Use In Paper Drafts\n\n");
     out.push_str("- Treat synthetic rows as method/debug evidence only.\n");
     out.push_str("- Use external runtime/KV-cache fixture groups for claims about runtime migration or model-state compression.\n");
-    out.push_str("- Phase 2 exact rows are the current evidence base for lossless QATQ claims; Phase 1 lossy rows remain baseline/error-structure context.\n");
+    out.push_str("- QATQ exact rows are the current evidence base for lossless QATQ claims; Phase 1 lossy rows remain baseline/error-structure context.\n");
     out
 }
 

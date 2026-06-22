@@ -100,9 +100,9 @@ fn cli_encodes_and_decodes_phase1_q4_with_seed() {
 }
 
 #[test]
-fn cli_encodes_and_decodes_phase2_lossless_with_seed_exactly() {
+fn cli_encodes_and_decodes_qatq_exact_with_seed_exactly() {
     let dir = std::env::temp_dir();
-    let stem = format!("qatq-cli-phase2-{}", std::process::id());
+    let stem = format!("qatq-cli-exact-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
     let encoded = dir.join(format!("{stem}.qatq"));
     let decoded = dir.join(format!("{stem}.decoded.f32le"));
@@ -124,7 +124,7 @@ fn cli_encodes_and_decodes_phase2_lossless_with_seed_exactly() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg("--seed")
         .arg("0x51415451")
         .arg(&input)
@@ -156,7 +156,7 @@ fn cli_encodes_and_decodes_phase2_lossless_with_seed_exactly() {
 #[test]
 fn cli_corrupt_qatq_decode_does_not_overwrite_existing_output() {
     let dir = std::env::temp_dir();
-    let stem = format!("qatq-cli-corrupt-phase2-{}", std::process::id());
+    let stem = format!("qatq-cli-corrupt-exact-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
     let encoded = dir.join(format!("{stem}.qatq"));
     let decoded = dir.join(format!("{stem}.decoded.f32le"));
@@ -171,7 +171,7 @@ fn cli_corrupt_qatq_decode_does_not_overwrite_existing_output() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg(&input)
         .arg(&encoded)
         .stdout(Stdio::null())
@@ -221,7 +221,7 @@ fn cli_failed_encode_does_not_overwrite_existing_output() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg(&input)
         .arg(&encoded)
         .stdout(Stdio::null())
@@ -254,7 +254,7 @@ fn cli_oversized_single_payload_encode_fails_before_overwriting_output() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg(&input)
         .arg(&encoded)
         .stdout(Stdio::null())
@@ -271,7 +271,7 @@ fn cli_oversized_single_payload_encode_fails_before_overwriting_output() {
 }
 
 #[test]
-fn cli_encodes_chunked_phase2_container_and_decodes_exactly() {
+fn cli_encodes_chunked_exact_container_and_decodes_exactly() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-cli-chunked-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));

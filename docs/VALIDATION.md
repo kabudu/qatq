@@ -1,6 +1,6 @@
 # Validation
 
-This file records local validation for the current Phase 1 and Phase 2
+This file records local validation for the current Phase 1 and QATQ exact
 implementation.
 
 ## 2026-06-21 Phase 1/2 Implementation
@@ -16,8 +16,8 @@ Commands run:
 cargo fmt
 cargo test rejects_nonzero_reserved_header_bytes
 cargo test byte_plane
-cargo test phase2_lossless_container
-cargo test phase2_decision
+cargo test qatq_exact_container
+cargo test exact_decision
 cargo test byte_plane_blocks
 cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks
 cargo test --test cli
@@ -28,11 +28,11 @@ cargo run --example production_chunk
 cargo run --bin qatq -- fixture generate --manifest fixtures/public.manifest --dir fixtures/generated
 cargo run --bin qatq -- fixture verify --manifest fixtures/public.manifest --output docs/PUBLIC_FIXTURE_AUDIT.md
 cargo run --release --bin qatq-bench -- --no-synthetic --output docs/PUBLIC_COMPARATIVE_BASELINES.md --paper-output docs/PUBLIC_COMPARATIVE_TABLES.md --manifest fixtures/public.manifest
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/PUBLIC_BENCHMARKS.md --paper-output docs/PUBLIC_PAPER_TABLES.md --manifest fixtures/public.manifest
+cargo run --release --bin qatq-bench -- --exact-only --no-synthetic --output docs/PUBLIC_BENCHMARKS.md --paper-output docs/PUBLIC_PAPER_TABLES.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --no-synthetic --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --no-synthetic --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.96 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 50.00 --max-phase2-container-ratio 0.97 --max-phase2-container-decode-ns-per-value 50.00
-cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md --gate-require-external --gate-policy competitive-compression
+cargo run --release --bin qatq-bench -- --exact-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-exact-ratio 0.96 --max-exact-encode-us 5000 --max-exact-decode-ns-per-value 50.00 --max-exact-container-ratio 0.97 --max-exact-container-decode-ns-per-value 50.00
+cargo run --release --bin qatq-bench -- --exact-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md --gate-require-external --gate-policy competitive-compression
 cargo test --test kv_stress -- --ignored --nocapture
 cargo test --release --test kv_stress -- --ignored --nocapture
 python3 scripts/ollama_task_quality.py --model phi4-mini:latest
@@ -47,8 +47,8 @@ Results:
 - `cargo fmt`: passed.
 - `cargo test rejects_nonzero_reserved_header_bytes`: passed.
 - `cargo test byte_plane`: passed.
-- `cargo test phase2_lossless_container`: passed.
-- `cargo test phase2_decision`: passed.
+- `cargo test qatq_exact_container`: passed.
+- `cargo test exact_decision`: passed.
 - `cargo test byte_plane_blocks`: passed.
 - `cargo test specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks`: passed.
 - `cargo test --test cli`: passed.
@@ -63,7 +63,7 @@ Results:
 - public retrieval task-quality report: passed.
 - latency-budget gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed. This gate is service-budget analysis, not the large-tensor production readiness signal.
 - public production KV throughput gate: passed with the split `production-kv` policy and portable `50.00 ns/value` direct/container decode ceilings.
-- public competitive compression gate: passed; every compression-positive public Phase 2 row is at or below the best zstd/lz4 raw-f32 baseline for the same fixture.
+- public competitive compression gate: passed; every compression-positive public QATQ exact row is at or below the best zstd/lz4 raw-f32 baseline for the same fixture.
 - deterministic KV stress matrix: passed locally across 4,096 generated
   KV-shaped cases and 8,499,064 f32 values; exact single-payload, dispatch,
   production chunk, and `QATC` container round trips all preserved bit identity.
@@ -77,7 +77,7 @@ Results:
   Ollama embedding endpoints were unavailable for this installed model, so the
   harness used deterministic text generation to produce a 12-query by
   24-document relevance-score tensor, ingested it as a runtime fixture, encoded
-  and decoded it through Phase 2, preserved exact f32 bits, compressed the
+  and decoded it through QATQ exact, preserved exact f32 bits, compressed the
   tensor to ratio `0.1476`, and preserved raw top-1 score decisions `12/12`.
 - `cargo fmt --check`: passed.
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
@@ -112,49 +112,49 @@ Coverage added:
 - Phase 1 truncated-body validation.
 - CLI encode/decode smoke coverage for `phase1-q4 --seed`.
 - CLI encode/decode smoke coverage for `turboquant-q4 --seed`.
-- `phase2-lossless` bit-identical reconstruction including signed zero,
+- `qatq-exact` bit-identical reconstruction including signed zero,
   infinities, and NaN payload bits;
-- `phase2-lossless` deterministic seed/config behavior;
-- adaptive Phase 2 exact strategy selection across raw-bit, byte-RLE,
+- `qatq-exact` deterministic seed/config behavior;
+- adaptive QATQ exact strategy selection across raw-bit, byte-RLE,
   byte-plane RLE, byte-plane zstd, and reversible quaternion-chain zstd
   candidates;
 - byte-plane block strategy selection for repetitive whole-plane f32 byte
   layouts in bfloat16-derived runtime captures;
-- adjacent-bit Phase 2 delta-XOR byte-plane RLE strategy selection for
+- adjacent-bit QATQ exact delta-XOR byte-plane RLE strategy selection for
   correlated exact bitstreams;
-- public Phase 2 strategy inspection for encoded exact payloads;
-- public Phase 2 storage-decision APIs that return either a compressed QATQ
+- public QATQ exact strategy inspection for encoded exact payloads;
+- public QATQ exact storage-decision APIs that return either a compressed QATQ
   payload or raw f32le pass-through bytes when the selected exact strategy is
   `raw-bits`;
-- bounded Phase 2 RLE strategy probing for incompressible streams;
-- direct Phase 2 byte-plane RLE strategy probing without materializing the
+- bounded QATQ exact RLE strategy probing for incompressible streams;
+- direct QATQ exact byte-plane RLE strategy probing without materializing the
   plane buffer, with byte-for-byte equivalence against the former materialized
   path;
-- direct Phase 2 delta-XOR byte-plane RLE strategy probing without materializing
+- direct QATQ exact delta-XOR byte-plane RLE strategy probing without materializing
   the delta buffer, with byte-for-byte equivalence against the materialized
   path;
-- bounded Phase 2 delta-XOR byte-plane probing for incompressible streams;
-- allocation-reduced Phase 2 byte-RLE decode and byte-plane assembly paths;
-- direct Phase 2 byte-plane block decode with fused checksum validation for
+- bounded QATQ exact delta-XOR byte-plane probing for incompressible streams;
+- allocation-reduced QATQ exact byte-RLE decode and byte-plane assembly paths;
+- direct QATQ exact byte-plane block decode with fused checksum validation for
   large exact tensors;
-- direct Phase 2 byte-plane block encode for the common
+- direct QATQ exact byte-plane block encode for the common
   `raw, raw, zero, zero` bfloat16-derived KV layout, with fused checksum
   calculation and byte-for-byte equivalence against the general block encoder;
-- preallocated Phase 2 byte-plane run decode buffer from bounded payload
+- preallocated QATQ exact byte-plane run decode buffer from bounded payload
   metadata;
-- fast Phase 2 exact encoding with compression-positive selection across
+- fast QATQ exact encoding with compression-positive selection across
   byte-plane and reversible quaternion-chain entropy-coded candidates;
-- exhaustive Phase 2 exact encoding for deeper strategy comparison;
+- exhaustive QATQ exact encoding for deeper strategy comparison;
 - ignored deterministic KV stress matrix covering thousands of generated
   bfloat16-like, low-rank, sparse, repeated-token, raw-noise,
   non-finite/signed-zero, delta-bit, and quaternion-chain-friendly KV cases;
 - local Ollama model-output task harness that captures generated relevance
   score tensors, validates fixture ingestion, encodes/decodes through QATQ, and
   verifies task-decision preservation;
-- chunked Phase 2 exact encode/decode round trip across partial chunk
+- chunked QATQ exact encode/decode round trip across partial chunk
   boundaries;
-- chunked Phase 2 empty-input handling and invalid chunk-size rejection;
-- sequential `QATC` Phase 2 container exact round trip through top-level
+- chunked QATQ exact empty-input handling and invalid chunk-size rejection;
+- sequential `QATC` QATQ exact container exact round trip through top-level
   `decode`;
 - sequential `QATC` container empty-input handling and invalid chunk-size
   rejection;
@@ -170,15 +170,15 @@ Coverage added:
   total value count before allocating the output vector;
 - sequential `QATC` payload visitor preserves chunk order and validates the full
   container layout before invoking callbacks;
-- Phase 2 body magic validation;
-- Phase 2 reserved-prefix validation;
-- Phase 2 oversized-header rejection;
-- Phase 2 malformed run rejection for zero-length runs, unknown run tags,
+- QATQ exact body magic validation;
+- QATQ exact reserved-prefix validation;
+- QATQ exact oversized-header rejection;
+- QATQ exact malformed run rejection for zero-length runs, unknown run tags,
   truncated repeat runs, and trailing run data;
-- Phase 2 delta-XOR byte-plane stream truncation rejection;
-- Phase 2 truncated residual stream validation;
-- Phase 2 checksum/corruption detection;
-- public `try_encode` and seeded Phase 2 `try_encode_*_with_config` APIs return
+- QATQ exact delta-XOR byte-plane stream truncation rejection;
+- QATQ exact truncated residual stream validation;
+- QATQ exact checksum/corruption detection;
+- public `try_encode` and seeded QATQ exact `try_encode_*_with_config` APIs return
   `QatqError` on validation failure while preserving bit-identical normal
   round trips.
 - direct public `try_encode_lossy_i4` and `try_encode_lossless_f32` APIs provide
@@ -187,7 +187,7 @@ Coverage added:
 - generic `try_encode` dispatch is covered across every single-payload mode.
 - public single-payload value-count validation rejects oversized inputs without
   requiring an oversized tensor allocation.
-- CLI encode/decode smoke coverage for exact `phase2-lossless --seed`.
+- CLI encode/decode smoke coverage for exact `qatq-exact --seed`.
 - CLI encode and `encode-chunked` raw `.f32le` input loading streams directly
   into `f32` values instead of retaining a second full byte buffer.
 - CLI single-payload encode rejects oversized raw `.f32le` inputs from file
@@ -226,9 +226,9 @@ Coverage added:
   only dataset metadata plus result rows after each benchmark, bounding peak
   fixture residency for large runtime-scale manifests.
 - Benchmark harness smoke coverage for fixture manifests and `--paper-output`.
-- Benchmark gate pass/fail behavior for Phase 2 exact ratio/latency thresholds.
+- Benchmark gate pass/fail behavior for QATQ exact ratio/latency thresholds.
 - Benchmark gate pass/fail behavior for `QATC` container ratio thresholds.
-- Benchmark phase2-only mode for faster readiness gates.
+- Benchmark exact-only mode for faster readiness gates.
 - Benchmark gate pass/fail behavior for throughput-normalized decode
   thresholds.
 - Benchmark report, paper-table report, and gate report output preservation when
@@ -237,9 +237,9 @@ Coverage added:
   malformed raw `.f32le` input is rejected before report generation.
 - Benchmark report, paper-table report, and gate report output preservation when
   a later manifest fixture fails during external metadata preflight.
-- Benchmark harness rows and paper tables for `phase2-lossless-container`
+- Benchmark harness rows and paper tables for `qatq-exact-container`
   overhead, exactness, and decode time.
-- Benchmark harness rows and paper tables include selected Phase 2 strategy
+- Benchmark harness rows and paper tables include selected QATQ exact strategy
   labels for exact payload evidence.
 - Benchmark harness synthetic controls include a `bit-delta` dataset that
   exercises the adjacent-bit delta-XOR byte-plane RLE strategy.
@@ -260,7 +260,7 @@ Known validation limits:
   model-output task tensor, not direct live runtime KV-cache captures.
 - The FP8 comparison is a local finite-value software E4M3 baseline, not a
   hardware/runtime FP8 path.
-- Phase 1 quality metrics are codec reconstruction metrics only. Phase 2 exact
+- Phase 1 quality metrics are codec reconstruction metrics only. QATQ exact
   metrics prove bit-identical f32 reconstruction locally, the public retrieval
   proxy verifies top-1 task parity on generated fixtures, and the Ollama harness
   verifies a local model-output task tensor. These do not yet measure language

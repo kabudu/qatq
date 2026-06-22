@@ -31,19 +31,19 @@ projection. It is included so QATQ can measure against a non-quaternion lossy
 baseline. It is not an official Google implementation and is not the default
 QATQ foundation.
 
-## Phase 2 - Primary QATQ Exact Mode
+## QATQ exact - Primary QATQ Exact Mode
 
 - [x] Define exact reconstruction semantics.
 - [x] Implement residual generation from QATQ reconstruction.
 - [x] Entropy-code residuals and compare against the exact f32 envelope.
 - [x] Add tests for bit-identical f32 reconstruction.
 
-Phase 2 is implemented as `phase2-lossless` and is the primary QATQ
+QATQ exact is implemented as `qatq-exact` and is the primary QATQ
 implementation. It adaptively stores raw f32 bits, byte-RLE, byte-plane RLE,
 byte-plane zstd, reversible quaternion-chain zstd, adjacent-bit delta-XOR
 byte-plane residuals, or the Phase 1 predictor plus run-coded XOR residuals and
 verifies final reconstruction with the payload checksum. Lossless QATQ claims
-are scoped to Phase 2 and its `QATC` container. zstd/lz4 comparison rows are
+are scoped to QATQ exact and its `QATC` container. zstd/lz4 comparison rows are
 included in benchmark reports as general-purpose byte-compression baselines over
 raw f32le, and the competitive compression gate rejects public fixture
 regressions against those baselines.
@@ -56,13 +56,13 @@ regressions against those baselines.
 - [ ] Add MLX, vLLM, and llama.cpp adapter examples as optional external
       integration examples.
 - [x] Add chunked exact encode/decode APIs for large KV blocks.
-- [x] Add a sequential Phase 2 chunk container for large tensor files.
-- [x] Validate the phase-2 production storage-decision API with generated public
+- [x] Add a sequential QATQ exact chunk container for large tensor files.
+- [x] Validate the QATQ exact production storage-decision API with generated public
       fixtures.
 - [ ] Add random-access metadata and a true streaming container/service
       protocol.
 
-The current QATQ implementation is usable for exact phase-2 runtime transfer
+The current QATQ implementation is usable for exact QATQ exact runtime transfer
 experiments, but the broader project is not complete until service adapters,
 release hygiene, and comparative paper baselines are finished.
 
@@ -70,7 +70,7 @@ release hygiene, and comparative paper baselines are finished.
 
 - [x] Prepare public repository hygiene around generated public fixtures.
 - [x] Add CI and fuzzing scaffold.
-- [x] Add scheduled longer fuzzing for decoder and Phase 2 round-trip targets.
+- [x] Add scheduled longer fuzzing for decoder and QATQ exact round-trip targets.
 - [x] Add a public end-to-end retrieval task-quality experiment.
 - [x] Add a local Ollama model-output task harness for runtime fixture
       ingestion and task-decision preservation.

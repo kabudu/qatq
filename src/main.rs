@@ -5,8 +5,8 @@ use std::{
 };
 
 use qatq::{
-    decode, decode_phase2_lossless, parse_mode, try_encode, try_encode_phase1_q4_with_config,
-    try_encode_phase2_lossless_with_config, try_encode_turboquant_q4_with_config, CodecMode,
+    decode, decode_qatq_exact, parse_mode, try_encode, try_encode_phase1_q4_with_config,
+    try_encode_qatq_exact_with_config, try_encode_turboquant_q4_with_config, CodecMode,
     Phase1Config, DEFAULT_MAX_QATC_CHUNKS, DEFAULT_MAX_QATC_CHUNK_BYTES, DEFAULT_MAX_QATC_VALUES,
     MAX_VALUES_PER_PAYLOAD,
 };
@@ -15,7 +15,7 @@ const QATC_MAGIC: &[u8; 4] = b"QATC";
 const QATC_VERSION: u8 = 2;
 const QATC_HEADER_LEN: usize = 32;
 const QATC_CHUNK_LEN: usize = 4;
-const PHASE2_LOSSLESS_MODE_ID: u8 = 4;
+const QATQ_EXACT_MODE_ID: u8 = 4;
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
@@ -61,10 +61,10 @@ fn encode_command(args: &[String]) -> Result<(), String> {
         }
         if mode != CodecMode::TurboQuantQ4
             && mode != CodecMode::Phase1Q4
-            && mode != CodecMode::Phase2Lossless
+            && mode != CodecMode::QatqExact
         {
             return Err(
-                "--seed is only supported with turboquant-q4, phase1-q4, and phase2-lossless"
+                "--seed is only supported with turboquant-q4, phase1-q4, and qatq-exact"
                     .to_string(),
             );
         }
@@ -82,8 +82,8 @@ fn encode_command(args: &[String]) -> Result<(), String> {
             try_encode_turboquant_q4_with_config(&values, Phase1Config { seed })
                 .map_err(|error| error.to_string())?
         }
-        (CodecMode::Phase2Lossless, Some(seed)) => {
-            try_encode_phase2_lossless_with_config(&values, Phase1Config { seed })
+        (CodecMode::QatqExact, Some(seed)) => {
+            try_encode_qatq_exact_with_config(&values, Phase1Config { seed })
                 .map_err(|error| error.to_string())?
         }
         _ => try_encode(&values, mode).map_err(|error| error.to_string())?,
@@ -180,7 +180,7 @@ fn decode_qatc_reader_to_f32le(
     if header[4] != QATC_VERSION {
         return Err(format!("unsupported QATQ version {}", header[4]));
     }
-    if header[5] != PHASE2_LOSSLESS_MODE_ID || header[6..8] != [0, 0] || header[20..24] != [0; 4] {
+    if header[5] != QATQ_EXACT_MODE_ID || header[6..8] != [0, 0] || header[20..24] != [0; 4] {
         return Err("chunked container is invalid".to_string());
     }
     let total_values = usize::try_from(u64::from_be_bytes(
@@ -224,7 +224,7 @@ fn decode_qatc_reader_to_f32le(
             .read_exact(&mut chunk)
             .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
         container_checksum = qatc_checksum_chunk(container_checksum, &chunk);
-        let values = decode_phase2_lossless(&chunk).map_err(|error| error.to_string())?;
+        let values = decode_qatq_exact(&chunk).map_err(|error| error.to_string())?;
         decoded_values = decoded_values
             .checked_add(values.len())
             .ok_or_else(|| "chunked container is invalid".to_string())?;
@@ -332,7 +332,7 @@ fn generated_fixture_specs() -> Vec<GeneratedFixture> {
         GeneratedFixture {
             name: "bf16-kv-wave-128x8x16",
             shape: "[tokens=128, heads=8, dim=16]",
-            notes: "generated public bfloat16-like KV wave; compression-positive phase2 fixture",
+            notes: "generated public bfloat16-like KV wave; compression-positive exact fixture",
             values: generated_bf16_wave_values(128 * 8 * 16),
         },
         GeneratedFixture {
@@ -909,7 +909,7 @@ fn encode_f32le_file_to_qatc_atomic(
             .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
         let mut container_checksum = FNV_OFFSET;
         if value_count == 0 {
-            let payload = try_encode_phase2_lossless_with_config(&[], config)
+            let payload = try_encode_qatq_exact_with_config(&[], config)
                 .map_err(|error| error.to_string())?;
             container_checksum = qatc_checksum_chunk(container_checksum, &payload);
             write_qatc_chunk(writer, &payload, output_path)?;
@@ -922,7 +922,7 @@ fn encode_f32le_file_to_qatc_atomic(
                     .read_exact(&mut bytes[..chunk_bytes])
                     .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
                 let values = decode_f32le_chunk(&bytes[..chunk_bytes]);
-                let payload = try_encode_phase2_lossless_with_config(&values, config)
+                let payload = try_encode_qatq_exact_with_config(&values, config)
                     .map_err(|error| error.to_string())?;
                 container_checksum = qatc_checksum_chunk(container_checksum, &payload);
                 write_qatc_chunk(writer, &payload, output_path)?;
@@ -949,7 +949,7 @@ fn write_qatc_header(
     container_checksum: u64,
 ) -> std::io::Result<()> {
     writer.write_all(QATC_MAGIC)?;
-    writer.write_all(&[QATC_VERSION, PHASE2_LOSSLESS_MODE_ID, 0, 0])?;
+    writer.write_all(&[QATC_VERSION, QATQ_EXACT_MODE_ID, 0, 0])?;
     writer.write_all(&(total_values as u64).to_be_bytes())?;
     writer.write_all(&(chunk_count as u32).to_be_bytes())?;
     writer.write_all(&[0, 0, 0, 0])?;
@@ -1078,7 +1078,7 @@ fn parse_seed(value: &str) -> Result<u64, String> {
 fn print_usage() {
     eprintln!("usage:");
     eprintln!(
-        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|phase2-lossless> [--seed <u64>] <input.f32le> <output.qatq>"
+        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|qatq-exact> [--seed <u64>] <input.f32le> <output.qatq>"
     );
     eprintln!(
         "  qatq encode-chunked --max-values-per-chunk <usize> [--seed <u64>] <input.f32le> <output.qatc>"

@@ -4,10 +4,10 @@ This table is the short release-facing view of the public fixture results. It
 uses the generated public corpus and reports size ratio versus raw little-endian
 f32 bytes. Lower is smaller.
 
-The strongest current QATQ claim is conservative: `phase2-lossless` provides
+The strongest current QATQ claim is conservative: `qatq-exact` provides
 bit-identical f32 reconstruction and, on the public corpus, beats the
 general-purpose `zstd-raw-f32le` and `lz4-raw-f32le` baselines by selecting the
-smallest exact Phase 2 candidate, including tensor-aware byte-plane entropy
+smallest exact QATQ exact candidate, including tensor-aware byte-plane entropy
 coding and reversible quaternion-chain residual coding.
 
 ## Exact Compression At A Glance
@@ -23,17 +23,17 @@ coding and reversible quaternion-chain residual coding.
 
 | claim | supported by public fixtures? | evidence |
 | --- | --- | --- |
-| QATQ Phase 2 is lossless on the public corpus. | yes | All `phase2-lossless` and `phase2-lossless-container` rows report exact bit reconstruction. |
-| QATQ Phase 2 compresses bfloat16-like KV fixtures below zstd/lz4 raw-f32 baselines. | yes | Ratios `0.3817` and `0.1153`, both below the best zstd/lz4 raw-f32 baseline for those rows. |
+| QATQ exact is lossless on the public corpus. | yes | All `qatq-exact` and `qatq-exact-container` rows report exact bit reconstruction. |
+| QATQ exact compresses bfloat16-like KV fixtures below zstd/lz4 raw-f32 baselines. | yes | Ratios `0.3817` and `0.1153`, both below the best zstd/lz4 raw-f32 baseline for those rows. |
 | Reversible quaternion-chain coding helps exact compression on public fixtures. | yes | `quaternion-chain-zstd` wins on the wave and exactness-stress fixtures while preserving f32 bits. |
-| QATQ Phase 2 exact compression is competitive across all public fixtures. | yes | The competitive compression gate passes every public row where Phase 2 selects a compression strategy. |
+| QATQ exact compression is competitive across all public fixtures. | yes | The competitive compression gate passes every public row where QATQ exact selects a compression strategy. |
 | QATQ avoids loss of f32 bit identity while improving size. | yes | All rows are exact, including signed-zero/NaN/Inf stress values. |
-| QATQ beats lossy quantizers on size. | not the Phase 2 claim | `turboquant-q4`, `phase1-q4`, FP8, and int4 rows are lossy comparator context, not lossless QATQ evidence. |
+| QATQ beats lossy quantizers on size. | not the QATQ exact claim | `turboquant-q4`, `phase1-q4`, FP8, and int4 rows are lossy comparator context, not lossless QATQ evidence. |
 
 ## Source Tables
 
 - Full all-codec rows: [PUBLIC_COMPARATIVE_BASELINES.md](PUBLIC_COMPARATIVE_BASELINES.md)
 - Paper-style tables: [PUBLIC_COMPARATIVE_TABLES.md](PUBLIC_COMPARATIVE_TABLES.md)
-- Phase 2 focused rows: [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md)
+- QATQ exact focused rows: [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md)
 - Production gate: [PUBLIC_BENCHMARK_GATE.md](PUBLIC_BENCHMARK_GATE.md)
 - Competitive compression gate: [PUBLIC_COMPETITIVE_COMPRESSION_GATE.md](PUBLIC_COMPETITIVE_COMPRESSION_GATE.md)

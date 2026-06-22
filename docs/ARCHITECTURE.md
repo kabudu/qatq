@@ -15,7 +15,7 @@ The seed format is intentionally small:
 
 - magic: `QATQ`
 - version: `1`
-- mode: `lossy-i4`, `lossless-f32`, `phase1-q4`, or `phase2-lossless`
+- mode: `lossy-i4`, `lossless-f32`, `phase1-q4`, or `qatq-exact`
 - reserved bytes, currently required to be zero
 - value count
 - scale field
@@ -28,8 +28,8 @@ length. The exact mode validates the checksum during decode.
 
 ## Chunk Container
 
-Large Phase 2 tensors can be stored in the sequential `QATC` container. This is
-a file-level wrapper around normal `QATQ` Phase 2 payloads, not a replacement
+Large QATQ exact tensors can be stored in the sequential `QATC` container. This is
+a file-level wrapper around normal `QATQ` QATQ exact payloads, not a replacement
 for the per-payload codec envelope.
 
 The current and only supported container format is `QATC` version `2`.
@@ -38,17 +38,17 @@ The version `2` container header stores:
 
 - magic: `QATC`
 - version: `2`
-- mode: `phase2-lossless`
+- mode: `qatq-exact`
 - reserved bytes
 - total decoded f32 value count
 - chunk count
 - aggregate checksum over the ordered chunk length/payload stream
 
 Each chunk stores a big-endian `u32` byte length followed by one complete
-`QATQ` `phase2-lossless` payload. The decoder validates the container header,
+`QATQ` `qatq-exact` payload. The decoder validates the container header,
 rejects nonzero reserved bytes, rejects truncated chunks, rejects trailing data,
 verifies the version `2` aggregate checksum before visitor callbacks or full
-decode allocation, decodes each embedded Phase 2 payload through the normal
+decode allocation, decodes each embedded QATQ exact payload through the normal
 checksum path, and verifies that the decoded chunk totals match the container
 total. The top-level `decode` function accepts both `QATQ` single payloads and
 `QATC` containers. Container decode first indexes embedded chunk headers,
@@ -73,7 +73,7 @@ benchmark, paper-table, and gate reports.
 
 The `phase1-q4` mode is a training-free lossy predictor and research comparator.
 It is implemented as a separate mode so the original seed-baseline `lossy-i4`
-baseline remains stable for comparison and so Phase 2 can reuse the predictor
+baseline remains stable for comparison and so QATQ exact can reuse the predictor
 when exact residual coding makes it worthwhile. It is not the main QATQ product
 surface.
 
@@ -108,7 +108,7 @@ The Phase 1 body stores:
 
 This path is intentionally lossy. The side channel is a QJL-inspired experiment
 for reducing reconstruction error and measuring residual structure. It is not
-the Phase 2 bit-identical residual codec, and lossless QATQ claims do not apply
+the QATQ exact bit-identical residual codec, and lossless QATQ claims do not apply
 to this mode.
 
 ## Lossless Strategy
@@ -123,17 +123,17 @@ track therefore needs a residual:
 4. entropy-code that residual;
 5. verify bit-identical reconstruction.
 
-The `phase2-lossless` mode is the primary QATQ implementation and the only mode
+The `qatq-exact` mode is the primary QATQ implementation and the only mode
 that carries lossless QATQ claims. The default encoder selects the smallest
 bit-identical candidate from byte-level, byte-plane, reversible
 quaternion-chain, delta-XOR, and predictor-residual strategies. Runtime KV-cache
 captures exposed a common exact pattern where the high two f32 byte planes vary
-and the low two byte planes are all zero, so Phase 2 also has a
+and the low two byte planes are all zero, so QATQ exact also has a
 `byte-plane-blocks` strategy that stores each byte plane as raw, repeated, or
-zero. The `encode_phase2_lossless_exhaustive` path keeps the deeper
+zero. The `encode_qatq_exact_exhaustive` path keeps the deeper
 full-candidate strategy search available for research comparisons.
 
-Phase 2 can store:
+QATQ exact can store:
 
 - raw f32 bits;
 - byte-level zero/raw run coding over the original f32 bitstream;
@@ -162,9 +162,9 @@ The predictor strategy:
 5. reconstruct by applying the XOR residual to the predicted bits;
 6. validate the final f32 bitstream with the payload checksum.
 
-The Phase 2 body stores:
+The QATQ exact body stores:
 
-- body magic: `P2L1`
+- body magic: `QEX1`
 - strategy byte and reserved bytes;
 - strategy-specific exact payload:
   - raw f32 bits;
@@ -181,22 +181,22 @@ This is bit-identical for f32 payloads, including signed zero, infinities, and
 NaN payload bits. Fast selection prevents the predictor path from dominating
 encode latency when a byte-plane candidate already compresses exactly.
 Exhaustive selection can still be used when smallest payload search matters more
-than encode time. Phase 2 is compression-positive on the current real
+than encode time. QATQ exact is compression-positive on the current real
 runtime KV fixtures, but the fixture set is still too small for broad
 production claims. The `lossless-f32` mode remains the exact envelope control.
 
-Production callers should use `encode_phase2_lossless_decision` or
-`try_encode_phase2_lossless_decision_with_config` when deciding what to store.
+Production callers should use `encode_qatq_exact_decision` or
+`try_encode_qatq_exact_decision_with_config` when deciding what to store.
 These APIs make the benchmark gate policy first-class:
 
-- `Compressed` returns a normal `QATQ` Phase 2 payload, the selected
-  `Phase2Strategy`, and the original raw f32le byte length.
-- `PassThroughRaw` returns raw little-endian f32 bytes when Phase 2 would choose
+- `Compressed` returns a normal `QATQ` QATQ exact payload, the selected
+  `QatqExactStrategy`, and the original raw f32le byte length.
+- `PassThroughRaw` returns raw little-endian f32 bytes when QATQ exact would choose
   the `raw-bits` strategy. That is an explicit instruction to bypass QATQ/QATC
   storage for that tensor rather than persist a compression-negative exact
   envelope.
 
-The existing `encode_phase2_lossless*` APIs still always return a valid `QATQ`
+The existing `encode_qatq_exact*` APIs still always return a valid `QATQ`
 payload for research, inspection, and compatibility tests.
 
 Decoder safety bounds:
@@ -205,36 +205,36 @@ Decoder safety bounds:
 - single-payload `try_encode*` APIs enforce the same bound before writing a
   header and return `QatqError::ValueCountTooLarge` instead of panicking;
 - f32 byte lengths and Phase 1 padded coordinate counts are checked before use;
-- Phase 2 reserved prefix bytes, unknown strategy bytes, unknown run tags,
+- QATQ exact reserved prefix bytes, unknown strategy bytes, unknown run tags,
   zero-length runs, truncated runs, and trailing run data are rejected;
 - run decoders grow output only as validated runs are consumed, avoiding large
   upfront allocations for malformed streams.
-- Phase 2 byte-RLE strategy probes are bounded to the raw f32 bitstream size, so
+- QATQ exact byte-RLE strategy probes are bounded to the raw f32 bitstream size, so
   incompressible byte streams are abandoned before they can become selected
   candidates.
-- Phase 2 byte-plane strategy probes run directly over plane order without
+- QATQ exact byte-plane strategy probes run directly over plane order without
   materializing a full byte-plane buffer, and they use the same bounded-abandon
   rule as byte-RLE probes.
-- Phase 2 delta-XOR byte-plane probes apply the same bounded run coding directly
+- QATQ exact delta-XOR byte-plane probes apply the same bounded run coding directly
   to adjacent f32 bit residuals without materializing a full delta buffer,
   giving correlated tensors another exact residual path before falling back to
   the heavier QATQ predictor.
-- Encoded Phase 2 payloads expose their selected exact strategy through
-  `phase2_lossless_strategy`, and benchmark reports include that label so paper
+- Encoded QATQ exact payloads expose their selected exact strategy through
+  `qatq_exact_strategy`, and benchmark reports include that label so paper
   evidence can distinguish raw fallback, byte-plane coding, delta-XOR coding,
   and predictor fallback.
-- Public Phase 2 storage-decision APIs expose the production compress vs raw
+- Public QATQ exact storage-decision APIs expose the production compress vs raw
   pass-through decision without requiring callers to parse benchmark reports.
-- Phase 2 byte-RLE decode writes f32 values directly from validated runs instead
+- QATQ exact byte-RLE decode writes f32 values directly from validated runs instead
   of materializing an intermediate byte stream.
-- Phase 2 byte-plane decode writes validated plane runs into a preallocated word
+- QATQ exact byte-plane decode writes validated plane runs into a preallocated word
   buffer and then converts those words to f32 values without rebuilding an
   interleaved byte stream.
-- Phase 2 byte-plane block decode has direct fast paths for the common
+- QATQ exact byte-plane block decode has direct fast paths for the common
   `raw, raw, zero, zero` and `raw, raw, raw, raw` plane layouts; it fuses
   checksum validation with f32 reconstruction to avoid a second pass over large
   bfloat16-derived tensors.
-- Phase 2 byte-plane block encode has a direct fast path for the common
+- QATQ exact byte-plane block encode has a direct fast path for the common
   `raw, raw, zero, zero` layout seen in bfloat16-derived runtime KV
   captures. It builds the two raw high-byte planes directly from f32 values and
   fuses checksum calculation, avoiding the full raw-bit staging buffer.
@@ -244,23 +244,23 @@ Decoder safety bounds:
 - QATC container payload visiting pre-validates the complete chunk layout before
   invoking callbacks, so malformed later chunks cannot cause partial visitor
   side effects.
-- QATC container encode writes each Phase 2 chunk directly into the final
+- QATC container encode writes each QATQ exact chunk directly into the final
   container buffer instead of staging a `Vec<Vec<u8>>` of encoded chunks.
-- CLI `encode-chunked` streams raw `.f32le` input into one Phase 2 chunk at a
+- CLI `encode-chunked` streams raw `.f32le` input into one QATQ exact chunk at a
   time, then writes each payload into the `QATC` artifact through the atomic
   output path.
 - The benchmark harness can run with `--no-synthetic` for external-fixture-only
   smoke checks, and it preflights external fixture metadata before timing work
   so missing or malformed captures fail before report replacement.
-- The benchmark harness can run with `--phase2-only` for readiness gates that
-  only need `phase2-lossless` and QATC rows.
+- The benchmark harness can run with `--exact-only` for readiness gates that
+  only need `qatq-exact` and QATC rows.
 - Gate reports can enforce either absolute decode microsecond ceilings or
   normalized decode ns/value ceilings. The normalized policy is a better fit
   for comparing captures with substantially different value counts.
 
-Large real tensors can be split with `encode_phase2_lossless_chunks` and
-reassembled with `decode_phase2_lossless_chunks`, or stored as a single
-sequential file with `encode_phase2_lossless_container`. This is exact across
+Large real tensors can be split with `encode_qatq_exact_chunks` and
+reassembled with `decode_qatq_exact_chunks`, or stored as a single
+sequential file with `encode_qatq_exact_container`. This is exact across
 chunk boundaries. Random-access metadata remains future runtime-integration
 work.
 

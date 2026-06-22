@@ -26,17 +26,17 @@ Current source files:
 The following claims are supported by the current QATQ repository evidence:
 
 - QATQ can generate, verify, benchmark, and gate its own public fixture corpus.
-- QATQ phase 2 reconstructs every generated public fixture bit-for-bit.
+- QATQ exact reconstructs every generated public fixture bit-for-bit.
 - Generated public fixtures compress below the best zstd/lz4 raw-f32 baseline
   for each row while preserving exact f32 reconstruction.
 - The production API keeps raw f32 pass-through available for future
   compression-negative tensors.
 - The public production KV throughput gate passes on the generated corpus.
 - The public competitive compression gate passes on the generated corpus.
-- QATQ Phase 2 preserves deterministic top-1 retrieval decisions on the public
+- QATQ exact preserves deterministic top-1 retrieval decisions on the public
   task-quality experiment because it reconstructs the finite fixture records
   exactly.
-- QATQ Phase 2 preserves a local Ollama model-output relevance-score task:
+- QATQ exact preserves a local Ollama model-output relevance-score task:
   `phi4-mini:latest` generated score tensors are ingested as runtime fixtures,
   reconstructed bit-for-bit, and keep raw top-1 task decisions unchanged.
 - `turboquant-q4` and `phase1-q4` now have deterministic codec-level
@@ -76,7 +76,7 @@ Replace synthetic-only result language with a real-data section:
 ```text
 QATQ generates a deterministic public tensor corpus that exercises both
 compression-positive bfloat16-like KV structure and exactness stress payloads.
-On this corpus, QATQ phase 2 reconstructs every row bit-for-bit and compresses
+On this corpus, QATQ exact reconstructs every row bit-for-bit and compresses
 all generated public fixtures at an average 0.2906 direct ratio versus raw f32,
 below the best zstd/lz4 raw-f32 baseline for each row. The reversible
 quaternion-chain residual candidate is selected on the public wave and
@@ -102,11 +102,11 @@ Use `docs/PUBLIC_PAPER_TABLES.md`, `docs/PUBLIC_QUALITY_EXPERIMENTS.md`, and
 tables for the refreshed paper:
 
 - fixture inventory by generated pattern and dtype;
-- raw/fp8/lossy/phase1/phase2 comparative baseline rows;
-- phase-2 compressed versus pass-through decision counts;
+- raw/fp8/lossy/phase1/qatq_exact comparative baseline rows;
+- QATQ exact compressed versus pass-through decision counts;
 - lossless size ratio and decode throughput for compressed real KV tensors;
 - TurboQuant QJL versus quaternion-overlay inner-product proxy error;
-- Phase 2 exact retrieval-task agreement, with lossy comparators clearly
+- QATQ exact retrieval-task agreement, with lossy comparators clearly
   separated;
 - local Ollama model-output score-task agreement;
 - optional external runtime evidence for compressed and pass-through paths.

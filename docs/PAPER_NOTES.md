@@ -53,19 +53,19 @@ codec mode:
 This is suitable for codec-level experiments and white-paper measurements, but
 it is not yet a model-quality result.
 
-The `phase2-lossless` mode is the current exact QATQ-family path. It selects the
-smallest bit-identical Phase 2 representation across Phase 1 prediction plus
+The `qatq-exact` mode is the current exact QATQ-family path. It selects the
+smallest bit-identical QATQ exact representation across Phase 1 prediction plus
 run-coded XOR residuals, adjacent-bit delta-XOR byte-plane residuals, byte-plane
 block layouts, raw bits, byte-RLE, byte-plane RLE, byte-plane zstd, and
 reversible quaternion-chain residual coding followed by byte-plane zstd. The
 quaternion-chain path groups values as four-component lanes, stores exact
 wrapping residuals within and across lanes, and wins on the public wave and
 stress fixtures where it lowers entropy more than simpler byte-plane
-transforms. Phase 2 is bit-identical for `f32` payloads, including signed zero,
+transforms. QATQ exact is bit-identical for `f32` payloads, including signed zero,
 infinities, and NaN payload bits. The `QATC` container carries large tensors as
-sequential Phase 2 chunks for CLI and runtime handoff use.
+sequential QATQ exact chunks for CLI and runtime handoff use.
 
-The first real-data paper-refresh step is now complete for Phase 2 exact
+The first real-data paper-refresh step is now complete for QATQ exact
 transport. The current paper inputs are:
 
 - `docs/PAPER_REFRESH_NOTES.md`
@@ -74,5 +74,5 @@ transport. The current paper inputs are:
 - `docs/PUBLIC_BENCHMARKS.md`
 - `docs/PUBLIC_PAPER_TABLES.md`
 
-Phase 1 remains a lossy method experiment. Phase 2 is the evidence-backed exact
+Phase 1 remains a lossy method experiment. QATQ exact is the evidence-backed exact
 transport path for refreshed paper claims.

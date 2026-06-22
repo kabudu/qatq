@@ -9,26 +9,26 @@ const CONTAINER_V2_HEADER_LEN: usize = 32;
 const CONTAINER_CHUNK_LEN: usize = 4;
 const PHASE1_BODY_MAGIC: &[u8; 4] = b"P1Q4";
 const TURBOQUANT_BODY_MAGIC: &[u8; 4] = b"TQ4R";
-const PHASE2_BODY_MAGIC: &[u8; 4] = b"P2L1";
+const QATQ_EXACT_BODY_MAGIC: &[u8; 4] = b"QEX1";
 const PHASE1_METADATA_LEN: usize = 20;
 const TURBOQUANT_METADATA_LEN: usize = 20;
-const PHASE2_PREFIX_LEN: usize = 8;
-const PHASE2_PREDICTOR_METADATA_LEN: usize = 12;
+const QATQ_EXACT_PREFIX_LEN: usize = 8;
+const QATQ_EXACT_PREDICTOR_METADATA_LEN: usize = 12;
 const DEFAULT_PHASE1_SEED: u64 = 0x5141_5451_c0de_0001;
 const TURBOQUANT_QJL_MAX_PROJECTIONS: usize = 256;
 const TURBOQUANT_QJL_SEED_XOR: u64 = 0x514a_4c5f_5352_4854;
 const XOR_ZERO_RUN: u8 = 0;
 const XOR_RAW_RUN: u8 = 1;
 const BYTE_REPEAT_RUN: u8 = 2;
-const PHASE2_STRATEGY_PREDICTOR_XOR: u8 = 0;
-const PHASE2_STRATEGY_RAW_BITS: u8 = 1;
-const PHASE2_STRATEGY_BYTE_RLE: u8 = 2;
-const PHASE2_STRATEGY_BYTE_PLANE_RLE: u8 = 3;
-const PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE: u8 = 4;
-const PHASE2_STRATEGY_BYTE_PLANE_BLOCKS: u8 = 5;
-const PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE: u8 = 6;
-const PHASE2_STRATEGY_BYTE_PLANE_ZSTD: u8 = 7;
-const PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD: u8 = 8;
+const QATQ_EXACT_STRATEGY_PREDICTOR_XOR: u8 = 0;
+const QATQ_EXACT_STRATEGY_RAW_BITS: u8 = 1;
+const QATQ_EXACT_STRATEGY_BYTE_RLE: u8 = 2;
+const QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE: u8 = 3;
+const QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE: u8 = 4;
+const QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS: u8 = 5;
+const QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE: u8 = 6;
+const QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD: u8 = 7;
+const QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD: u8 = 8;
 const BYTE_PLANE_BLOCK_ZERO: u8 = 0;
 const BYTE_PLANE_BLOCK_RAW: u8 = 1;
 const BYTE_PLANE_BLOCK_REPEAT: u8 = 2;
@@ -47,14 +47,14 @@ pub const DEFAULT_MAX_QATC_VALUES: usize = 1 << 32;
 pub const DEFAULT_MAX_QATC_CHUNKS: usize = 1 << 20;
 pub const DEFAULT_MAX_QATC_ENCODED_BYTES: usize = usize::MAX;
 pub const DEFAULT_MAX_QATC_CHUNK_BYTES: usize =
-    HEADER_LEN + PHASE2_PREFIX_LEN + (MAX_VALUES_PER_PAYLOAD * 4);
+    HEADER_LEN + QATQ_EXACT_PREFIX_LEN + (MAX_VALUES_PER_PAYLOAD * 4);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CodecMode {
     LossyI4,
     LosslessF32,
     Phase1Q4,
-    Phase2Lossless,
+    QatqExact,
     TurboQuantQ4,
 }
 
@@ -64,7 +64,7 @@ impl CodecMode {
             Self::LossyI4 => 1,
             Self::LosslessF32 => 2,
             Self::Phase1Q4 => 3,
-            Self::Phase2Lossless => 4,
+            Self::QatqExact => 4,
             Self::TurboQuantQ4 => 5,
         }
     }
@@ -74,7 +74,7 @@ impl CodecMode {
             1 => Ok(Self::LossyI4),
             2 => Ok(Self::LosslessF32),
             3 => Ok(Self::Phase1Q4),
-            4 => Ok(Self::Phase2Lossless),
+            4 => Ok(Self::QatqExact),
             5 => Ok(Self::TurboQuantQ4),
             other => Err(QatqError::UnsupportedMode(other)),
         }
@@ -94,7 +94,7 @@ pub enum QatqError {
     InvalidHeader,
     InvalidPhase1Body,
     InvalidTurboQuantBody,
-    InvalidPhase2Body,
+    InvalidQatqExactBody,
     InvalidResidualStream,
     InvalidChunkSize(usize),
     InvalidContainer,
@@ -129,8 +129,8 @@ impl fmt::Display for QatqError {
             Self::InvalidHeader => write!(f, "payload header is invalid"),
             Self::InvalidPhase1Body => write!(f, "phase1 payload body is invalid"),
             Self::InvalidTurboQuantBody => write!(f, "turboquant payload body is invalid"),
-            Self::InvalidPhase2Body => write!(f, "phase2 payload body is invalid"),
-            Self::InvalidResidualStream => write!(f, "phase2 residual stream is invalid"),
+            Self::InvalidQatqExactBody => write!(f, "exact payload body is invalid"),
+            Self::InvalidResidualStream => write!(f, "exact residual stream is invalid"),
             Self::InvalidChunkSize(size) => write!(f, "chunk size is invalid: {size}"),
             Self::InvalidContainer => write!(f, "chunked container is invalid"),
             Self::ContainerLimitExceeded(limit) => {
@@ -175,9 +175,7 @@ pub fn parse_mode(mode: &str) -> Result<CodecMode, QatqError> {
         "lossless-f32" | "f32" | "exact-f32" => Ok(CodecMode::LosslessF32),
         "turboquant-q4" | "standard-turboquant-q4" | "tq-q4" => Ok(CodecMode::TurboQuantQ4),
         "phase1-q4" | "qatq-phase1" | "qatq-q4" | "quaternion-q4" => Ok(CodecMode::Phase1Q4),
-        "phase2-lossless" | "qatq-lossless" | "lossless-qatq" | "qres-lossless" => {
-            Ok(CodecMode::Phase2Lossless)
-        }
+        "qatq-exact" => Ok(CodecMode::QatqExact),
         _ => Err(QatqError::UnsupportedMode(0)),
     }
 }
@@ -204,15 +202,13 @@ fn encode_unchecked(values: &[f32], mode: CodecMode) -> Vec<u8> {
         CodecMode::LosslessF32 => encode_lossless_f32_unchecked(values),
         CodecMode::TurboQuantQ4 => encode_turboquant_q4_unchecked(values, Phase1Config::default()),
         CodecMode::Phase1Q4 => encode_phase1_q4_unchecked(values, Phase1Config::default()),
-        CodecMode::Phase2Lossless => {
-            encode_phase2_lossless_unchecked(values, Phase1Config::default())
-        }
+        CodecMode::QatqExact => encode_qatq_exact_unchecked(values, Phase1Config::default()),
     }
 }
 
 pub fn decode(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     if payload.len() >= CONTAINER_MAGIC.len() && &payload[0..4] == CONTAINER_MAGIC {
-        return decode_phase2_lossless_container(payload);
+        return decode_qatq_exact_container(payload);
     }
     let header = Header::parse(payload)?;
     match header.mode {
@@ -220,7 +216,7 @@ pub fn decode(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
         CodecMode::LosslessF32 => decode_lossless_f32(payload),
         CodecMode::TurboQuantQ4 => decode_turboquant_q4(payload),
         CodecMode::Phase1Q4 => decode_phase1_q4(payload),
-        CodecMode::Phase2Lossless => decode_phase2_lossless(payload),
+        CodecMode::QatqExact => decode_qatq_exact(payload),
     }
 }
 
@@ -327,7 +323,7 @@ pub fn decode_lossless_f32(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Phase2Strategy {
+pub enum QatqExactStrategy {
     PredictorXor,
     RawBits,
     ByteRle,
@@ -341,14 +337,14 @@ pub enum Phase2Strategy {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductionStorage {
-    QatqPhase2,
+    QatqExact,
     RawF32LePassThrough,
 }
 
 impl ProductionStorage {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::QatqPhase2 => "qatq-phase2",
+            Self::QatqExact => "qatq-exact",
             Self::RawF32LePassThrough => "raw-f32le-pass-through",
         }
     }
@@ -358,7 +354,7 @@ impl ProductionStorage {
 pub struct ProductionChunkMetadata {
     pub storage: ProductionStorage,
     pub raw_f32le_len: usize,
-    pub strategy: Option<Phase2Strategy>,
+    pub strategy: Option<QatqExactStrategy>,
 }
 
 impl ProductionChunkMetadata {
@@ -382,7 +378,7 @@ pub struct ProductionEncodeResult {
 
 impl ProductionEncodeResult {
     pub fn should_compress(&self) -> bool {
-        self.metadata.storage == ProductionStorage::QatqPhase2
+        self.metadata.storage == ProductionStorage::QatqExact
     }
 
     pub fn should_pass_through(&self) -> bool {
@@ -395,10 +391,10 @@ impl ProductionEncodeResult {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Phase2EncodeDecision {
+pub enum QatqExactEncodeDecision {
     Compressed {
         payload: Vec<u8>,
-        strategy: Phase2Strategy,
+        strategy: QatqExactStrategy,
         raw_f32le_len: usize,
     },
     PassThroughRaw {
@@ -406,7 +402,7 @@ pub enum Phase2EncodeDecision {
     },
 }
 
-impl Phase2EncodeDecision {
+impl QatqExactEncodeDecision {
     pub fn should_compress(&self) -> bool {
         matches!(self, Self::Compressed { .. })
     }
@@ -415,7 +411,7 @@ impl Phase2EncodeDecision {
         matches!(self, Self::PassThroughRaw { .. })
     }
 
-    pub fn strategy(&self) -> Option<Phase2Strategy> {
+    pub fn strategy(&self) -> Option<QatqExactStrategy> {
         match self {
             Self::Compressed { strategy, .. } => Some(*strategy),
             Self::PassThroughRaw { .. } => None,
@@ -437,19 +433,19 @@ impl Phase2EncodeDecision {
     }
 }
 
-impl Phase2Strategy {
+impl QatqExactStrategy {
     fn from_id(id: u8) -> Result<Self, QatqError> {
         match id {
-            PHASE2_STRATEGY_PREDICTOR_XOR => Ok(Self::PredictorXor),
-            PHASE2_STRATEGY_RAW_BITS => Ok(Self::RawBits),
-            PHASE2_STRATEGY_BYTE_RLE => Ok(Self::ByteRle),
-            PHASE2_STRATEGY_BYTE_PLANE_RLE => Ok(Self::BytePlaneRle),
-            PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => Ok(Self::DeltaXorBytePlaneRle),
-            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => Ok(Self::BytePlaneBlocks),
-            PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE => Ok(Self::BytePlanePackedRle),
-            PHASE2_STRATEGY_BYTE_PLANE_ZSTD => Ok(Self::BytePlaneZstd),
-            PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD => Ok(Self::QuaternionChainZstd),
-            _ => Err(QatqError::InvalidPhase2Body),
+            QATQ_EXACT_STRATEGY_PREDICTOR_XOR => Ok(Self::PredictorXor),
+            QATQ_EXACT_STRATEGY_RAW_BITS => Ok(Self::RawBits),
+            QATQ_EXACT_STRATEGY_BYTE_RLE => Ok(Self::ByteRle),
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => Ok(Self::BytePlaneRle),
+            QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => Ok(Self::DeltaXorBytePlaneRle),
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS => Ok(Self::BytePlaneBlocks),
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => Ok(Self::BytePlanePackedRle),
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => Ok(Self::BytePlaneZstd),
+            QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => Ok(Self::QuaternionChainZstd),
+            _ => Err(QatqError::InvalidQatqExactBody),
         }
     }
 
@@ -626,49 +622,49 @@ pub fn decode_phase1_q4(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     Ok(reconstruct_phase1_values(header.value_count, &parts))
 }
 
-pub fn encode_phase2_lossless(values: &[f32]) -> Vec<u8> {
-    encode_phase2_lossless_with_config(values, Phase1Config::default())
+pub fn encode_qatq_exact(values: &[f32]) -> Vec<u8> {
+    encode_qatq_exact_with_config(values, Phase1Config::default())
 }
 
-pub fn encode_phase2_lossless_with_config(values: &[f32], config: Phase1Config) -> Vec<u8> {
-    try_encode_phase2_lossless_with_config(values, config)
+pub fn encode_qatq_exact_with_config(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    try_encode_qatq_exact_with_config(values, config)
         .expect("value count exceeds single-payload bound; use chunked APIs")
 }
 
-pub fn try_encode_phase2_lossless_with_config(
+pub fn try_encode_qatq_exact_with_config(
     values: &[f32],
     config: Phase1Config,
 ) -> Result<Vec<u8>, QatqError> {
     validate_single_payload_value_count(values.len())?;
-    Ok(encode_phase2_lossless_unchecked(values, config))
+    Ok(encode_qatq_exact_unchecked(values, config))
 }
 
-pub fn encode_phase2_lossless_decision(values: &[f32]) -> Phase2EncodeDecision {
-    encode_phase2_lossless_decision_with_config(values, Phase1Config::default())
+pub fn encode_qatq_exact_decision(values: &[f32]) -> QatqExactEncodeDecision {
+    encode_qatq_exact_decision_with_config(values, Phase1Config::default())
 }
 
-pub fn encode_phase2_lossless_decision_with_config(
+pub fn encode_qatq_exact_decision_with_config(
     values: &[f32],
     config: Phase1Config,
-) -> Phase2EncodeDecision {
-    try_encode_phase2_lossless_decision_with_config(values, config)
+) -> QatqExactEncodeDecision {
+    try_encode_qatq_exact_decision_with_config(values, config)
         .expect("value count exceeds single-payload bound; use chunked APIs")
 }
 
-pub fn try_encode_phase2_lossless_decision_with_config(
+pub fn try_encode_qatq_exact_decision_with_config(
     values: &[f32],
     config: Phase1Config,
-) -> Result<Phase2EncodeDecision, QatqError> {
+) -> Result<QatqExactEncodeDecision, QatqError> {
     validate_single_payload_value_count(values.len())?;
     let raw_f32le_len = checked_value_byte_len(values.len())?;
-    let payload = encode_phase2_lossless_unchecked(values, config);
-    let strategy = phase2_lossless_strategy(&payload)?;
-    if strategy == Phase2Strategy::RawBits {
-        Ok(Phase2EncodeDecision::PassThroughRaw {
+    let payload = encode_qatq_exact_unchecked(values, config);
+    let strategy = qatq_exact_strategy(&payload)?;
+    if strategy == QatqExactStrategy::RawBits {
+        Ok(QatqExactEncodeDecision::PassThroughRaw {
             bytes: encode_f32_bits_le(values),
         })
     } else {
-        Ok(Phase2EncodeDecision::Compressed {
+        Ok(QatqExactEncodeDecision::Compressed {
             payload,
             strategy,
             raw_f32le_len,
@@ -684,25 +680,27 @@ pub fn try_encode_production_chunk_with_config(
     values: &[f32],
     config: Phase1Config,
 ) -> Result<ProductionEncodeResult, QatqError> {
-    let decision = try_encode_phase2_lossless_decision_with_config(values, config)?;
+    let decision = try_encode_qatq_exact_decision_with_config(values, config)?;
     Ok(production_result_from_decision(decision))
 }
 
-pub fn production_result_from_decision(decision: Phase2EncodeDecision) -> ProductionEncodeResult {
+pub fn production_result_from_decision(
+    decision: QatqExactEncodeDecision,
+) -> ProductionEncodeResult {
     match decision {
-        Phase2EncodeDecision::Compressed {
+        QatqExactEncodeDecision::Compressed {
             payload,
             strategy,
             raw_f32le_len,
         } => ProductionEncodeResult {
             metadata: ProductionChunkMetadata {
-                storage: ProductionStorage::QatqPhase2,
+                storage: ProductionStorage::QatqExact,
                 raw_f32le_len,
                 strategy: Some(strategy),
             },
             bytes: payload,
         },
-        Phase2EncodeDecision::PassThroughRaw { bytes } => ProductionEncodeResult {
+        QatqExactEncodeDecision::PassThroughRaw { bytes } => ProductionEncodeResult {
             metadata: ProductionChunkMetadata {
                 storage: ProductionStorage::RawF32LePassThrough,
                 raw_f32le_len: bytes.len(),
@@ -718,8 +716,8 @@ pub fn restore_production_chunk(
     bytes: &[u8],
 ) -> Result<Vec<f32>, QatqError> {
     match metadata.storage {
-        ProductionStorage::QatqPhase2 => {
-            let restored = decode_phase2_lossless(bytes)?;
+        ProductionStorage::QatqExact => {
+            let restored = decode_qatq_exact(bytes)?;
             let expected_len = metadata.raw_f32le_len;
             let actual_len = checked_value_byte_len(restored.len())?;
             if actual_len != expected_len {
@@ -729,9 +727,9 @@ pub fn restore_production_chunk(
                 });
             }
             if let Some(expected_strategy) = metadata.strategy {
-                let actual_strategy = phase2_lossless_strategy(bytes)?;
+                let actual_strategy = qatq_exact_strategy(bytes)?;
                 if actual_strategy != expected_strategy {
-                    return Err(QatqError::InvalidPhase2Body);
+                    return Err(QatqError::InvalidQatqExactBody);
                 }
             }
             Ok(restored)
@@ -740,33 +738,30 @@ pub fn restore_production_chunk(
     }
 }
 
-fn encode_phase2_lossless_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
-    encode_phase2_lossless_fast(values, config)
+fn encode_qatq_exact_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    encode_qatq_exact_fast(values, config)
 }
 
-pub fn encode_phase2_lossless_exhaustive(values: &[f32]) -> Vec<u8> {
-    encode_phase2_lossless_exhaustive_with_config(values, Phase1Config::default())
+pub fn encode_qatq_exact_exhaustive(values: &[f32]) -> Vec<u8> {
+    encode_qatq_exact_exhaustive_with_config(values, Phase1Config::default())
 }
 
-pub fn encode_phase2_lossless_exhaustive_with_config(
-    values: &[f32],
-    config: Phase1Config,
-) -> Vec<u8> {
-    try_encode_phase2_lossless_exhaustive_with_config(values, config)
+pub fn encode_qatq_exact_exhaustive_with_config(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    try_encode_qatq_exact_exhaustive_with_config(values, config)
         .expect("value count exceeds single-payload bound; use chunked APIs")
 }
 
-pub fn try_encode_phase2_lossless_exhaustive_with_config(
+pub fn try_encode_qatq_exact_exhaustive_with_config(
     values: &[f32],
     config: Phase1Config,
 ) -> Result<Vec<u8>, QatqError> {
     validate_single_payload_value_count(values.len())?;
-    Ok(encode_phase2_lossless_exhaustive_unchecked(values, config))
+    Ok(encode_qatq_exact_exhaustive_unchecked(values, config))
 }
 
-fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
+fn encode_qatq_exact_exhaustive_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
     let raw_bits = encode_f32_bits_be(values);
-    let raw_body_len = PHASE2_PREFIX_LEN + raw_bits.len();
+    let raw_body_len = QATQ_EXACT_PREFIX_LEN + raw_bits.len();
     let byte_plane_blocks = encode_byte_plane_blocks_bounded(&raw_bits, raw_bits.len());
     let byte_plane_blocks_body_len = candidate_body_len(byte_plane_blocks.as_ref());
     let byte_rle = encode_byte_runs_bounded(&raw_bits, raw_bits.len());
@@ -787,34 +782,37 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
     let residuals = encode_xor_residuals(values, &predicted);
     let quantized_len = parts.coord_count.div_ceil(2);
     let residual_sign_len = parts.coord_count.div_ceil(8);
-    let predictor_body_len = PHASE2_PREFIX_LEN
-        + PHASE2_PREDICTOR_METADATA_LEN
+    let predictor_body_len = QATQ_EXACT_PREFIX_LEN
+        + QATQ_EXACT_PREDICTOR_METADATA_LEN
         + quantized_len
         + residual_sign_len
         + residuals.len();
-    let mut strategy = PHASE2_STRATEGY_RAW_BITS;
+    let mut strategy = QATQ_EXACT_STRATEGY_RAW_BITS;
     let mut best_body_len = raw_body_len;
     for (candidate_strategy, candidate_len) in [
-        (PHASE2_STRATEGY_BYTE_RLE, byte_rle_body_len),
-        (PHASE2_STRATEGY_BYTE_PLANE_RLE, byte_plane_body_len),
+        (QATQ_EXACT_STRATEGY_BYTE_RLE, byte_rle_body_len),
+        (QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE, byte_plane_body_len),
         (
-            PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE,
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE,
             byte_plane_packed_body_len,
         ),
-        (PHASE2_STRATEGY_BYTE_PLANE_ZSTD, byte_plane_zstd_body_len),
         (
-            PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD,
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD,
+            byte_plane_zstd_body_len,
+        ),
+        (
+            QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD,
             quaternion_chain_zstd_body_len,
         ),
         (
-            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS,
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS,
             byte_plane_blocks_body_len,
         ),
         (
-            PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE,
+            QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE,
             delta_xor_byte_plane_body_len,
         ),
-        (PHASE2_STRATEGY_PREDICTOR_XOR, predictor_body_len),
+        (QATQ_EXACT_STRATEGY_PREDICTOR_XOR, predictor_body_len),
     ] {
         if candidate_len < best_body_len {
             strategy = candidate_strategy;
@@ -822,65 +820,65 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
         }
     }
     let body_len = match strategy {
-        PHASE2_STRATEGY_RAW_BITS => raw_body_len,
-        PHASE2_STRATEGY_BYTE_RLE => byte_rle_body_len,
-        PHASE2_STRATEGY_BYTE_PLANE_RLE => byte_plane_body_len,
-        PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE => byte_plane_packed_body_len,
-        PHASE2_STRATEGY_BYTE_PLANE_ZSTD => byte_plane_zstd_body_len,
-        PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD => quaternion_chain_zstd_body_len,
-        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => byte_plane_blocks_body_len,
-        PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => delta_xor_byte_plane_body_len,
-        PHASE2_STRATEGY_PREDICTOR_XOR => predictor_body_len,
+        QATQ_EXACT_STRATEGY_RAW_BITS => raw_body_len,
+        QATQ_EXACT_STRATEGY_BYTE_RLE => byte_rle_body_len,
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => byte_plane_body_len,
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => byte_plane_packed_body_len,
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => byte_plane_zstd_body_len,
+        QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => quaternion_chain_zstd_body_len,
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS => byte_plane_blocks_body_len,
+        QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => delta_xor_byte_plane_body_len,
+        QATQ_EXACT_STRATEGY_PREDICTOR_XOR => predictor_body_len,
         _ => unreachable!("known strategy"),
     };
     debug_assert_eq!(body_len, best_body_len);
     let mut out = Vec::with_capacity(HEADER_LEN + body_len);
     write_header(
         &mut out,
-        CodecMode::Phase2Lossless,
+        CodecMode::QatqExact,
         values.len(),
-        if strategy == PHASE2_STRATEGY_PREDICTOR_XOR {
+        if strategy == QATQ_EXACT_STRATEGY_PREDICTOR_XOR {
             parts.scale
         } else {
             1.0
         },
         checksum,
     );
-    write_phase2_prefix(&mut out, strategy);
+    write_qatq_exact_prefix(&mut out, strategy);
     match strategy {
-        PHASE2_STRATEGY_RAW_BITS => out.extend_from_slice(&raw_bits),
-        PHASE2_STRATEGY_BYTE_RLE => {
+        QATQ_EXACT_STRATEGY_RAW_BITS => out.extend_from_slice(&raw_bits),
+        QATQ_EXACT_STRATEGY_BYTE_RLE => {
             out.extend_from_slice(byte_rle.as_ref().expect("selected byte-RLE candidate"))
         }
-        PHASE2_STRATEGY_BYTE_PLANE_RLE => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => {
             out.extend_from_slice(byte_plane.as_ref().expect("selected byte-plane candidate"))
         }
-        PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE => out.extend_from_slice(
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => out.extend_from_slice(
             byte_plane_packed
                 .as_ref()
                 .expect("selected packed byte-plane candidate"),
         ),
-        PHASE2_STRATEGY_BYTE_PLANE_ZSTD => out.extend_from_slice(
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => out.extend_from_slice(
             byte_plane_zstd
                 .as_ref()
                 .expect("selected zstd byte-plane candidate"),
         ),
-        PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD => out.extend_from_slice(
+        QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => out.extend_from_slice(
             quaternion_chain_zstd
                 .as_ref()
                 .expect("selected quaternion-chain candidate"),
         ),
-        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => out.extend_from_slice(
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS => out.extend_from_slice(
             byte_plane_blocks
                 .as_ref()
                 .expect("selected byte-plane block candidate"),
         ),
-        PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => out.extend_from_slice(
+        QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => out.extend_from_slice(
             delta_xor_byte_plane
                 .as_ref()
                 .expect("selected delta-XOR byte-plane candidate"),
         ),
-        PHASE2_STRATEGY_PREDICTOR_XOR => {
+        QATQ_EXACT_STRATEGY_PREDICTOR_XOR => {
             out.extend_from_slice(&parts.seed.to_be_bytes());
             out.extend_from_slice(&parts.residual_scale.to_bits().to_be_bytes());
             pack_i4_nibbles(&parts.quantized, &mut out);
@@ -892,9 +890,9 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
     out
 }
 
-fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> {
+fn encode_qatq_exact_fast(values: &[f32], config: Phase1Config) -> Vec<u8> {
     let raw_bits = encode_f32_bits_be(values);
-    let raw_body_len = PHASE2_PREFIX_LEN + raw_bits.len();
+    let raw_body_len = QATQ_EXACT_PREFIX_LEN + raw_bits.len();
     let (byte_plane_blocks, checksum) =
         encode_two_high_raw_two_low_zero_blocks_bounded(values, raw_bits.len())
             .map(|(encoded, checksum)| (Some(encoded), checksum))
@@ -918,34 +916,37 @@ fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> 
     let residuals = encode_xor_residuals(values, &predicted);
     let quantized_len = parts.coord_count.div_ceil(2);
     let residual_sign_len = parts.coord_count.div_ceil(8);
-    let predictor_body_len = PHASE2_PREFIX_LEN
-        + PHASE2_PREDICTOR_METADATA_LEN
+    let predictor_body_len = QATQ_EXACT_PREFIX_LEN
+        + QATQ_EXACT_PREDICTOR_METADATA_LEN
         + quantized_len
         + residual_sign_len
         + residuals.len();
-    let mut strategy = PHASE2_STRATEGY_RAW_BITS;
+    let mut strategy = QATQ_EXACT_STRATEGY_RAW_BITS;
     let mut best_body_len = raw_body_len;
     for (candidate_strategy, candidate_len) in [
-        (PHASE2_STRATEGY_BYTE_RLE, byte_rle_body_len),
-        (PHASE2_STRATEGY_BYTE_PLANE_RLE, byte_plane_body_len),
+        (QATQ_EXACT_STRATEGY_BYTE_RLE, byte_rle_body_len),
+        (QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE, byte_plane_body_len),
         (
-            PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE,
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE,
             byte_plane_packed_body_len,
         ),
-        (PHASE2_STRATEGY_BYTE_PLANE_ZSTD, byte_plane_zstd_body_len),
         (
-            PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD,
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD,
+            byte_plane_zstd_body_len,
+        ),
+        (
+            QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD,
             quaternion_chain_zstd_body_len,
         ),
         (
-            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS,
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS,
             byte_plane_blocks_body_len,
         ),
         (
-            PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE,
+            QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE,
             delta_xor_byte_plane_body_len,
         ),
-        (PHASE2_STRATEGY_PREDICTOR_XOR, predictor_body_len),
+        (QATQ_EXACT_STRATEGY_PREDICTOR_XOR, predictor_body_len),
     ] {
         if candidate_len < best_body_len {
             strategy = candidate_strategy;
@@ -953,7 +954,7 @@ fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> 
         }
     }
     let _ = best_body_len;
-    write_phase2_selected(
+    write_qatq_exact_selected(
         values.len(),
         checksum,
         strategy,
@@ -970,7 +971,7 @@ fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> 
     )
 }
 
-fn write_phase2_selected(
+fn write_qatq_exact_selected(
     value_count: usize,
     checksum: u64,
     strategy: u8,
@@ -986,46 +987,46 @@ fn write_phase2_selected(
     residuals: &[u8],
 ) -> Vec<u8> {
     let body_len = match strategy {
-        PHASE2_STRATEGY_RAW_BITS => PHASE2_PREFIX_LEN + raw_bits.len(),
-        PHASE2_STRATEGY_BYTE_RLE => {
-            PHASE2_PREFIX_LEN + byte_rle.expect("selected byte-RLE candidate").len()
+        QATQ_EXACT_STRATEGY_RAW_BITS => QATQ_EXACT_PREFIX_LEN + raw_bits.len(),
+        QATQ_EXACT_STRATEGY_BYTE_RLE => {
+            QATQ_EXACT_PREFIX_LEN + byte_rle.expect("selected byte-RLE candidate").len()
         }
-        PHASE2_STRATEGY_BYTE_PLANE_RLE => {
-            PHASE2_PREFIX_LEN + byte_plane.expect("selected byte-plane candidate").len()
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => {
+            QATQ_EXACT_PREFIX_LEN + byte_plane.expect("selected byte-plane candidate").len()
         }
-        PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE => {
-            PHASE2_PREFIX_LEN
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => {
+            QATQ_EXACT_PREFIX_LEN
                 + byte_plane_packed
                     .expect("selected packed byte-plane candidate")
                     .len()
         }
-        PHASE2_STRATEGY_BYTE_PLANE_ZSTD => {
-            PHASE2_PREFIX_LEN
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => {
+            QATQ_EXACT_PREFIX_LEN
                 + byte_plane_zstd
                     .expect("selected zstd byte-plane candidate")
                     .len()
         }
-        PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD => {
-            PHASE2_PREFIX_LEN
+        QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => {
+            QATQ_EXACT_PREFIX_LEN
                 + quaternion_chain_zstd
                     .expect("selected quaternion-chain candidate")
                     .len()
         }
-        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => {
-            PHASE2_PREFIX_LEN
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS => {
+            QATQ_EXACT_PREFIX_LEN
                 + byte_plane_blocks
                     .expect("selected byte-plane block candidate")
                     .len()
         }
-        PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => {
-            PHASE2_PREFIX_LEN
+        QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => {
+            QATQ_EXACT_PREFIX_LEN
                 + delta_xor_byte_plane
                     .expect("selected delta-XOR byte-plane candidate")
                     .len()
         }
-        PHASE2_STRATEGY_PREDICTOR_XOR => {
-            PHASE2_PREFIX_LEN
-                + PHASE2_PREDICTOR_METADATA_LEN
+        QATQ_EXACT_STRATEGY_PREDICTOR_XOR => {
+            QATQ_EXACT_PREFIX_LEN
+                + QATQ_EXACT_PREDICTOR_METADATA_LEN
                 + parts.coord_count.div_ceil(2)
                 + parts.coord_count.div_ceil(8)
                 + residuals.len()
@@ -1035,39 +1036,39 @@ fn write_phase2_selected(
     let mut out = Vec::with_capacity(HEADER_LEN + body_len);
     write_header(
         &mut out,
-        CodecMode::Phase2Lossless,
+        CodecMode::QatqExact,
         value_count,
-        if strategy == PHASE2_STRATEGY_PREDICTOR_XOR {
+        if strategy == QATQ_EXACT_STRATEGY_PREDICTOR_XOR {
             parts.scale
         } else {
             1.0
         },
         checksum,
     );
-    write_phase2_prefix(&mut out, strategy);
+    write_qatq_exact_prefix(&mut out, strategy);
     match strategy {
-        PHASE2_STRATEGY_RAW_BITS => out.extend_from_slice(raw_bits),
-        PHASE2_STRATEGY_BYTE_RLE => {
+        QATQ_EXACT_STRATEGY_RAW_BITS => out.extend_from_slice(raw_bits),
+        QATQ_EXACT_STRATEGY_BYTE_RLE => {
             out.extend_from_slice(byte_rle.expect("selected byte-RLE candidate"))
         }
-        PHASE2_STRATEGY_BYTE_PLANE_RLE => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => {
             out.extend_from_slice(byte_plane.expect("selected byte-plane candidate"))
         }
-        PHASE2_STRATEGY_BYTE_PLANE_PACKED_RLE => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => {
             out.extend_from_slice(byte_plane_packed.expect("selected packed byte-plane candidate"))
         }
-        PHASE2_STRATEGY_BYTE_PLANE_ZSTD => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => {
             out.extend_from_slice(byte_plane_zstd.expect("selected zstd byte-plane candidate"))
         }
-        PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD => out
+        QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => out
             .extend_from_slice(quaternion_chain_zstd.expect("selected quaternion-chain candidate")),
-        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS => {
             out.extend_from_slice(byte_plane_blocks.expect("selected byte-plane block candidate"))
         }
-        PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => out.extend_from_slice(
+        QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => out.extend_from_slice(
             delta_xor_byte_plane.expect("selected delta-XOR byte-plane candidate"),
         ),
-        PHASE2_STRATEGY_PREDICTOR_XOR => {
+        QATQ_EXACT_STRATEGY_PREDICTOR_XOR => {
             out.extend_from_slice(&parts.seed.to_be_bytes());
             out.extend_from_slice(&parts.residual_scale.to_bits().to_be_bytes());
             pack_i4_nibbles(&parts.quantized, &mut out);
@@ -1079,14 +1080,14 @@ fn write_phase2_selected(
     out
 }
 
-pub fn encode_phase2_lossless_chunks(
+pub fn encode_qatq_exact_chunks(
     values: &[f32],
     max_values_per_chunk: usize,
 ) -> Result<Vec<Vec<u8>>, QatqError> {
-    encode_phase2_lossless_chunks_with_config(values, max_values_per_chunk, Phase1Config::default())
+    encode_qatq_exact_chunks_with_config(values, max_values_per_chunk, Phase1Config::default())
 }
 
-pub fn encode_phase2_lossless_chunks_with_config(
+pub fn encode_qatq_exact_chunks_with_config(
     values: &[f32],
     max_values_per_chunk: usize,
     config: Phase1Config,
@@ -1095,38 +1096,34 @@ pub fn encode_phase2_lossless_chunks_with_config(
         return Err(QatqError::InvalidChunkSize(max_values_per_chunk));
     }
     if values.is_empty() {
-        return Ok(vec![encode_phase2_lossless_with_config(values, config)]);
+        return Ok(vec![encode_qatq_exact_with_config(values, config)]);
     }
     Ok(values
         .chunks(max_values_per_chunk)
-        .map(|chunk| encode_phase2_lossless_with_config(chunk, config))
+        .map(|chunk| encode_qatq_exact_with_config(chunk, config))
         .collect())
 }
 
-pub fn decode_phase2_lossless_chunks<I, B>(chunks: I) -> Result<Vec<f32>, QatqError>
+pub fn decode_qatq_exact_chunks<I, B>(chunks: I) -> Result<Vec<f32>, QatqError>
 where
     I: IntoIterator<Item = B>,
     B: AsRef<[u8]>,
 {
     let mut values = Vec::new();
     for chunk in chunks {
-        values.extend(decode_phase2_lossless(chunk.as_ref())?);
+        values.extend(decode_qatq_exact(chunk.as_ref())?);
     }
     Ok(values)
 }
 
-pub fn encode_phase2_lossless_container(
+pub fn encode_qatq_exact_container(
     values: &[f32],
     max_values_per_chunk: usize,
 ) -> Result<Vec<u8>, QatqError> {
-    encode_phase2_lossless_container_with_config(
-        values,
-        max_values_per_chunk,
-        Phase1Config::default(),
-    )
+    encode_qatq_exact_container_with_config(values, max_values_per_chunk, Phase1Config::default())
 }
 
-pub fn encode_phase2_lossless_container_with_config(
+pub fn encode_qatq_exact_container_with_config(
     values: &[f32],
     max_values_per_chunk: usize,
     config: Phase1Config,
@@ -1147,7 +1144,7 @@ pub fn encode_phase2_lossless_container_with_config(
     write_container_header(&mut out, values.len(), chunk_count, 0);
     let mut container_checksum = FNV_OFFSET;
     if values.is_empty() {
-        let payload = encode_phase2_lossless_with_config(values, config);
+        let payload = encode_qatq_exact_with_config(values, config);
         container_checksum = container_checksum_chunk(container_checksum, &payload);
         append_container_chunk(&mut out, &payload)?;
         patch_container_checksum(&mut out, container_checksum)?;
@@ -1155,7 +1152,7 @@ pub fn encode_phase2_lossless_container_with_config(
     }
 
     for chunk_values in values.chunks(max_values_per_chunk) {
-        let payload = encode_phase2_lossless_with_config(chunk_values, config);
+        let payload = encode_qatq_exact_with_config(chunk_values, config);
         container_checksum = container_checksum_chunk(container_checksum, &payload);
         append_container_chunk(&mut out, &payload)?;
     }
@@ -1177,11 +1174,11 @@ fn append_container_chunk(out: &mut Vec<u8>, payload: &[u8]) -> Result<(), QatqE
     Ok(())
 }
 
-pub fn decode_phase2_lossless_container(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
-    decode_phase2_lossless_container_with_limits(payload, QatcDecodeLimits::default())
+pub fn decode_qatq_exact_container(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
+    decode_qatq_exact_container_with_limits(payload, QatcDecodeLimits::default())
 }
 
-pub fn decode_phase2_lossless_container_with_limits(
+pub fn decode_qatq_exact_container_with_limits(
     payload: &[u8],
     limits: QatcDecodeLimits,
 ) -> Result<Vec<f32>, QatqError> {
@@ -1193,7 +1190,7 @@ pub fn decode_phase2_lossless_container_with_limits(
         .try_reserve_exact(header.total_values)
         .map_err(|_| QatqError::ContainerLimitExceeded("allocation"))?;
     for (chunk_start, chunk_end) in chunks {
-        values.extend(decode_phase2_lossless(&body[chunk_start..chunk_end])?);
+        values.extend(decode_qatq_exact(&body[chunk_start..chunk_end])?);
     }
     if values.len() != header.total_values {
         return Err(QatqError::InvalidContainer);
@@ -1201,18 +1198,18 @@ pub fn decode_phase2_lossless_container_with_limits(
     Ok(values)
 }
 
-pub fn for_each_phase2_lossless_container_payload(
+pub fn for_each_qatq_exact_container_payload(
     payload: &[u8],
     mut visitor: impl FnMut(&[u8]) -> Result<(), QatqError>,
 ) -> Result<(), QatqError> {
-    for_each_phase2_lossless_container_payload_with_limits(
+    for_each_qatq_exact_container_payload_with_limits(
         payload,
         QatcDecodeLimits::default(),
         |chunk| visitor(chunk),
     )
 }
 
-pub fn for_each_phase2_lossless_container_payload_with_limits(
+pub fn for_each_qatq_exact_container_payload_with_limits(
     payload: &[u8],
     limits: QatcDecodeLimits,
     mut visitor: impl FnMut(&[u8]) -> Result<(), QatqError>,
@@ -1223,11 +1220,11 @@ pub fn for_each_phase2_lossless_container_payload_with_limits(
     for_each_container_chunk_unchecked(body, chunk_count, |chunk| visitor(chunk))
 }
 
-pub fn decode_phase2_lossless_container_payloads(payload: &[u8]) -> Result<Vec<&[u8]>, QatqError> {
-    decode_phase2_lossless_container_payloads_with_limits(payload, QatcDecodeLimits::default())
+pub fn decode_qatq_exact_container_payloads(payload: &[u8]) -> Result<Vec<&[u8]>, QatqError> {
+    decode_qatq_exact_container_payloads_with_limits(payload, QatcDecodeLimits::default())
 }
 
-pub fn decode_phase2_lossless_container_payloads_with_limits(
+pub fn decode_qatq_exact_container_payloads_with_limits(
     payload: &[u8],
     limits: QatcDecodeLimits,
 ) -> Result<Vec<&[u8]>, QatqError> {
@@ -1284,7 +1281,7 @@ fn read_container_chunk_index(
         }
         let chunk_len =
             u32::from_be_bytes(body[offset..len_end].try_into().expect("fixed length")) as usize;
-        if chunk_len < HEADER_LEN + PHASE2_PREFIX_LEN {
+        if chunk_len < HEADER_LEN + QATQ_EXACT_PREFIX_LEN {
             return Err(QatqError::InvalidContainer);
         }
         if chunk_len > limits.max_chunk_bytes {
@@ -1299,7 +1296,7 @@ fn read_container_chunk_index(
         }
 
         let chunk_header =
-            Header::parse_for_mode(&body[chunk_start..chunk_end], CodecMode::Phase2Lossless)?;
+            Header::parse_for_mode(&body[chunk_start..chunk_end], CodecMode::QatqExact)?;
         indexed_total = indexed_total
             .checked_add(chunk_header.value_count)
             .ok_or(QatqError::InvalidContainer)?;
@@ -1334,34 +1331,41 @@ fn for_each_container_chunk_unchecked(
     Ok(())
 }
 
-pub fn decode_phase2_lossless(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
-    let header = Header::parse_for_mode(payload, CodecMode::Phase2Lossless)?;
+pub fn decode_qatq_exact(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
+    let header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
     let body = &payload[HEADER_LEN..];
-    let strategy = parse_phase2_strategy_body(body)?;
-    if strategy == Phase2Strategy::BytePlaneBlocks {
-        return decode_phase2_byte_plane_blocks_checked(&body[PHASE2_PREFIX_LEN..], &header);
+    let strategy = parse_qatq_exact_strategy_body(body)?;
+    if strategy == QatqExactStrategy::BytePlaneBlocks {
+        return decode_qatq_exact_byte_plane_blocks_checked(
+            &body[QATQ_EXACT_PREFIX_LEN..],
+            &header,
+        );
     }
     let values = match strategy {
-        Phase2Strategy::RawBits => decode_phase2_raw_bits(&body[PHASE2_PREFIX_LEN..], &header)?,
-        Phase2Strategy::ByteRle => decode_phase2_byte_rle(&body[PHASE2_PREFIX_LEN..], &header)?,
-        Phase2Strategy::BytePlaneRle => {
-            decode_phase2_byte_plane_rle(&body[PHASE2_PREFIX_LEN..], &header)?
+        QatqExactStrategy::RawBits => {
+            decode_qatq_exact_raw_bits(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
         }
-        Phase2Strategy::BytePlanePackedRle => {
-            decode_phase2_byte_plane_packed_rle(&body[PHASE2_PREFIX_LEN..], &header)?
+        QatqExactStrategy::ByteRle => {
+            decode_qatq_exact_byte_rle(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
         }
-        Phase2Strategy::BytePlaneZstd => {
-            decode_phase2_byte_plane_zstd(&body[PHASE2_PREFIX_LEN..], &header)?
+        QatqExactStrategy::BytePlaneRle => {
+            decode_qatq_exact_byte_plane_rle(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
         }
-        Phase2Strategy::QuaternionChainZstd => {
-            decode_phase2_quaternion_chain_zstd(&body[PHASE2_PREFIX_LEN..], &header)?
+        QatqExactStrategy::BytePlanePackedRle => {
+            decode_qatq_exact_byte_plane_packed_rle(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
         }
-        Phase2Strategy::DeltaXorBytePlaneRle => {
-            decode_phase2_delta_xor_byte_plane_rle(&body[PHASE2_PREFIX_LEN..], &header)?
+        QatqExactStrategy::BytePlaneZstd => {
+            decode_qatq_exact_byte_plane_zstd(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
         }
-        Phase2Strategy::BytePlaneBlocks => unreachable!("byte-plane blocks returned above"),
-        Phase2Strategy::PredictorXor => {
-            decode_phase2_predictor_xor(&body[PHASE2_PREFIX_LEN..], &header)?
+        QatqExactStrategy::QuaternionChainZstd => {
+            decode_qatq_exact_quaternion_chain_zstd(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
+        }
+        QatqExactStrategy::DeltaXorBytePlaneRle => {
+            decode_qatq_exact_delta_xor_byte_plane_rle(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
+        }
+        QatqExactStrategy::BytePlaneBlocks => unreachable!("byte-plane blocks returned above"),
+        QatqExactStrategy::PredictorXor => {
+            decode_qatq_exact_predictor_xor(&body[QATQ_EXACT_PREFIX_LEN..], &header)?
         }
     };
 
@@ -1376,32 +1380,32 @@ pub fn decode_phase2_lossless(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     Ok(values)
 }
 
-pub fn phase2_lossless_strategy(payload: &[u8]) -> Result<Phase2Strategy, QatqError> {
-    let _header = Header::parse_for_mode(payload, CodecMode::Phase2Lossless)?;
-    parse_phase2_strategy_body(&payload[HEADER_LEN..])
+pub fn qatq_exact_strategy(payload: &[u8]) -> Result<QatqExactStrategy, QatqError> {
+    let _header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
+    parse_qatq_exact_strategy_body(&payload[HEADER_LEN..])
 }
 
-fn parse_phase2_strategy_body(body: &[u8]) -> Result<Phase2Strategy, QatqError> {
-    if body.len() < PHASE2_PREFIX_LEN {
+fn parse_qatq_exact_strategy_body(body: &[u8]) -> Result<QatqExactStrategy, QatqError> {
+    if body.len() < QATQ_EXACT_PREFIX_LEN {
         return Err(QatqError::PayloadTooShort {
             actual: body.len(),
-            minimum: PHASE2_PREFIX_LEN,
+            minimum: QATQ_EXACT_PREFIX_LEN,
         });
     }
-    if &body[0..4] != PHASE2_BODY_MAGIC {
-        return Err(QatqError::InvalidPhase2Body);
+    if &body[0..4] != QATQ_EXACT_BODY_MAGIC {
+        return Err(QatqError::InvalidQatqExactBody);
     }
     if body[5..8] != [0, 0, 0] {
-        return Err(QatqError::InvalidPhase2Body);
+        return Err(QatqError::InvalidQatqExactBody);
     }
-    Phase2Strategy::from_id(body[4])
+    QatqExactStrategy::from_id(body[4])
 }
 
-fn decode_phase2_predictor_xor(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
+fn decode_qatq_exact_predictor_xor(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
     let coord_count = checked_phase1_coordinate_count(header.value_count)?;
     let quantized_len = coord_count.div_ceil(2);
     let residual_sign_len = coord_count.div_ceil(8);
-    let minimum_payload_len = PHASE2_PREDICTOR_METADATA_LEN + quantized_len + residual_sign_len;
+    let minimum_payload_len = QATQ_EXACT_PREDICTOR_METADATA_LEN + quantized_len + residual_sign_len;
     if body.len() < minimum_payload_len {
         return Err(QatqError::PayloadTooShort {
             actual: body.len(),
@@ -1409,7 +1413,7 @@ fn decode_phase2_predictor_xor(body: &[u8], header: &Header) -> Result<Vec<f32>,
         });
     }
 
-    let quantized_offset = PHASE2_PREDICTOR_METADATA_LEN;
+    let quantized_offset = QATQ_EXACT_PREDICTOR_METADATA_LEN;
     let residual_sign_offset = quantized_offset + quantized_len;
     let xor_offset = residual_sign_offset + residual_sign_len;
     let parts = read_phase_parts(
@@ -1430,7 +1434,7 @@ fn decode_phase2_predictor_xor(body: &[u8], header: &Header) -> Result<Vec<f32>,
     Ok(values)
 }
 
-fn decode_phase2_raw_bits(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
+fn decode_qatq_exact_raw_bits(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
     let expected_len = checked_value_byte_len(header.value_count)?;
     if body.len() != expected_len {
         return Err(QatqError::LengthMismatch {
@@ -1446,18 +1450,18 @@ fn decode_phase2_raw_bits(body: &[u8], header: &Header) -> Result<Vec<f32>, Qatq
     Ok(values)
 }
 
-fn decode_phase2_byte_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
+fn decode_qatq_exact_byte_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
     let expected_len = checked_value_byte_len(header.value_count)?;
     decode_byte_runs_to_f32(body, expected_len, header.value_count)
 }
 
-fn decode_phase2_byte_plane_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
+fn decode_qatq_exact_byte_plane_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
     let expected_len = checked_value_byte_len(header.value_count)?;
     let words = decode_byte_plane_runs_to_words(body, expected_len, header.value_count)?;
     Ok(words.into_iter().map(f32::from_bits).collect())
 }
 
-fn decode_phase2_delta_xor_byte_plane_rle(
+fn decode_qatq_exact_delta_xor_byte_plane_rle(
     body: &[u8],
     header: &Header,
 ) -> Result<Vec<f32>, QatqError> {
@@ -1477,7 +1481,7 @@ fn decode_phase2_delta_xor_byte_plane_rle(
     Ok(values)
 }
 
-fn decode_phase2_byte_plane_blocks_checked(
+fn decode_qatq_exact_byte_plane_blocks_checked(
     body: &[u8],
     header: &Header,
 ) -> Result<Vec<f32>, QatqError> {
@@ -1493,7 +1497,7 @@ fn decode_phase2_byte_plane_blocks_checked(
     Ok(values)
 }
 
-fn decode_phase2_byte_plane_packed_rle(
+fn decode_qatq_exact_byte_plane_packed_rle(
     body: &[u8],
     header: &Header,
 ) -> Result<Vec<f32>, QatqError> {
@@ -1502,7 +1506,7 @@ fn decode_phase2_byte_plane_packed_rle(
     Ok(words.into_iter().map(f32::from_bits).collect())
 }
 
-fn decode_phase2_byte_plane_zstd(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
+fn decode_qatq_exact_byte_plane_zstd(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
     let expected_len = checked_value_byte_len(header.value_count)?;
     let plane_bytes =
         zstd::bulk::decompress(body, expected_len).map_err(|_| QatqError::InvalidResidualStream)?;
@@ -1513,7 +1517,7 @@ fn decode_phase2_byte_plane_zstd(body: &[u8], header: &Header) -> Result<Vec<f32
     Ok(words.into_iter().map(f32::from_bits).collect())
 }
 
-fn decode_phase2_quaternion_chain_zstd(
+fn decode_qatq_exact_quaternion_chain_zstd(
     body: &[u8],
     header: &Header,
 ) -> Result<Vec<f32>, QatqError> {
@@ -1812,7 +1816,7 @@ fn write_plane_word_byte(words: &mut [u32], plane_index: usize, value_count: usi
 
 fn candidate_body_len(candidate: Option<&Vec<u8>>) -> usize {
     candidate
-        .map(|bytes| PHASE2_PREFIX_LEN + bytes.len())
+        .map(|bytes| QATQ_EXACT_PREFIX_LEN + bytes.len())
         .unwrap_or(usize::MAX)
 }
 
@@ -2590,8 +2594,8 @@ fn write_turboquant_metadata_and_payload(out: &mut Vec<u8>, parts: &TurboQuantPa
     pack_residual_signs(&parts.qjl_signs, out);
 }
 
-fn write_phase2_prefix(out: &mut Vec<u8>, strategy: u8) {
-    out.extend_from_slice(PHASE2_BODY_MAGIC);
+fn write_qatq_exact_prefix(out: &mut Vec<u8>, strategy: u8) {
+    out.extend_from_slice(QATQ_EXACT_BODY_MAGIC);
     out.push(strategy);
     out.extend_from_slice(&[0, 0, 0]);
 }
@@ -3125,7 +3129,7 @@ fn write_container_header(
     );
     out.extend_from_slice(CONTAINER_MAGIC);
     out.push(CONTAINER_VERSION);
-    out.push(CodecMode::Phase2Lossless.id());
+    out.push(CodecMode::QatqExact.id());
     out.extend_from_slice(&[0, 0]);
     out.extend_from_slice(&(total_values as u64).to_be_bytes());
     out.extend_from_slice(&(chunk_count as u32).to_be_bytes());
@@ -3245,7 +3249,7 @@ impl ContainerHeader {
             return Err(QatqError::UnsupportedVersion(version));
         }
         let mode = CodecMode::from_id(payload[5])?;
-        if mode != CodecMode::Phase2Lossless {
+        if mode != CodecMode::QatqExact {
             return Err(QatqError::UnsupportedMode(mode.id()));
         }
         if payload[6..8] != [0, 0] || payload[20..24] != [0, 0, 0, 0] {
@@ -3324,6 +3328,16 @@ mod tests {
 
     fn lcg_next_for_test(state: u32) -> u32 {
         state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223)
+    }
+
+    #[test]
+    fn parse_mode_accepts_only_qatq_exact_for_exact_product_surface() {
+        assert_eq!(parse_mode("qatq-exact"), Ok(CodecMode::QatqExact));
+        let old_exact_mode = ["phase", "2-lossless"].concat();
+        assert_eq!(
+            parse_mode(&old_exact_mode),
+            Err(QatqError::UnsupportedMode(0))
+        );
     }
 
     #[test]
@@ -3573,7 +3587,7 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_roundtrip_preserves_bits() {
+    fn qatq_exact_roundtrip_preserves_bits() {
         let values = [
             0.0_f32,
             -0.0,
@@ -3585,8 +3599,8 @@ mod tests {
             f32::from_bits(0xff80_0001),
         ];
 
-        let encoded = encode_phase2_lossless(&values);
-        let decoded = decode_phase2_lossless(&encoded).unwrap();
+        let encoded = encode_qatq_exact(&values);
+        let decoded = decode_qatq_exact(&encoded).unwrap();
 
         let before: Vec<u32> = values.iter().map(|value| value.to_bits()).collect();
         let after: Vec<u32> = decoded.iter().map(|value| value.to_bits()).collect();
@@ -3594,15 +3608,15 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_exhaustive_roundtrip_preserves_bits() {
+    fn qatq_exact_exhaustive_roundtrip_preserves_bits() {
         let values: Vec<f32> = (0..256)
             .map(|index| ((index as f32) * 0.03125).sin())
             .collect();
 
-        let fast = encode_phase2_lossless(&values);
-        let exhaustive = encode_phase2_lossless_exhaustive(&values);
-        let decoded_fast = decode_phase2_lossless(&fast).unwrap();
-        let decoded_exhaustive = decode_phase2_lossless(&exhaustive).unwrap();
+        let fast = encode_qatq_exact(&values);
+        let exhaustive = encode_qatq_exact_exhaustive(&values);
+        let decoded_fast = decode_qatq_exact(&fast).unwrap();
+        let decoded_exhaustive = decode_qatq_exact(&exhaustive).unwrap();
 
         assert_eq!(f32_bits(&decoded_fast), f32_bits(&values));
         assert_eq!(f32_bits(&decoded_exhaustive), f32_bits(&values));
@@ -3610,58 +3624,58 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_seed_is_deterministic_and_changes_payload() {
+    fn qatq_exact_seed_is_deterministic_and_changes_payload() {
         let values: Vec<f32> = (0..128)
             .map(|index| ((index as f32) * 0.017).sin())
             .collect();
-        let first = encode_phase2_predictor_for_test(&values, Phase1Config { seed: 11 });
-        let second = encode_phase2_predictor_for_test(&values, Phase1Config { seed: 11 });
-        let third = encode_phase2_predictor_for_test(&values, Phase1Config { seed: 12 });
+        let first = encode_qatq_exact_predictor_for_test(&values, Phase1Config { seed: 11 });
+        let second = encode_qatq_exact_predictor_for_test(&values, Phase1Config { seed: 11 });
+        let third = encode_qatq_exact_predictor_for_test(&values, Phase1Config { seed: 12 });
 
-        assert_eq!(first[HEADER_LEN + 4], PHASE2_STRATEGY_PREDICTOR_XOR);
-        assert_eq!(third[HEADER_LEN + 4], PHASE2_STRATEGY_PREDICTOR_XOR);
+        assert_eq!(first[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_PREDICTOR_XOR);
+        assert_eq!(third[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_PREDICTOR_XOR);
         assert_eq!(first, second);
         assert_ne!(first, third);
-        assert_eq!(decode_phase2_lossless(&first).unwrap(), values);
-        assert_eq!(decode_phase2_lossless(&third).unwrap(), values);
+        assert_eq!(decode_qatq_exact(&first).unwrap(), values);
+        assert_eq!(decode_qatq_exact(&third).unwrap(), values);
     }
 
     #[test]
-    fn phase2_lossless_rejects_bad_body_magic() {
-        let mut encoded = encode_phase2_lossless(&[1.0, 2.0, 3.0, 4.0]);
+    fn qatq_exact_rejects_bad_body_magic() {
+        let mut encoded = encode_qatq_exact(&[1.0, 2.0, 3.0, 4.0]);
         encoded[HEADER_LEN] = b'X';
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
-            Err(QatqError::InvalidPhase2Body)
+            decode_qatq_exact(&encoded),
+            Err(QatqError::InvalidQatqExactBody)
         );
     }
 
     #[test]
-    fn phase2_lossless_rejects_nonzero_reserved_prefix_bytes() {
-        let mut encoded = encode_phase2_lossless(&[1.0, 2.0, 3.0, 4.0]);
+    fn qatq_exact_rejects_nonzero_reserved_prefix_bytes() {
+        let mut encoded = encode_qatq_exact(&[1.0, 2.0, 3.0, 4.0]);
         encoded[HEADER_LEN + 5] = 1;
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
-            Err(QatqError::InvalidPhase2Body)
+            decode_qatq_exact(&encoded),
+            Err(QatqError::InvalidQatqExactBody)
         );
     }
 
     #[test]
-    fn phase2_lossless_rejects_oversized_header_count() {
+    fn qatq_exact_rejects_oversized_header_count() {
         let mut encoded = Vec::new();
         write_test_header_unchecked(
             &mut encoded,
-            CodecMode::Phase2Lossless,
+            CodecMode::QatqExact,
             (MAX_VALUES_PER_PAYLOAD + 1) as u64,
             1.0,
             checksum_f32_bits(&[]),
         );
-        write_phase2_prefix(&mut encoded, PHASE2_STRATEGY_RAW_BITS);
+        write_qatq_exact_prefix(&mut encoded, QATQ_EXACT_STRATEGY_RAW_BITS);
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::ValueCountTooLarge(MAX_VALUES_PER_PAYLOAD + 1))
         );
     }
@@ -3704,84 +3718,84 @@ mod tests {
             CodecMode::LosslessF32,
             CodecMode::TurboQuantQ4,
             CodecMode::Phase1Q4,
-            CodecMode::Phase2Lossless,
+            CodecMode::QatqExact,
         ];
 
         for mode in modes {
             let encoded = try_encode(&values, mode).unwrap();
             let decoded = decode(&encoded).unwrap();
             assert_eq!(decoded.len(), values.len());
-            if matches!(mode, CodecMode::LosslessF32 | CodecMode::Phase2Lossless) {
+            if matches!(mode, CodecMode::LosslessF32 | CodecMode::QatqExact) {
                 assert_eq!(f32_bits(&decoded), f32_bits(&values));
             }
         }
     }
 
     #[test]
-    fn try_encode_phase2_lossless_roundtrip_preserves_bits() {
+    fn try_encode_qatq_exact_roundtrip_preserves_bits() {
         let values = [0.0_f32, -0.0, f32::INFINITY, f32::from_bits(0x7fc0_1234)];
-        let encoded = try_encode(&values, CodecMode::Phase2Lossless).unwrap();
+        let encoded = try_encode(&values, CodecMode::QatqExact).unwrap();
 
         assert_eq!(f32_bits(&decode(&encoded).unwrap()), f32_bits(&values));
     }
 
     #[test]
-    fn try_encode_seeded_phase2_lossless_roundtrip_preserves_bits() {
+    fn try_encode_seeded_qatq_exact_roundtrip_preserves_bits() {
         let values = [0.25_f32, -0.5, f32::from_bits(0x7fc0_5678), 2.0];
         let encoded =
-            try_encode_phase2_lossless_with_config(&values, Phase1Config { seed: 17 }).unwrap();
+            try_encode_qatq_exact_with_config(&values, Phase1Config { seed: 17 }).unwrap();
 
         assert_eq!(f32_bits(&decode(&encoded).unwrap()), f32_bits(&values));
     }
 
     #[test]
-    fn phase2_lossless_rejects_truncated_residual_stream() {
+    fn qatq_exact_rejects_truncated_residual_stream() {
         let values: Vec<f32> = (0..128)
             .map(|index| ((index as f32) * 0.017).sin())
             .collect();
-        let mut encoded = encode_phase2_predictor_for_test(&values, Phase1Config { seed: 1 });
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_PREDICTOR_XOR);
+        let mut encoded = encode_qatq_exact_predictor_for_test(&values, Phase1Config { seed: 1 });
+        assert_eq!(encoded[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_PREDICTOR_XOR);
         encoded.pop();
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::InvalidResidualStream)
         );
     }
 
     #[test]
-    fn phase2_lossless_detects_payload_corruption() {
+    fn qatq_exact_detects_payload_corruption() {
         let values = vec![0.0_f32; 128];
-        let mut encoded = encode_phase2_lossless(&values);
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_RLE);
+        let mut encoded = encode_qatq_exact(&values);
+        assert_eq!(encoded[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_BYTE_RLE);
         let last = encoded.last_mut().unwrap();
         *last ^= 0x01;
 
         assert!(matches!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::ChecksumMismatch { .. }) | Err(QatqError::InvalidResidualStream)
         ));
     }
 
     #[test]
-    fn phase2_lossless_uses_raw_bits_when_predictor_residual_is_larger() {
+    fn qatq_exact_uses_raw_bits_when_predictor_residual_is_larger() {
         let values = [
             f32::from_bits(0x0102_0304),
             f32::from_bits(0x1122_3344),
             f32::from_bits(0x5566_7788),
             f32::from_bits(0x99aa_bbcc),
         ];
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_RAW_BITS);
+        assert_eq!(encoded[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_RAW_BITS);
         assert_eq!(
-            f32_bits(&decode_phase2_lossless(&encoded).unwrap()),
+            f32_bits(&decode_qatq_exact(&encoded).unwrap()),
             f32_bits(&values)
         );
     }
 
     #[test]
-    fn phase2_decision_passes_through_raw_bits_as_f32le() {
+    fn exact_decision_passes_through_raw_bits_as_f32le() {
         let values = [
             f32::from_bits(0x0102_0304),
             f32::from_bits(0x1122_3344),
@@ -3789,8 +3803,7 @@ mod tests {
             f32::from_bits(0x99aa_bbcc),
         ];
         let decision =
-            try_encode_phase2_lossless_decision_with_config(&values, Phase1Config::default())
-                .unwrap();
+            try_encode_qatq_exact_decision_with_config(&values, Phase1Config::default()).unwrap();
 
         let expected = encode_f32_bits_le(&values);
         assert!(decision.should_pass_through());
@@ -3801,25 +3814,25 @@ mod tests {
     }
 
     #[test]
-    fn phase2_decision_compresses_non_raw_strategy() {
+    fn exact_decision_compresses_non_raw_strategy() {
         let values = vec![0.0_f32; 128];
-        let decision = encode_phase2_lossless_decision(&values);
+        let decision = encode_qatq_exact_decision(&values);
 
         match decision {
-            Phase2EncodeDecision::Compressed {
+            QatqExactEncodeDecision::Compressed {
                 payload,
                 strategy,
                 raw_f32le_len,
             } => {
-                assert_eq!(strategy, Phase2Strategy::ByteRle);
+                assert_eq!(strategy, QatqExactStrategy::ByteRle);
                 assert_eq!(raw_f32le_len, values.len() * 4);
                 assert!(payload.len() < raw_f32le_len);
                 assert_eq!(
-                    f32_bits(&decode_phase2_lossless(&payload).unwrap()),
+                    f32_bits(&decode_qatq_exact(&payload).unwrap()),
                     f32_bits(&values)
                 );
             }
-            Phase2EncodeDecision::PassThroughRaw { .. } => {
+            QatqExactEncodeDecision::PassThroughRaw { .. } => {
                 panic!("compressible values should return a compressed decision")
             }
         }
@@ -3831,9 +3844,9 @@ mod tests {
         let encoded = try_encode_production_chunk(&values).unwrap();
 
         assert!(encoded.should_compress());
-        assert_eq!(encoded.metadata.storage_label(), "qatq-phase2");
+        assert_eq!(encoded.metadata.storage_label(), "qatq-exact");
         assert_eq!(encoded.metadata.raw_f32le_len, values.len() * 4);
-        assert_eq!(encoded.metadata.strategy, Some(Phase2Strategy::ByteRle));
+        assert_eq!(encoded.metadata.strategy, Some(QatqExactStrategy::ByteRle));
 
         let restored = restore_production_chunk(&encoded.metadata, encoded.stored_bytes()).unwrap();
         assert_eq!(f32_bits(&restored), f32_bits(&values));
@@ -3874,17 +3887,20 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_uses_byte_plane_blocks_when_raw_planes_are_repetitive() {
+    fn qatq_exact_uses_byte_plane_blocks_when_raw_planes_are_repetitive() {
         let values = vec![1.0_f32; 128];
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
+        assert_eq!(
+            encoded[HEADER_LEN + 4],
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS
+        );
         assert!(encoded.len() < encode_lossless_f32(&values).len());
-        assert_eq!(decode_phase2_lossless(&encoded).unwrap(), values);
+        assert_eq!(decode_qatq_exact(&encoded).unwrap(), values);
     }
 
     #[test]
-    fn phase2_lossless_uses_delta_xor_byte_plane_for_adjacent_bit_residuals() {
+    fn qatq_exact_uses_delta_xor_byte_plane_for_adjacent_bit_residuals() {
         let mut bits = 0x3f00_0001_u32;
         let values: Vec<f32> = (0..256)
             .map(|_| {
@@ -3892,36 +3908,36 @@ mod tests {
                 f32::from_bits(bits)
             })
             .collect();
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
         assert_eq!(
             encoded[HEADER_LEN + 4],
-            PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE
+            QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE
         );
         assert!(encoded.len() < encode_lossless_f32(&values).len());
         assert_eq!(
-            f32_bits(&decode_phase2_lossless(&encoded).unwrap()),
+            f32_bits(&decode_qatq_exact(&encoded).unwrap()),
             f32_bits(&values)
         );
     }
 
     #[test]
-    fn phase2_lossless_strategy_reports_selected_strategy() {
+    fn qatq_exact_strategy_reports_selected_strategy() {
         let values = [0.0_f32; 128];
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
         assert_eq!(
-            phase2_lossless_strategy(&encoded),
-            Ok(Phase2Strategy::ByteRle)
+            qatq_exact_strategy(&encoded),
+            Ok(QatqExactStrategy::ByteRle)
         );
         assert_eq!(
-            phase2_lossless_strategy(&encode_lossless_f32(&values)),
+            qatq_exact_strategy(&encode_lossless_f32(&values)),
             Err(QatqError::UnsupportedMode(2))
         );
     }
 
     #[test]
-    fn phase2_lossless_fast_accepts_compression_positive_byte_plane_zstd_candidate() {
+    fn qatq_exact_fast_accepts_compression_positive_byte_plane_zstd_candidate() {
         let mut state = 0x9e37_79b9_u32;
         let values: Vec<f32> = (0..4096)
             .map(|index| {
@@ -3932,49 +3948,52 @@ mod tests {
                 f32::from_bits(sign | (exponent << 23) | mantissa)
             })
             .collect();
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_ZSTD);
+        assert_eq!(encoded[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD);
         assert!(encoded.len() < encode_lossless_f32(&values).len());
         assert_eq!(
-            f32_bits(&decode_phase2_lossless(&encoded).unwrap()),
+            f32_bits(&decode_qatq_exact(&encoded).unwrap()),
             f32_bits(&values)
         );
     }
 
     #[test]
-    fn phase2_lossless_selects_reversible_quaternion_chain_when_smaller() {
+    fn qatq_exact_selects_reversible_quaternion_chain_when_smaller() {
         let values: Vec<f32> = (0..4096)
             .map(|index| {
                 let value = ((index as f32) * 0.03125).sin();
                 f32::from_bits(value.to_bits() & 0xffff_0000)
             })
             .collect();
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
         assert_eq!(
             encoded[HEADER_LEN + 4],
-            PHASE2_STRATEGY_QUATERNION_CHAIN_ZSTD
+            QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD
         );
         assert!(encoded.len() < encode_lossless_f32(&values).len());
         assert_eq!(
-            f32_bits(&decode_phase2_lossless(&encoded).unwrap()),
+            f32_bits(&decode_qatq_exact(&encoded).unwrap()),
             f32_bits(&values)
         );
     }
 
     #[test]
-    fn phase2_lossless_byte_rle_compresses_repeated_nonzero_bytes() {
+    fn qatq_exact_byte_rle_compresses_repeated_nonzero_bytes() {
         let values = vec![1.0_f32; 128];
-        let encoded = encode_phase2_lossless(&values);
+        let encoded = encode_qatq_exact(&values);
 
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
+        assert_eq!(
+            encoded[HEADER_LEN + 4],
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS
+        );
         assert!(encoded.len() < encode_lossless_f32(&values).len());
-        assert_eq!(decode_phase2_lossless(&encoded).unwrap(), values);
+        assert_eq!(decode_qatq_exact(&encoded).unwrap(), values);
     }
 
     #[test]
-    fn phase2_lossless_delta_xor_byte_plane_rejects_truncated_stream() {
+    fn qatq_exact_delta_xor_byte_plane_rejects_truncated_stream() {
         let mut bits = 0x3f00_0001_u32;
         let values: Vec<f32> = (0..256)
             .map(|_| {
@@ -3982,91 +4001,94 @@ mod tests {
                 f32::from_bits(bits)
             })
             .collect();
-        let mut encoded = encode_phase2_lossless(&values);
+        let mut encoded = encode_qatq_exact(&values);
         assert_eq!(
             encoded[HEADER_LEN + 4],
-            PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE
+            QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE
         );
         encoded.pop();
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::InvalidResidualStream)
         );
     }
 
     #[test]
-    fn phase2_lossless_rejects_truncated_byte_plane_block() {
+    fn qatq_exact_rejects_truncated_byte_plane_block() {
         let values = vec![1.0_f32; 128];
-        let mut encoded = encode_phase2_lossless(&values);
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
+        let mut encoded = encode_qatq_exact(&values);
+        assert_eq!(
+            encoded[HEADER_LEN + 4],
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS
+        );
         encoded.pop();
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::InvalidResidualStream)
         );
     }
 
     #[test]
-    fn phase2_lossless_rejects_zero_length_byte_run() {
+    fn qatq_exact_rejects_zero_length_byte_run() {
         let mut encoded = Vec::new();
         write_header(
             &mut encoded,
-            CodecMode::Phase2Lossless,
+            CodecMode::QatqExact,
             1,
             1.0,
             checksum_f32_bits(&[0.0]),
         );
-        write_phase2_prefix(&mut encoded, PHASE2_STRATEGY_BYTE_RLE);
+        write_qatq_exact_prefix(&mut encoded, QATQ_EXACT_STRATEGY_BYTE_RLE);
         encoded.extend_from_slice(&[XOR_ZERO_RUN, 0, 0]);
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::InvalidResidualStream)
         );
     }
 
     #[test]
-    fn phase2_lossless_rejects_unknown_byte_run_token() {
+    fn qatq_exact_rejects_unknown_byte_run_token() {
         let mut encoded = Vec::new();
         write_header(
             &mut encoded,
-            CodecMode::Phase2Lossless,
+            CodecMode::QatqExact,
             1,
             1.0,
             checksum_f32_bits(&[0.0]),
         );
-        write_phase2_prefix(&mut encoded, PHASE2_STRATEGY_BYTE_RLE);
+        write_qatq_exact_prefix(&mut encoded, QATQ_EXACT_STRATEGY_BYTE_RLE);
         encoded.extend_from_slice(&[99, 0, 4]);
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::InvalidResidualStream)
         );
     }
 
     #[test]
-    fn phase2_lossless_rejects_trailing_byte_run_data() {
+    fn qatq_exact_rejects_trailing_byte_run_data() {
         let mut encoded = Vec::new();
         write_header(
             &mut encoded,
-            CodecMode::Phase2Lossless,
+            CodecMode::QatqExact,
             1,
             1.0,
             checksum_f32_bits(&[0.0]),
         );
-        write_phase2_prefix(&mut encoded, PHASE2_STRATEGY_BYTE_RLE);
+        write_qatq_exact_prefix(&mut encoded, QATQ_EXACT_STRATEGY_BYTE_RLE);
         encoded.extend_from_slice(&[XOR_ZERO_RUN, 0, 4, 0xaa]);
 
         assert_eq!(
-            decode_phase2_lossless(&encoded),
+            decode_qatq_exact(&encoded),
             Err(QatqError::InvalidResidualStream)
         );
     }
 
     #[test]
-    fn phase2_lossless_chunks_roundtrip_preserves_bits() {
+    fn qatq_exact_chunks_roundtrip_preserves_bits() {
         let values: Vec<f32> = (0..257)
             .map(|index| {
                 if index % 31 == 0 {
@@ -4078,37 +4100,36 @@ mod tests {
             .collect();
 
         let chunks =
-            encode_phase2_lossless_chunks_with_config(&values, 64, Phase1Config { seed: 99 })
-                .unwrap();
-        let decoded = decode_phase2_lossless_chunks(chunks.iter().map(Vec::as_slice)).unwrap();
+            encode_qatq_exact_chunks_with_config(&values, 64, Phase1Config { seed: 99 }).unwrap();
+        let decoded = decode_qatq_exact_chunks(chunks.iter().map(Vec::as_slice)).unwrap();
 
         assert_eq!(chunks.len(), 5);
         assert_eq!(f32_bits(&decoded), f32_bits(&values));
     }
 
     #[test]
-    fn phase2_lossless_chunks_handle_empty_input_as_one_payload() {
-        let chunks = encode_phase2_lossless_chunks(&[], 64).unwrap();
-        let decoded = decode_phase2_lossless_chunks(chunks.iter().map(Vec::as_slice)).unwrap();
+    fn qatq_exact_chunks_handle_empty_input_as_one_payload() {
+        let chunks = encode_qatq_exact_chunks(&[], 64).unwrap();
+        let decoded = decode_qatq_exact_chunks(chunks.iter().map(Vec::as_slice)).unwrap();
 
         assert_eq!(chunks.len(), 1);
         assert!(decoded.is_empty());
     }
 
     #[test]
-    fn phase2_lossless_chunks_reject_invalid_chunk_sizes() {
+    fn qatq_exact_chunks_reject_invalid_chunk_sizes() {
         assert_eq!(
-            encode_phase2_lossless_chunks(&[1.0], 0),
+            encode_qatq_exact_chunks(&[1.0], 0),
             Err(QatqError::InvalidChunkSize(0))
         );
         assert_eq!(
-            encode_phase2_lossless_chunks(&[1.0], MAX_VALUES_PER_PAYLOAD + 1),
+            encode_qatq_exact_chunks(&[1.0], MAX_VALUES_PER_PAYLOAD + 1),
             Err(QatqError::InvalidChunkSize(MAX_VALUES_PER_PAYLOAD + 1))
         );
     }
 
     #[test]
-    fn phase2_lossless_container_roundtrip_preserves_bits_through_decode() {
+    fn qatq_exact_container_roundtrip_preserves_bits_through_decode() {
         let values: Vec<f32> = (0..259)
             .map(|index| match index % 53 {
                 0 => -0.0,
@@ -4118,7 +4139,7 @@ mod tests {
             .collect();
 
         let encoded =
-            encode_phase2_lossless_container_with_config(&values, 64, Phase1Config { seed: 123 })
+            encode_qatq_exact_container_with_config(&values, 64, Phase1Config { seed: 123 })
                 .unwrap();
         let decoded = decode(&encoded).unwrap();
 
@@ -4127,23 +4148,23 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_container_handles_empty_input_as_one_chunk() {
-        let encoded = encode_phase2_lossless_container(&[], 64).unwrap();
-        let decoded = decode_phase2_lossless_container(&encoded).unwrap();
+    fn qatq_exact_container_handles_empty_input_as_one_chunk() {
+        let encoded = encode_qatq_exact_container(&[], 64).unwrap();
+        let decoded = decode_qatq_exact_container(&encoded).unwrap();
 
         assert_eq!(u32::from_be_bytes(encoded[16..20].try_into().unwrap()), 1);
         assert!(decoded.is_empty());
     }
 
     #[test]
-    fn phase2_lossless_container_payload_visitor_preserves_chunk_order() {
+    fn qatq_exact_container_payload_visitor_preserves_chunk_order() {
         let values: Vec<f32> = (0..10).map(|index| index as f32).collect();
-        let encoded = encode_phase2_lossless_container(&values, 4).unwrap();
+        let encoded = encode_qatq_exact_container(&values, 4).unwrap();
         let mut chunk_lengths = Vec::new();
         let mut decoded = Vec::new();
 
-        for_each_phase2_lossless_container_payload(&encoded, |chunk| {
-            let chunk_values = decode_phase2_lossless(chunk)?;
+        for_each_qatq_exact_container_payload(&encoded, |chunk| {
+            let chunk_values = decode_qatq_exact(chunk)?;
             chunk_lengths.push(chunk_values.len());
             decoded.extend(chunk_values);
             Ok(())
@@ -4155,43 +4176,43 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_container_writes_v2_checksum() {
-        let encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+    fn qatq_exact_container_writes_v2_checksum() {
+        let encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 2).unwrap();
 
         assert_eq!(encoded[4], CONTAINER_VERSION);
         assert_ne!(&encoded[24..32], &[0_u8; 8]);
         assert_eq!(
-            decode_phase2_lossless_container(&encoded).unwrap(),
+            decode_qatq_exact_container(&encoded).unwrap(),
             [1.0, 2.0, 3.0]
         );
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_v2_checksum_mismatch() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+    fn qatq_exact_container_rejects_v2_checksum_mismatch() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 2).unwrap();
         let last = encoded.len() - 1;
         encoded[last] ^= 0x01;
 
         assert!(matches!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::ChecksumMismatch { .. })
         ));
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_legacy_v1_header() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0], 1).unwrap();
+    fn qatq_exact_container_rejects_legacy_v1_header() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0], 1).unwrap();
         encoded[4] = VERSION;
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::UnsupportedVersion(VERSION))
         );
     }
 
     #[test]
-    fn phase2_lossless_container_enforces_decode_limits_before_callbacks() {
-        let encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 1).unwrap();
+    fn qatq_exact_container_enforces_decode_limits_before_callbacks() {
+        let encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 1).unwrap();
         let limits = QatcDecodeLimits {
             max_total_values: 2,
             ..QatcDecodeLimits::default()
@@ -4199,11 +4220,11 @@ mod tests {
         let mut visited = 0;
 
         assert_eq!(
-            decode_phase2_lossless_container_with_limits(&encoded, limits),
+            decode_qatq_exact_container_with_limits(&encoded, limits),
             Err(QatqError::ContainerLimitExceeded("total values"))
         );
         assert_eq!(
-            for_each_phase2_lossless_container_payload_with_limits(&encoded, limits, |_| {
+            for_each_qatq_exact_container_payload_with_limits(&encoded, limits, |_| {
                 visited += 1;
                 Ok(())
             }),
@@ -4213,61 +4234,61 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_invalid_chunk_size() {
+    fn qatq_exact_container_rejects_invalid_chunk_size() {
         assert_eq!(
-            encode_phase2_lossless_container(&[1.0], 0),
+            encode_qatq_exact_container(&[1.0], 0),
             Err(QatqError::InvalidChunkSize(0))
         );
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_zero_chunk_count() {
+    fn qatq_exact_container_rejects_zero_chunk_count() {
         let mut encoded = Vec::new();
         write_container_header(&mut encoded, 0, 0, FNV_OFFSET);
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::InvalidContainer)
         );
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_nonzero_reserved_bytes() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0], 1).unwrap();
+    fn qatq_exact_container_rejects_nonzero_reserved_bytes() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0], 1).unwrap();
         encoded[6] = 1;
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::InvalidContainer)
         );
 
         encoded[6] = 0;
         encoded[20] = 1;
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::InvalidContainer)
         );
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_truncated_chunk_body() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+    fn qatq_exact_container_rejects_truncated_chunk_body() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 2).unwrap();
         encoded.pop();
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::InvalidContainer)
         );
     }
 
     #[test]
-    fn phase2_lossless_container_payload_visitor_validates_before_callbacks() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+    fn qatq_exact_container_payload_visitor_validates_before_callbacks() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 2).unwrap();
         encoded.pop();
         let mut visited = 0;
 
         assert_eq!(
-            for_each_phase2_lossless_container_payload(&encoded, |_| {
+            for_each_qatq_exact_container_payload(&encoded, |_| {
                 visited += 1;
                 Ok(())
             }),
@@ -4277,34 +4298,34 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_total_value_mismatch() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+    fn qatq_exact_container_rejects_total_value_mismatch() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 2).unwrap();
         encoded[15] = 2;
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::InvalidContainer)
         );
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_huge_total_before_allocation() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0], 1).unwrap();
+    fn qatq_exact_container_rejects_huge_total_before_allocation() {
+        let mut encoded = encode_qatq_exact_container(&[1.0], 1).unwrap();
         encoded[8..16].copy_from_slice(&((DEFAULT_MAX_QATC_VALUES as u64) + 1).to_be_bytes());
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::ContainerLimitExceeded("total values"))
         );
     }
 
     #[test]
-    fn phase2_lossless_container_rejects_trailing_data() {
-        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+    fn qatq_exact_container_rejects_trailing_data() {
+        let mut encoded = encode_qatq_exact_container(&[1.0, 2.0, 3.0], 2).unwrap();
         encoded.push(0);
 
         assert_eq!(
-            decode_phase2_lossless_container(&encoded),
+            decode_qatq_exact_container(&encoded),
             Err(QatqError::InvalidContainer)
         );
     }
@@ -4500,7 +4521,7 @@ mod tests {
         );
     }
 
-    fn encode_phase2_predictor_for_test(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    fn encode_qatq_exact_predictor_for_test(values: &[f32], config: Phase1Config) -> Vec<u8> {
         let parts = build_phase1_parts(values, config);
         let predicted = reconstruct_phase1_values(values.len(), &parts);
         let residuals = encode_xor_residuals(values, &predicted);
@@ -4508,12 +4529,12 @@ mod tests {
         let mut out = Vec::new();
         write_header(
             &mut out,
-            CodecMode::Phase2Lossless,
+            CodecMode::QatqExact,
             values.len(),
             parts.scale,
             checksum,
         );
-        write_phase2_prefix(&mut out, PHASE2_STRATEGY_PREDICTOR_XOR);
+        write_qatq_exact_prefix(&mut out, QATQ_EXACT_STRATEGY_PREDICTOR_XOR);
         out.extend_from_slice(&parts.seed.to_be_bytes());
         out.extend_from_slice(&parts.residual_scale.to_bits().to_be_bytes());
         pack_i4_nibbles(&parts.quantized, &mut out);

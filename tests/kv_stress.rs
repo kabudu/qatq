@@ -4,11 +4,11 @@ use std::{
 };
 
 use qatq::{
-    decode, decode_phase2_lossless, decode_phase2_lossless_container,
-    decode_phase2_lossless_container_with_limits, encode_phase2_lossless_container_with_config,
-    phase2_lossless_strategy, restore_production_chunk,
-    try_encode_phase2_lossless_exhaustive_with_config, try_encode_phase2_lossless_with_config,
-    try_encode_production_chunk_with_config, Phase1Config, Phase2Strategy, QatcDecodeLimits,
+    decode, decode_qatq_exact, decode_qatq_exact_container,
+    decode_qatq_exact_container_with_limits, encode_qatq_exact_container_with_config,
+    qatq_exact_strategy, restore_production_chunk, try_encode_production_chunk_with_config,
+    try_encode_qatq_exact_exhaustive_with_config, try_encode_qatq_exact_with_config, Phase1Config,
+    QatcDecodeLimits, QatqExactStrategy,
 };
 
 const DEFAULT_CASES: usize = 4_096;
@@ -19,7 +19,7 @@ const RELEASE_DECODE_NS_PER_VALUE_CEILING: f64 = 150.0;
 
 #[test]
 #[ignore = "runs thousands of deterministic KV-cache codec stress cases"]
-fn phase2_kv_cache_stress_matrix() {
+fn exact_kv_cache_stress_matrix() {
     let case_count = std::env::var("QATQ_KV_STRESS_CASES")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -42,16 +42,16 @@ fn phase2_kv_cache_stress_matrix() {
         let raw_len = values.len() * 4;
 
         let encode_start = Instant::now();
-        let encoded = try_encode_phase2_lossless_with_config(&values, config).unwrap();
+        let encoded = try_encode_qatq_exact_with_config(&values, config).unwrap();
         summary.encode_time += encode_start.elapsed();
         summary.encoded_bytes += encoded.len();
         summary.raw_bytes += raw_len;
 
-        let strategy = phase2_lossless_strategy(&encoded).unwrap();
+        let strategy = qatq_exact_strategy(&encoded).unwrap();
         *strategy_counts.entry(strategy.as_str()).or_default() += 1;
 
         let decode_start = Instant::now();
-        let decoded = decode_phase2_lossless(&encoded).unwrap();
+        let decoded = decode_qatq_exact(&encoded).unwrap();
         summary.decode_time += decode_start.elapsed();
         assert_same_bits(&values, &decoded, case_index, "single-payload");
 
@@ -68,9 +68,9 @@ fn phase2_kv_cache_stress_matrix() {
 
         let chunk_size = spec.chunk_size();
         let container =
-            encode_phase2_lossless_container_with_config(&values, chunk_size, config).unwrap();
+            encode_qatq_exact_container_with_config(&values, chunk_size, config).unwrap();
         summary.container_bytes += container.len();
-        let decoded_container = decode_phase2_lossless_container(&container).unwrap();
+        let decoded_container = decode_qatq_exact_container(&container).unwrap();
         assert_same_bits(&values, &decoded_container, case_index, "container");
         let decoded_container_via_dispatch = decode(&container).unwrap();
         assert_same_bits(
@@ -81,9 +81,8 @@ fn phase2_kv_cache_stress_matrix() {
         );
 
         if case_index < EXHAUSTIVE_CASES && values.len() <= 2_048 {
-            let exhaustive =
-                try_encode_phase2_lossless_exhaustive_with_config(&values, config).unwrap();
-            let decoded_exhaustive = decode_phase2_lossless(&exhaustive).unwrap();
+            let exhaustive = try_encode_qatq_exact_exhaustive_with_config(&values, config).unwrap();
+            let decoded_exhaustive = decode_qatq_exact(&exhaustive).unwrap();
             assert_same_bits(&values, &decoded_exhaustive, case_index, "exhaustive");
             assert!(
                 encoded.len() <= exhaustive.len(),
@@ -94,7 +93,7 @@ fn phase2_kv_cache_stress_matrix() {
         }
 
         if case_index % 7 == 0 && encoded.len() > 40 {
-            assert_mutation_rejected(&encoded, case_index, "phase2-payload");
+            assert_mutation_rejected(&encoded, case_index, "exact-payload");
         }
         if case_index % 11 == 0 && container.len() > 48 {
             assert_mutation_rejected(&container, case_index, "qatc-container");
@@ -105,7 +104,7 @@ fn phase2_kv_cache_stress_matrix() {
                 ..QatcDecodeLimits::default()
             };
             assert!(
-                decode_phase2_lossless_container_with_limits(&container, limits).is_err(),
+                decode_qatq_exact_container_with_limits(&container, limits).is_err(),
                 "case {case_index} accepted a container above total-value decode limit"
             );
         }
@@ -124,22 +123,22 @@ fn phase2_kv_cache_stress_matrix() {
 
     assert!(
         strategy_counts.len() >= 4,
-        "stress corpus did not exercise enough Phase 2 strategies: {strategy_counts:?}"
+        "stress corpus did not exercise enough QATQ exact strategies: {strategy_counts:?}"
     );
     assert!(
-        strategy_counts.contains_key(Phase2Strategy::QuaternionChainZstd.as_str()),
+        strategy_counts.contains_key(QatqExactStrategy::QuaternionChainZstd.as_str()),
         "stress corpus never selected reversible quaternion-chain zstd"
     );
     assert!(
-        strategy_counts.contains_key(Phase2Strategy::BytePlaneZstd.as_str()),
+        strategy_counts.contains_key(QatqExactStrategy::BytePlaneZstd.as_str()),
         "stress corpus never selected byte-plane zstd"
     );
     assert!(
-        strategy_counts.contains_key(Phase2Strategy::RawBits.as_str()),
+        strategy_counts.contains_key(QatqExactStrategy::RawBits.as_str()),
         "stress corpus never selected raw-bits fallback"
     );
     assert!(
-        storage_counts.contains_key("qatq-phase2")
+        storage_counts.contains_key("qatq-exact")
             && storage_counts.contains_key("raw-f32le-pass-through"),
         "stress corpus did not cover both production storage decisions: {storage_counts:?}"
     );

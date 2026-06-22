@@ -16,15 +16,15 @@ The current implementation provides:
 
 - deterministic public fixture generation with `qatq fixture generate`;
 - public CI-ready fixture, benchmark, paper-table, and gate reports;
-- the Phase 2 `phase2-lossless` codec as the primary QATQ implementation:
+- the QATQ exact `qatq-exact` codec as the primary QATQ implementation:
   adaptive exact storage over raw bits, byte-RLE, byte-plane RLE,
   byte-plane zstd entropy coding, reversible quaternion-chain residual coding,
   adjacent-bit delta-XOR byte-plane residuals, or Phase 1 prediction plus coded
   XOR residuals for bit-identical f32 reconstruction;
-- a sequential `QATC` chunk container for exact Phase 2 transport of large
+- a sequential `QATC` chunk container for exact QATQ exact transport of large
   tensors through the CLI;
-- production chunk helpers for exact Phase 2 storage decisions and restore;
-- an exhaustive Phase 2 encoder variant for research comparisons when payload
+- production chunk helpers for exact QATQ exact storage decisions and restore;
+- an exhaustive QATQ exact encoder variant for research comparisons when payload
   size search is more important than encode latency;
 - a deterministic lossy signed-int4 tensor codec retained as a seed baseline;
 - a Phase 1 training-free `phase1-q4` codec with quaternion grouping,
@@ -43,9 +43,9 @@ The current implementation provides:
   1 deterministic/configured behavior, production chunk restore, CLI behavior,
   and benchmark gate policy.
 
-`phase2-lossless` and the `QATC` container are the main QATQ product surface.
+`qatq-exact` and the `QATC` container are the main QATQ product surface.
 They are exact by construction and use a fast strategy policy:
-the encoder selects the smallest bit-identical Phase 2 candidate, including a
+the encoder selects the smallest bit-identical QATQ exact candidate, including a
 reversible quaternion-chain residual path when it beats simpler byte-plane
 transforms. Phase 1 is still lossy and experimental; it is useful as an
 internal predictor and comparator, but lossless QATQ claims apply only to Phase
@@ -53,7 +53,7 @@ internal predictor and comparator, but lossless QATQ claims apply only to Phase
 The generated public fixtures are the default reproducible evidence set. Larger
 or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` f32 values each; larger tensors
-should use the Phase 2 `QATC` chunk container.
+should use the QATQ exact `QATC` chunk container.
 
 ## Attribution
 
@@ -85,7 +85,7 @@ and faster to transmit for KV/tensor workloads.
 Encode a raw f32 little-endian tensor with QATQ exact reconstruction:
 
 ```sh
-cargo run -- encode --mode phase2-lossless input.f32le output.qatq
+cargo run -- encode --mode qatq-exact input.f32le output.qatq
 ```
 
 Decode back to raw f32 little-endian:
@@ -94,13 +94,13 @@ Decode back to raw f32 little-endian:
 cargo run -- decode output.qatq restored.f32le
 ```
 
-Use an explicit seed for reproducible Phase 2 sweeps:
+Use an explicit seed for reproducible QATQ exact sweeps:
 
 ```sh
-cargo run -- encode --mode phase2-lossless --seed 0x51415451 input.f32le output.qatq
+cargo run -- encode --mode qatq-exact --seed 0x51415451 input.f32le output.qatq
 ```
 
-For large tensors, write a Phase 2 chunk container so each embedded payload
+For large tensors, write a QATQ exact chunk container so each embedded payload
 stays inside the decoder safety bound while preserving bit-identical
 reconstruction across chunk boundaries:
 
@@ -153,7 +153,7 @@ Run the public benchmark report:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --phase2-only \
+  --exact-only \
   --no-synthetic \
   --output docs/PUBLIC_BENCHMARKS.md \
   --paper-output docs/PUBLIC_PAPER_TABLES.md \
@@ -172,7 +172,7 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/public.manifest
 ```
 
-Run the public retrieval task-quality report. This verifies that Phase 2 exact
+Run the public retrieval task-quality report. This verifies that QATQ exact
 transport preserves top-1 retrieval decisions on the public fixture corpus and
 keeps lossy comparator rows separate:
 
@@ -235,26 +235,26 @@ nanoseconds per value:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --phase2-only \
+  --exact-only \
   --no-synthetic \
   --manifest fixtures/public.manifest \
   --gate-output docs/PUBLIC_BENCHMARK_GATE.md \
   --gate-require-external \
   --gate-policy production-kv \
-  --max-phase2-ratio 0.96 \
-  --max-phase2-encode-us 5000 \
-  --max-phase2-decode-ns-per-value 50.00 \
-  --max-phase2-container-ratio 0.97 \
-  --max-phase2-container-decode-ns-per-value 50.00
+  --max-exact-ratio 0.96 \
+  --max-exact-encode-us 5000 \
+  --max-exact-decode-ns-per-value 50.00 \
+  --max-exact-container-ratio 0.97 \
+  --max-exact-container-decode-ns-per-value 50.00
 ```
 
 Run the competitive compression gate. This refuses regressions where a
-compression-positive Phase 2 row is larger than the best of the `zstd-raw-f32le`
+compression-positive QATQ exact row is larger than the best of the `zstd-raw-f32le`
 and `lz4-raw-f32le` baselines over the same public raw f32 fixture:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --phase2-only \
+  --exact-only \
   --no-synthetic \
   --manifest fixtures/public.manifest \
   --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
@@ -263,7 +263,7 @@ cargo run --release --bin qatq-bench -- \
 ```
 
 Run the deterministic KV-cache stress matrix. This ignored integration test
-generates thousands of KV-shaped tensors, verifies Phase 2 bit identity through
+generates thousands of KV-shaped tensors, verifies QATQ exact bit identity through
 single payloads, production chunk decisions, `QATC` containers, dispatch decode,
 sampled corruption rejection, and default-vs-exhaustive payload size checks:
 
@@ -277,17 +277,17 @@ large-tensor production readiness signal:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --phase2-only \
+  --exact-only \
   --no-synthetic \
   --manifest fixtures/public.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
   --gate-policy latency-budget \
-  --max-phase2-ratio 0.95 \
-  --max-phase2-encode-us 5000 \
-  --max-phase2-decode-us 1000 \
-  --max-phase2-container-ratio 0.96 \
-  --max-phase2-container-decode-us 1200
+  --max-exact-ratio 0.95 \
+  --max-exact-encode-us 5000 \
+  --max-exact-decode-us 1000 \
+  --max-exact-container-ratio 0.96 \
+  --max-exact-container-decode-us 1200
 ```
 
 ## Library
@@ -305,30 +305,30 @@ Runtime integrations should prefer `try_encode` for single-payload artifacts so
 oversized inputs return `QatqError::ValueCountTooLarge` instead of panicking.
 Direct fallible helpers are also available for mode-specific callers:
 `try_encode_lossy_i4`, `try_encode_lossless_f32`,
-`try_encode_phase1_q4_with_config`, `try_encode_phase2_lossless_with_config`,
-and `try_encode_phase2_lossless_exhaustive_with_config`. Use the chunk APIs or
-`QATC` container for larger tensors. Use `phase2_lossless_strategy` to inspect
-which exact Phase 2 strategy was selected for an encoded payload.
+`try_encode_phase1_q4_with_config`, `try_encode_qatq_exact_with_config`,
+and `try_encode_qatq_exact_exhaustive_with_config`. Use the chunk APIs or
+`QATC` container for larger tensors. Use `qatq_exact_strategy` to inspect
+which exact QATQ exact strategy was selected for an encoded payload.
 
-Chunk exact Phase 2 payloads for large tensor blocks:
+Chunk exact QATQ exact payloads for large tensor blocks:
 
 ```rust
-use qatq::{decode_phase2_lossless_chunks, encode_phase2_lossless_chunks};
+use qatq::{decode_qatq_exact_chunks, encode_qatq_exact_chunks};
 
 let values = vec![0.0_f32; 1_000_000];
-let chunks = encode_phase2_lossless_chunks(&values, 65_536)?;
-let decoded = decode_phase2_lossless_chunks(chunks.iter().map(Vec::as_slice))?;
+let chunks = encode_qatq_exact_chunks(&values, 65_536)?;
+let decoded = decode_qatq_exact_chunks(chunks.iter().map(Vec::as_slice))?;
 assert_eq!(decoded, values);
 # Ok::<(), qatq::QatqError>(())
 ```
 
-Use the sequential Phase 2 container when a single file artifact is needed:
+Use the sequential QATQ exact container when a single file artifact is needed:
 
 ```rust
-use qatq::{decode, encode_phase2_lossless_container};
+use qatq::{decode, encode_qatq_exact_container};
 
 let values = vec![0.0_f32; 1_000_000];
-let payload = encode_phase2_lossless_container(&values, 65_536)?;
+let payload = encode_qatq_exact_container(&values, 65_536)?;
 let decoded = decode(&payload)?;
 assert_eq!(decoded, values);
 # Ok::<(), qatq::QatqError>(())
@@ -339,19 +339,19 @@ chunks without allocating the full decoded tensor:
 
 ```rust
 use qatq::{
-    decode_phase2_lossless, encode_phase2_lossless_container,
-    for_each_phase2_lossless_container_payload_with_limits, QatcDecodeLimits,
+    decode_qatq_exact, encode_qatq_exact_container,
+    for_each_qatq_exact_container_payload_with_limits, QatcDecodeLimits,
 };
 
-let payload = encode_phase2_lossless_container(&[1.0_f32, 2.0, 3.0], 2)?;
+let payload = encode_qatq_exact_container(&[1.0_f32, 2.0, 3.0], 2)?;
 let mut decoded_count = 0;
 let limits = QatcDecodeLimits {
     max_total_values: 1_000_000,
     ..QatcDecodeLimits::default()
 };
 
-for_each_phase2_lossless_container_payload_with_limits(&payload, limits, |chunk| {
-    let values = decode_phase2_lossless(chunk)?;
+for_each_qatq_exact_container_payload_with_limits(&payload, limits, |chunk| {
+    let values = decode_qatq_exact(chunk)?;
     decoded_count += values.len();
     Ok(())
 })?;

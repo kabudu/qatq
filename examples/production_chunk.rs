@@ -7,8 +7,8 @@ fn main() -> Result<(), QatqError> {
 
     let encoded = try_encode_production_chunk(&values)?;
     match encoded.metadata.storage {
-        ProductionStorage::QatqPhase2 => {
-            assert_eq!(encoded.metadata.storage_label(), "qatq-phase2");
+        ProductionStorage::QatqExact => {
+            assert_eq!(encoded.metadata.storage_label(), "qatq-exact");
         }
         ProductionStorage::RawF32LePassThrough => {
             assert_eq!(encoded.metadata.storage_label(), "raw-f32le-pass-through");
