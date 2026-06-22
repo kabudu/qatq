@@ -107,6 +107,8 @@ not just access to exported tensors.
       transfer-size baselines.
 - [x] Freeze source-release API/CLI names before crates.io publish.
 - [x] Add coverage and supply-chain checks.
+- [x] Wire GitHub Releases with cargo-dist binary archives, installers, and
+      checksums.
+- [x] Add manual crates.io publication workflow with environment approval.
 - [ ] Publish to crates.io when the release owner performs and records the
       publication step.
-- [ ] Cut GitHub Releases with binaries once the CLI is useful standalone.

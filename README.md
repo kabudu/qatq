@@ -73,6 +73,32 @@ and remaining gates are tracked in
 [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
 Runtime-agnostic external integration evidence is summarized in
 [`docs/EXTERNAL_RUNTIME_EVIDENCE.md`](docs/EXTERNAL_RUNTIME_EVIDENCE.md).
+Release packaging and publication are documented in
+[`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md): GitHub Release
+binaries are built by cargo-dist from annotated tags, while crates.io
+publication is a separate manually approved workflow.
+
+## Installation
+
+Until the first public release is tagged, build from source:
+
+```sh
+cargo install --path .
+```
+
+After a GitHub Release exists, install the prebuilt CLI with the generated
+cargo-dist installer:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/kabudu/qatq/releases/download/v0.1.0/qatq-installer.sh | sh
+```
+
+On Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.1.0/qatq-installer.ps1 | iex"
+```
 
 ## Attribution
 

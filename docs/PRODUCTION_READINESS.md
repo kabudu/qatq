@@ -17,6 +17,8 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | API/CLI naming | accepted for v0.1.0 | `docs/API_CLI_FREEZE.md`. |
 | Coverage checks | wired in CI | `.github/workflows/coverage-supply-chain.yml`; line coverage gate `75%`. |
 | Supply-chain checks | wired in CI | `.github/workflows/coverage-supply-chain.yml`; RustSec audit, locked metadata, duplicate dependency check. |
+| GitHub Release binaries | wired in CI | `.github/workflows/release.yml`; cargo-dist archives, installers, and checksums from annotated tags. |
+| crates.io publication | manually gated | `.github/workflows/publish-crate.yml`; requires `crates-io` environment approval. |
 
 ## Remaining Production Gates
 
@@ -27,7 +29,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | Adapter maintenance | Keep the llama.cpp patch version-pinned and refresh it whenever the target llama.cpp commit changes. |
 | Fuzzing | Keep scheduled fuzzing green and review crashes before releases. |
 | Security review | Re-run malicious/corrupt QATC tests and fuzz targets before tagging. |
-| Release publication | Do not publish to crates.io until the release owner explicitly performs and records that publication step. |
+| Release publication | Configure `CARGO_REGISTRY_TOKEN`, protect the `crates-io` GitHub environment with required reviewers, and record the manual publication step. |
 
 ## Current Claim
 
