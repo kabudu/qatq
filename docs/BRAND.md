@@ -13,7 +13,7 @@ design system.
 
 Recommended GitHub/social description:
 
-> Exact tensor-aware compression for exported LLM KV caches and live-migration artifacts.
+> Quaternion-grade compression for LLM KV caches and live runtime migration.
 
 Recommended topics:
 

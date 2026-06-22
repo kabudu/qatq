@@ -4,6 +4,8 @@
 
 # QATQ
 
+**QATQ makes live LLM memory smaller, exact, and portable.**
+
 QATQ is a Rust codec toolkit for **Quaternion-Augmented TurboQuant**: exact
 tensor-aware compression for exported LLM KV caches and other high-dimensional
 tensor streams used during live agent/runtime migration.
