@@ -15,6 +15,8 @@ use qatq::{
 
 const ITERATIONS: usize = 200;
 const TIMING_SAMPLES: usize = 3;
+const DEBUG_ITERATIONS: usize = 5;
+const DEBUG_TIMING_SAMPLES: usize = 1;
 const CONTAINER_CHUNK_VALUES: usize = 65_536;
 
 fn main() {
@@ -628,15 +630,31 @@ fn phase2_strategy_label(payload: &[u8]) -> Option<&'static str> {
 }
 
 fn time_encode<T>(mut f: impl FnMut() -> T) -> f64 {
-    time_loop(ITERATIONS, TIMING_SAMPLES, || {
+    time_loop(timing_iterations(), timing_samples(), || {
         black_box(f());
     })
 }
 
 fn time_decode<T>(mut f: impl FnMut() -> T) -> f64 {
-    time_loop(ITERATIONS, TIMING_SAMPLES, || {
+    time_loop(timing_iterations(), timing_samples(), || {
         black_box(f());
     })
+}
+
+fn timing_iterations() -> usize {
+    if cfg!(debug_assertions) {
+        DEBUG_ITERATIONS
+    } else {
+        ITERATIONS
+    }
+}
+
+fn timing_samples() -> usize {
+    if cfg!(debug_assertions) {
+        DEBUG_TIMING_SAMPLES
+    } else {
+        TIMING_SAMPLES
+    }
 }
 
 fn time_loop(iterations: usize, samples: usize, mut f: impl FnMut()) -> f64 {

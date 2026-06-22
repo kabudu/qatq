@@ -262,6 +262,15 @@ cargo run --release --bin qatq-bench -- \
   --gate-policy competitive-compression
 ```
 
+Run the deterministic KV-cache stress matrix. This ignored integration test
+generates thousands of KV-shaped tensors, verifies Phase 2 bit identity through
+single payloads, production chunk decisions, `QATC` containers, dispatch decode,
+sampled corruption rejection, and default-vs-exhaustive payload size checks:
+
+```sh
+cargo test --test kv_stress -- --ignored --nocapture
+```
+
 Run the fixed absolute-latency gate only as service-budget analysis for small
 tensors or deployment-specific envelopes. It is intentionally not the
 large-tensor production readiness signal:

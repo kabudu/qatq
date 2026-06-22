@@ -33,6 +33,8 @@ cargo run --release --bin qatq-bench -- --no-synthetic --quality-output docs/PUB
 cargo run --release --bin qatq-bench -- --no-synthetic --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.96 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 50.00 --max-phase2-container-ratio 0.97 --max-phase2-container-decode-ns-per-value 50.00
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md --gate-require-external --gate-policy competitive-compression
+cargo test --test kv_stress -- --ignored --nocapture
+cargo test --release --test kv_stress -- --ignored --nocapture
 cargo fmt --check
 cargo check --manifest-path fuzz/Cargo.toml
 cargo package --allow-dirty
@@ -61,6 +63,15 @@ Results:
 - latency-budget gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed. This gate is service-budget analysis, not the large-tensor production readiness signal.
 - public production KV throughput gate: passed with the split `production-kv` policy and portable `50.00 ns/value` direct/container decode ceilings.
 - public competitive compression gate: passed; every compression-positive public Phase 2 row is at or below the best zstd/lz4 raw-f32 baseline for the same fixture.
+- deterministic KV stress matrix: passed locally across 4,096 generated
+  KV-shaped cases and 8,499,064 f32 values; exact single-payload, dispatch,
+  production chunk, and `QATC` container round trips all preserved bit identity.
+  Sampled payload/container mutations were rejected, bounded container limits
+  rejected oversized decode attempts, and the default encoder was checked
+  against exhaustive encoding on the first 512 eligible cases.
+- deterministic KV stress matrix in release mode: passed across the same 4,096
+  cases with aggregate ratio `0.1441`, encode throughput `62.09 ns/value`, and
+  decode throughput `7.25 ns/value`.
 - `cargo fmt --check`: passed.
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
 - `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
@@ -127,6 +138,9 @@ Coverage added:
 - fast Phase 2 exact encoding with compression-positive selection across
   byte-plane and reversible quaternion-chain entropy-coded candidates;
 - exhaustive Phase 2 exact encoding for deeper strategy comparison;
+- ignored deterministic KV stress matrix covering thousands of generated
+  bfloat16-like, low-rank, sparse, repeated-token, raw-noise,
+  non-finite/signed-zero, delta-bit, and quaternion-chain-friendly KV cases;
 - chunked Phase 2 exact encode/decode round trip across partial chunk
   boundaries;
 - chunked Phase 2 empty-input handling and invalid chunk-size rejection;
@@ -226,6 +240,9 @@ Coverage added:
 - Benchmark timing uses three samples of 200 iterations and reports the best
   sample mean to reduce scheduler-noise sensitivity while keeping local
   validation bounded.
+- Debug builds of `qatq-bench` use a shorter timing loop so `cargo test` cannot
+  hang on expensive exact strategy probes; release benchmark runs keep the
+  documented 200 iterations and 3 timing samples.
 
 Known validation limits:
 

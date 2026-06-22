@@ -52,6 +52,7 @@ cargo run --release --bin qatq-bench -- \
   --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
   --gate-require-external \
   --gate-policy competitive-compression
+cargo test --test kv_stress -- --ignored --nocapture
 ```
 
 After regenerating benchmark outputs, review
@@ -70,6 +71,7 @@ Do not tag a public release if:
 
 - generated public fixtures cannot be regenerated and verified;
 - `cargo test` fails;
+- the deterministic KV stress matrix fails;
 - the public production gate fails;
 - the public competitive compression gate fails;
 - docs claim external runtime data is required for QATQ to operate;

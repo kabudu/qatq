@@ -37,5 +37,12 @@ jobs:
           --max-phase2-decode-ns-per-value 50.00
           --max-phase2-container-ratio 0.97
           --max-phase2-container-decode-ns-per-value 50.00
+      - name: Public competitive compression gate
+        run: >
+          cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic
+          --manifest fixtures/public.manifest
+          --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.ci.md
+          --gate-require-external
+          --gate-policy competitive-compression
       - name: Package
         run: cargo package --allow-dirty
