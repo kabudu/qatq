@@ -10,6 +10,7 @@ the Markdown evidence report.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import time
@@ -20,11 +21,11 @@ from pathlib import Path
 DEFAULT_MODELS = [
     (
         "qwen2.5-1.5b",
-        "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        os.environ.get("QATQ_LLAMA_MODEL_QWEN25_15B", ""),
     ),
     (
         "qwen2.5-coder-3b",
-        "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+        os.environ.get("QATQ_LLAMA_MODEL_QWEN25_CODER_3B", ""),
     ),
 ]
 

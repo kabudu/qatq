@@ -25,14 +25,14 @@ through QATQ.
 git clone https://github.com/ggml-org/llama.cpp.git /tmp/qatq-llama.cpp
 cd /tmp/qatq-llama.cpp
 git checkout 7992aa7c8
-git apply /Users/kabudu/projex/qatq/adapters/llama-cpp/qatq-kv-export-7992aa7c8.patch
+git apply "$QATQ_REPO/adapters/llama-cpp/qatq-kv-export-7992aa7c8.patch"
 cmake -B build-qatq -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build-qatq --target llama-simple -j 6
 ```
 
 ```sh
 /tmp/qatq-llama.cpp/build-qatq/bin/llama-simple \
-  -m /Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf \
+  -m "$QATQ_LLAMA_MODEL_QWEN25_15B" \
   -ngl 0 \
   -n 16 \
   --qatq-kv-export-dir /tmp/qatq-real-kv \

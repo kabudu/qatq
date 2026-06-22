@@ -13,6 +13,7 @@ It does not treat llama.cpp session/state blobs as raw KV tensors.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -22,11 +23,11 @@ from pathlib import Path
 DEFAULT_MODELS = [
     (
         "daily-driver",
-        "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        os.environ.get("QATQ_LLAMA_MODEL_QWEN25_15B", ""),
     ),
     (
         "software-engineering",
-        "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+        os.environ.get("QATQ_LLAMA_MODEL_QWEN25_CODER_3B", ""),
     ),
 ]
 
