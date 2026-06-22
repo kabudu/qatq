@@ -66,6 +66,30 @@ The current QATQ implementation is usable for exact QATQ exact runtime transfer
 experiments, but the broader project is not complete until service adapters,
 release hygiene, and comparative paper baselines are finished.
 
+The initial public release should stay focused on storage and transfer of
+exported KV/tensor bytes: checkpoints, migration artifacts, runtime captures,
+and fixture bundles. QATQ should not claim transparent live GPU VRAM reduction
+for v0.1.
+
+## Experimental Track - Live KV Paging and VRAM Reduction
+
+- [ ] Define a runtime KV page/offload adapter contract.
+- [ ] Choose one paged/offload-capable runtime target for the first experiment.
+- [ ] Compress only cold/inactive KV pages and restore them before attention
+      needs them.
+- [ ] Measure peak VRAM, tokens/sec, first-token latency, and per-token latency
+      against the runtime's native KV cache, FP8/KV quantization, CPU offload,
+      zstd, and lz4.
+- [ ] Prove byte-exact page restore for exact mode and task/output preservation
+      across long-context generation.
+- [ ] Keep the feature behind experimental docs or feature flags until it beats
+      simpler runtime offload strategies under realistic workloads.
+
+This track is deliberately separate from the v0.1 release goal. QATQ can
+already compress exported KV/tensor state for storage and transfer; live VRAM
+reduction requires participation in a runtime's KV allocator or page scheduler,
+not just access to exported tensors.
+
 ## Phase 4 - Open Release
 
 - [x] Prepare public repository hygiene around generated public fixtures.

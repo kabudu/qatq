@@ -10,6 +10,11 @@ and release checklist. External runtime evidence can be attached through
 fixture manifests, but no external project is required to build, test, benchmark,
 or use QATQ.
 
+The initial release target is exact storage and transfer compression for
+exported KV/tensor bytes. Live GPU VRAM reduction is a separate experimental
+roadmap goal that would require runtime KV paging/offload integration and
+latency proof before it becomes a product claim.
+
 ## Status
 
 The current implementation provides:
@@ -80,11 +85,17 @@ QATQ is designed for structured numeric streams:
 - runtime migration packets that can tolerate bounded numeric error or carry a
   residual for exact reconstruction.
 
-It is not a general-purpose byte compressor like zstd or lz4. A QATQ-family
-lossless codec is possible, but only by transmitting enough residual
-information to reconstruct the original values exactly. The practical question
-for this project is whether the QATQ transform makes those residuals smaller
-and faster to transmit for KV/tensor workloads.
+For v0.1, QATQ is about exported-state compression: checkpoints, migration
+payloads, fixture captures, and cold storage for typed tensor bytes. It is not a
+transparent layer between an arbitrary LLM runtime and GPU memory. Live VRAM
+reduction would need a runtime adapter that compresses cold KV pages, restores
+them on demand, and proves lower peak VRAM without unacceptable token-latency or
+behavior regressions.
+
+It is not a general-purpose byte compressor like zstd or lz4. The practical
+question for this project is whether QATQ's tensor-aware exact strategy makes
+KV/tensor payloads smaller and fast enough to transmit for runtime migration and
+storage workloads.
 
 ## CLI
 

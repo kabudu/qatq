@@ -33,3 +33,8 @@ llama.cpp f16 KV-cache captures. On the first real packed all-KV capture, QATQ
 beat zstd and lz4 while preserving exact bytes. That is strong evidence for the
 codec and adapter path, not yet a universal superiority claim across all models,
 prompts, dtypes, and cache layouts.
+
+The production target for the initial release is storage and transfer of
+exported KV/tensor state. Live GPU VRAM reduction remains experimental because
+it requires runtime KV paging/offload hooks, cold-page scheduling, and latency
+proof under generation workloads.
