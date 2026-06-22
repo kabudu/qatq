@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kabudu/qatq/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kabudu/qatq/ci.yml?branch=master&label=ci&style=flat-square"></a>
-  <a href="https://github.com/kabudu/qatq/actions/workflows/coverage-supply-chain.yml"><img alt="Coverage and supply-chain" src="https://img.shields.io/github/actions/workflow/status/kabudu/qatq/coverage-supply-chain.yml?branch=master&label=coverage%20%2F%20supply-chain&style=flat-square"></a>
-  <a href="https://github.com/kabudu/qatq/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/kabudu/qatq/release.yml?branch=master&label=release&style=flat-square"></a>
+  <a href="https://github.com/kabudu/qatq/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/kabudu/qatq/actions/workflows/ci.yml/badge.svg?branch=master"></a>
+  <a href="https://github.com/kabudu/qatq/actions/workflows/coverage-supply-chain.yml"><img alt="Coverage and supply-chain" src="https://github.com/kabudu/qatq/actions/workflows/coverage-supply-chain.yml/badge.svg?branch=master"></a>
+  <a href="https://github.com/kabudu/qatq/actions/workflows/release.yml"><img alt="Release" src="https://github.com/kabudu/qatq/actions/workflows/release.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
   <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
   <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
