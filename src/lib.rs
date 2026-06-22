@@ -3,8 +3,9 @@ use std::fmt;
 const MAGIC: &[u8; 4] = b"QATQ";
 const CONTAINER_MAGIC: &[u8; 4] = b"QATC";
 const VERSION: u8 = 1;
+const CONTAINER_VERSION: u8 = 2;
 const HEADER_LEN: usize = 28;
-const CONTAINER_HEADER_LEN: usize = 24;
+const CONTAINER_V2_HEADER_LEN: usize = 32;
 const CONTAINER_CHUNK_LEN: usize = 4;
 const PHASE1_BODY_MAGIC: &[u8; 4] = b"P1Q4";
 const TURBOQUANT_BODY_MAGIC: &[u8; 4] = b"TQ4R";
@@ -33,6 +34,11 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 const FNV_PRIME_SQUARED: u64 = FNV_PRIME.wrapping_mul(FNV_PRIME);
 const SQRT_PI_OVER_TWO: f32 = 1.253_314_1;
 pub const MAX_VALUES_PER_PAYLOAD: usize = 1 << 26;
+pub const DEFAULT_MAX_QATC_VALUES: usize = 1 << 32;
+pub const DEFAULT_MAX_QATC_CHUNKS: usize = 1 << 20;
+pub const DEFAULT_MAX_QATC_ENCODED_BYTES: usize = usize::MAX;
+pub const DEFAULT_MAX_QATC_CHUNK_BYTES: usize =
+    HEADER_LEN + PHASE2_PREFIX_LEN + (MAX_VALUES_PER_PAYLOAD * 4);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CodecMode {
@@ -83,6 +89,7 @@ pub enum QatqError {
     InvalidResidualStream,
     InvalidChunkSize(usize),
     InvalidContainer,
+    ContainerLimitExceeded(&'static str),
     ChecksumMismatch { expected: u64, actual: u64 },
     ValueCountTooLarge(usize),
 }
@@ -117,6 +124,9 @@ impl fmt::Display for QatqError {
             Self::InvalidResidualStream => write!(f, "phase2 residual stream is invalid"),
             Self::InvalidChunkSize(size) => write!(f, "chunk size is invalid: {size}"),
             Self::InvalidContainer => write!(f, "chunked container is invalid"),
+            Self::ContainerLimitExceeded(limit) => {
+                write!(f, "chunked container exceeds decode limit: {limit}")
+            }
             Self::ChecksumMismatch { expected, actual } => {
                 write!(
                     f,
@@ -129,6 +139,25 @@ impl fmt::Display for QatqError {
 }
 
 impl std::error::Error for QatqError {}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct QatcDecodeLimits {
+    pub max_total_values: usize,
+    pub max_chunks: usize,
+    pub max_encoded_bytes: usize,
+    pub max_chunk_bytes: usize,
+}
+
+impl Default for QatcDecodeLimits {
+    fn default() -> Self {
+        Self {
+            max_total_values: DEFAULT_MAX_QATC_VALUES,
+            max_chunks: DEFAULT_MAX_QATC_CHUNKS,
+            max_encoded_bytes: DEFAULT_MAX_QATC_ENCODED_BYTES,
+            max_chunk_bytes: DEFAULT_MAX_QATC_CHUNK_BYTES,
+        }
+    }
+}
 
 pub fn parse_mode(mode: &str) -> Result<CodecMode, QatqError> {
     match mode.trim().to_ascii_lowercase().as_str() {
@@ -1164,17 +1193,22 @@ pub fn encode_phase2_lossless_container_with_config(
     }
 
     let mut out = Vec::new();
-    write_container_header(&mut out, values.len(), chunk_count);
+    write_container_header(&mut out, values.len(), chunk_count, 0);
+    let mut container_checksum = FNV_OFFSET;
     if values.is_empty() {
         let payload = encode_phase2_lossless_with_config(values, config);
+        container_checksum = container_checksum_chunk(container_checksum, &payload);
         append_container_chunk(&mut out, &payload)?;
+        patch_container_checksum(&mut out, container_checksum)?;
         return Ok(out);
     }
 
     for chunk_values in values.chunks(max_values_per_chunk) {
         let payload = encode_phase2_lossless_with_config(chunk_values, config);
+        container_checksum = container_checksum_chunk(container_checksum, &payload);
         append_container_chunk(&mut out, &payload)?;
     }
+    patch_container_checksum(&mut out, container_checksum)?;
     Ok(out)
 }
 
@@ -1193,12 +1227,26 @@ fn append_container_chunk(out: &mut Vec<u8>, payload: &[u8]) -> Result<(), QatqE
 }
 
 pub fn decode_phase2_lossless_container(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
-    let header = ContainerHeader::parse(payload)?;
-    let mut values = Vec::with_capacity(header.total_values);
-    for_each_phase2_lossless_container_payload(payload, |chunk| {
-        values.extend(decode_phase2_lossless(chunk)?);
-        Ok(())
-    })?;
+    decode_phase2_lossless_container_with_limits(payload, QatcDecodeLimits::default())
+}
+
+pub fn decode_phase2_lossless_container_with_limits(
+    payload: &[u8],
+    limits: QatcDecodeLimits,
+) -> Result<Vec<f32>, QatqError> {
+    let (header, body, chunk_count) = container_body_and_chunk_count(payload, limits)?;
+    let chunks = read_container_chunk_index(body, chunk_count, header.total_values, limits)?;
+    verify_container_checksum(&header, body, &chunks)?;
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(header.total_values)
+        .map_err(|_| QatqError::ContainerLimitExceeded("allocation"))?;
+    for (chunk_start, chunk_end) in chunks {
+        values.extend(decode_phase2_lossless(&body[chunk_start..chunk_end])?);
+    }
+    if values.len() != header.total_values {
+        return Err(QatqError::InvalidContainer);
+    }
     Ok(values)
 }
 
@@ -1206,15 +1254,36 @@ pub fn for_each_phase2_lossless_container_payload(
     payload: &[u8],
     mut visitor: impl FnMut(&[u8]) -> Result<(), QatqError>,
 ) -> Result<(), QatqError> {
-    let (header, body, chunk_count) = container_body_and_chunk_count(payload)?;
-    validate_container_chunk_layout(body, chunk_count, header.total_values)?;
+    for_each_phase2_lossless_container_payload_with_limits(
+        payload,
+        QatcDecodeLimits::default(),
+        |chunk| visitor(chunk),
+    )
+}
+
+pub fn for_each_phase2_lossless_container_payload_with_limits(
+    payload: &[u8],
+    limits: QatcDecodeLimits,
+    mut visitor: impl FnMut(&[u8]) -> Result<(), QatqError>,
+) -> Result<(), QatqError> {
+    let (header, body, chunk_count) = container_body_and_chunk_count(payload, limits)?;
+    let chunks = read_container_chunk_index(body, chunk_count, header.total_values, limits)?;
+    verify_container_checksum(&header, body, &chunks)?;
     for_each_container_chunk_unchecked(body, chunk_count, |chunk| visitor(chunk))
 }
 
 pub fn decode_phase2_lossless_container_payloads(payload: &[u8]) -> Result<Vec<&[u8]>, QatqError> {
-    let (header, body, chunk_count) = container_body_and_chunk_count(payload)?;
+    decode_phase2_lossless_container_payloads_with_limits(payload, QatcDecodeLimits::default())
+}
 
-    let chunks = read_container_chunk_index(body, chunk_count, header.total_values)?;
+pub fn decode_phase2_lossless_container_payloads_with_limits(
+    payload: &[u8],
+    limits: QatcDecodeLimits,
+) -> Result<Vec<&[u8]>, QatqError> {
+    let (header, body, chunk_count) = container_body_and_chunk_count(payload, limits)?;
+
+    let chunks = read_container_chunk_index(body, chunk_count, header.total_values, limits)?;
+    verify_container_checksum(&header, body, &chunks)?;
     Ok(chunks
         .into_iter()
         .map(|(chunk_start, chunk_end)| &body[chunk_start..chunk_end])
@@ -1223,12 +1292,22 @@ pub fn decode_phase2_lossless_container_payloads(payload: &[u8]) -> Result<Vec<&
 
 fn container_body_and_chunk_count(
     payload: &[u8],
+    limits: QatcDecodeLimits,
 ) -> Result<(ContainerHeader, &[u8], usize), QatqError> {
     let header = ContainerHeader::parse(payload)?;
-    let body = &payload[CONTAINER_HEADER_LEN..];
+    if payload.len() > limits.max_encoded_bytes {
+        return Err(QatqError::ContainerLimitExceeded("encoded bytes"));
+    }
+    if header.total_values > limits.max_total_values {
+        return Err(QatqError::ContainerLimitExceeded("total values"));
+    }
+    let body = &payload[header.header_len..];
     let chunk_count = header.chunk_count as usize;
     if chunk_count == 0 {
         return Err(QatqError::InvalidContainer);
+    }
+    if chunk_count > limits.max_chunks {
+        return Err(QatqError::ContainerLimitExceeded("chunks"));
     }
     if chunk_count > body.len() / CONTAINER_CHUNK_LEN {
         return Err(QatqError::InvalidContainer);
@@ -1240,6 +1319,7 @@ fn read_container_chunk_index(
     body: &[u8],
     chunk_count: usize,
     total_values: usize,
+    limits: QatcDecodeLimits,
 ) -> Result<Vec<(usize, usize)>, QatqError> {
     let mut offset = 0_usize;
     let mut chunks = Vec::with_capacity(chunk_count);
@@ -1255,6 +1335,9 @@ fn read_container_chunk_index(
             u32::from_be_bytes(body[offset..len_end].try_into().expect("fixed length")) as usize;
         if chunk_len < HEADER_LEN + PHASE2_PREFIX_LEN {
             return Err(QatqError::InvalidContainer);
+        }
+        if chunk_len > limits.max_chunk_bytes {
+            return Err(QatqError::ContainerLimitExceeded("chunk bytes"));
         }
         let chunk_start = len_end;
         let chunk_end = chunk_start
@@ -1280,50 +1363,6 @@ fn read_container_chunk_index(
         return Err(QatqError::InvalidContainer);
     }
     Ok(chunks)
-}
-
-fn validate_container_chunk_layout(
-    body: &[u8],
-    chunk_count: usize,
-    total_values: usize,
-) -> Result<(), QatqError> {
-    let mut offset = 0_usize;
-    let mut indexed_total = 0_usize;
-    for _ in 0..chunk_count {
-        let len_end = offset
-            .checked_add(CONTAINER_CHUNK_LEN)
-            .ok_or(QatqError::InvalidContainer)?;
-        if len_end > body.len() {
-            return Err(QatqError::InvalidContainer);
-        }
-        let chunk_len =
-            u32::from_be_bytes(body[offset..len_end].try_into().expect("fixed length")) as usize;
-        if chunk_len < HEADER_LEN + PHASE2_PREFIX_LEN {
-            return Err(QatqError::InvalidContainer);
-        }
-        let chunk_start = len_end;
-        let chunk_end = chunk_start
-            .checked_add(chunk_len)
-            .ok_or(QatqError::InvalidContainer)?;
-        if chunk_end > body.len() {
-            return Err(QatqError::InvalidContainer);
-        }
-
-        let chunk_header =
-            Header::parse_for_mode(&body[chunk_start..chunk_end], CodecMode::Phase2Lossless)?;
-        indexed_total = indexed_total
-            .checked_add(chunk_header.value_count)
-            .ok_or(QatqError::InvalidContainer)?;
-        if indexed_total > total_values {
-            return Err(QatqError::InvalidContainer);
-        }
-        offset = chunk_end;
-    }
-
-    if offset != body.len() || indexed_total != total_values {
-        return Err(QatqError::InvalidContainer);
-    }
-    Ok(())
 }
 
 fn for_each_container_chunk_unchecked(
@@ -2895,7 +2934,12 @@ fn write_header(out: &mut Vec<u8>, mode: CodecMode, value_count: usize, scale: f
     out.extend_from_slice(&checksum.to_be_bytes());
 }
 
-fn write_container_header(out: &mut Vec<u8>, total_values: usize, chunk_count: usize) {
+fn write_container_header(
+    out: &mut Vec<u8>,
+    total_values: usize,
+    chunk_count: usize,
+    container_checksum: u64,
+) {
     assert!(
         total_values <= u64::MAX as usize,
         "value count exceeds portable container header"
@@ -2905,12 +2949,21 @@ fn write_container_header(out: &mut Vec<u8>, total_values: usize, chunk_count: u
         "chunk count exceeds container header"
     );
     out.extend_from_slice(CONTAINER_MAGIC);
-    out.push(VERSION);
+    out.push(CONTAINER_VERSION);
     out.push(CodecMode::Phase2Lossless.id());
     out.extend_from_slice(&[0, 0]);
     out.extend_from_slice(&(total_values as u64).to_be_bytes());
     out.extend_from_slice(&(chunk_count as u32).to_be_bytes());
     out.extend_from_slice(&[0, 0, 0, 0]);
+    out.extend_from_slice(&container_checksum.to_be_bytes());
+}
+
+fn patch_container_checksum(out: &mut [u8], container_checksum: u64) -> Result<(), QatqError> {
+    if out.len() < CONTAINER_V2_HEADER_LEN {
+        return Err(QatqError::InvalidContainer);
+    }
+    out[24..32].copy_from_slice(&container_checksum.to_be_bytes());
+    Ok(())
 }
 
 fn checksum_f32_bits(values: &[f32]) -> u64 {
@@ -2946,6 +2999,45 @@ fn checksum_two_high_bytes_update(mut hash: u64, first: u8, second: u8) -> u64 {
     hash.wrapping_mul(FNV_PRIME_SQUARED)
 }
 
+fn container_checksum_chunk(mut hash: u64, payload: &[u8]) -> u64 {
+    for byte in (payload.len() as u32).to_be_bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    for byte in payload {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
+}
+
+fn verify_container_checksum(
+    header: &ContainerHeader,
+    body: &[u8],
+    chunks: &[(usize, usize)],
+) -> Result<(), QatqError> {
+    let expected = header.container_checksum;
+    let mut actual = FNV_OFFSET;
+    for &(chunk_start, chunk_end) in chunks {
+        let len_start = chunk_start
+            .checked_sub(CONTAINER_CHUNK_LEN)
+            .ok_or(QatqError::InvalidContainer)?;
+        let encoded_len = u32::from_be_bytes(
+            body[len_start..chunk_start]
+                .try_into()
+                .expect("fixed length"),
+        ) as usize;
+        if encoded_len != chunk_end - chunk_start {
+            return Err(QatqError::InvalidContainer);
+        }
+        actual = container_checksum_chunk(actual, &body[chunk_start..chunk_end]);
+    }
+    if actual != expected {
+        return Err(QatqError::ChecksumMismatch { expected, actual });
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 struct Header {
     mode: CodecMode,
@@ -2956,23 +3048,25 @@ struct Header {
 
 #[derive(Debug)]
 struct ContainerHeader {
+    header_len: usize,
     total_values: usize,
     chunk_count: u32,
+    container_checksum: u64,
 }
 
 impl ContainerHeader {
     fn parse(payload: &[u8]) -> Result<Self, QatqError> {
-        if payload.len() < CONTAINER_HEADER_LEN {
+        if payload.len() < CONTAINER_V2_HEADER_LEN {
             return Err(QatqError::PayloadTooShort {
                 actual: payload.len(),
-                minimum: CONTAINER_HEADER_LEN,
+                minimum: CONTAINER_V2_HEADER_LEN,
             });
         }
         if &payload[0..4] != CONTAINER_MAGIC {
             return Err(QatqError::InvalidMagic);
         }
         let version = payload[4];
-        if version != VERSION {
+        if version != CONTAINER_VERSION {
             return Err(QatqError::UnsupportedVersion(version));
         }
         let mode = CodecMode::from_id(payload[5])?;
@@ -2989,8 +3083,14 @@ impl ContainerHeader {
         let chunk_count =
             u32::from_be_bytes(payload[16..20].try_into().expect("fixed container header"));
         Ok(Self {
+            header_len: CONTAINER_V2_HEADER_LEN,
             total_values,
             chunk_count,
+            container_checksum: u64::from_be_bytes(
+                payload[24..32]
+                    .try_into()
+                    .expect("fixed container checksum"),
+            ),
         })
     }
 }
@@ -3851,6 +3951,64 @@ mod tests {
     }
 
     #[test]
+    fn phase2_lossless_container_writes_v2_checksum() {
+        let encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+
+        assert_eq!(encoded[4], CONTAINER_VERSION);
+        assert_ne!(&encoded[24..32], &[0_u8; 8]);
+        assert_eq!(
+            decode_phase2_lossless_container(&encoded).unwrap(),
+            [1.0, 2.0, 3.0]
+        );
+    }
+
+    #[test]
+    fn phase2_lossless_container_rejects_v2_checksum_mismatch() {
+        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 2).unwrap();
+        let last = encoded.len() - 1;
+        encoded[last] ^= 0x01;
+
+        assert!(matches!(
+            decode_phase2_lossless_container(&encoded),
+            Err(QatqError::ChecksumMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn phase2_lossless_container_rejects_legacy_v1_header() {
+        let mut encoded = encode_phase2_lossless_container(&[1.0, 2.0], 1).unwrap();
+        encoded[4] = VERSION;
+
+        assert_eq!(
+            decode_phase2_lossless_container(&encoded),
+            Err(QatqError::UnsupportedVersion(VERSION))
+        );
+    }
+
+    #[test]
+    fn phase2_lossless_container_enforces_decode_limits_before_callbacks() {
+        let encoded = encode_phase2_lossless_container(&[1.0, 2.0, 3.0], 1).unwrap();
+        let limits = QatcDecodeLimits {
+            max_total_values: 2,
+            ..QatcDecodeLimits::default()
+        };
+        let mut visited = 0;
+
+        assert_eq!(
+            decode_phase2_lossless_container_with_limits(&encoded, limits),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
+        assert_eq!(
+            for_each_phase2_lossless_container_payload_with_limits(&encoded, limits, |_| {
+                visited += 1;
+                Ok(())
+            }),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
+        assert_eq!(visited, 0);
+    }
+
+    #[test]
     fn phase2_lossless_container_rejects_invalid_chunk_size() {
         assert_eq!(
             encode_phase2_lossless_container(&[1.0], 0),
@@ -3861,7 +4019,7 @@ mod tests {
     #[test]
     fn phase2_lossless_container_rejects_zero_chunk_count() {
         let mut encoded = Vec::new();
-        write_container_header(&mut encoded, 0, 0);
+        write_container_header(&mut encoded, 0, 0, FNV_OFFSET);
 
         assert_eq!(
             decode_phase2_lossless_container(&encoded),
@@ -3922,6 +4080,17 @@ mod tests {
         assert_eq!(
             decode_phase2_lossless_container(&encoded),
             Err(QatqError::InvalidContainer)
+        );
+    }
+
+    #[test]
+    fn phase2_lossless_container_rejects_huge_total_before_allocation() {
+        let mut encoded = encode_phase2_lossless_container(&[1.0], 1).unwrap();
+        encoded[8..16].copy_from_slice(&((DEFAULT_MAX_QATC_VALUES as u64) + 1).to_be_bytes());
+
+        assert_eq!(
+            decode_phase2_lossless_container(&encoded),
+            Err(QatqError::ContainerLimitExceeded("total values"))
         );
     }
 

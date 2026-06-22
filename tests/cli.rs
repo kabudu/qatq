@@ -309,6 +309,8 @@ fn cli_encodes_chunked_phase2_container_and_decodes_exactly() {
 
     let encoded_bytes = fs::read(&encoded).expect("read encoded");
     assert_eq!(&encoded_bytes[0..4], b"QATC");
+    assert_eq!(encoded_bytes[4], 2);
+    assert_ne!(&encoded_bytes[24..32], &[0_u8; 8]);
 
     let decode_status = Command::new(bin)
         .arg("decode")
@@ -394,6 +396,58 @@ fn cli_corrupt_qatc_decode_does_not_overwrite_existing_output() {
     let mut encoded_bytes = fs::read(&encoded).expect("read encoded");
     let last = encoded_bytes.last_mut().expect("encoded bytes");
     *last ^= 0x01;
+    fs::write(&encoded, encoded_bytes).expect("write corrupt encoded");
+
+    let sentinel = b"keep-existing-output";
+    fs::write(&decoded, sentinel).expect("write sentinel output");
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(!decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes, sentinel);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_qatc_checksum_mismatch_does_not_overwrite_existing_output() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-corrupt-qatchash-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+    let values: Vec<f32> = (0..130).map(|index| (index as f32).cos()).collect();
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, &input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode-chunked")
+        .arg("--max-values-per-chunk")
+        .arg("32")
+        .arg(&input)
+        .arg(&encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run encode-chunked");
+    assert!(encode_status.success());
+
+    let mut encoded_bytes = fs::read(&encoded).expect("read encoded");
+    encoded_bytes[31] ^= 0x01;
     fs::write(&encoded, encoded_bytes).expect("write corrupt encoded");
 
     let sentinel = b"keep-existing-output";

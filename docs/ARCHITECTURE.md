@@ -32,43 +32,50 @@ Large Phase 2 tensors can be stored in the sequential `QATC` container. This is
 a file-level wrapper around normal `QATQ` Phase 2 payloads, not a replacement
 for the per-payload codec envelope.
 
-The container header stores:
+The current and only supported container format is `QATC` version `2`.
+
+The version `2` container header stores:
 
 - magic: `QATC`
-- version: `1`
+- version: `2`
 - mode: `phase2-lossless`
 - reserved bytes
 - total decoded f32 value count
 - chunk count
+- aggregate checksum over the ordered chunk length/payload stream
 
 Each chunk stores a big-endian `u32` byte length followed by one complete
 `QATQ` `phase2-lossless` payload. The decoder validates the container header,
 rejects nonzero reserved bytes, rejects truncated chunks, rejects trailing data,
-decodes each embedded Phase 2 payload through the normal checksum path, and
-verifies that the decoded chunk totals match the container total. The top-level
-`decode` function accepts both `QATQ` single payloads and `QATC` containers.
-Container decode first indexes embedded chunk headers and verifies the declared
-total value count, then allocates the output vector once and decodes chunks.
-This avoids repeated growth on valid large files while rejecting bogus totals
-before allocation.
+verifies the version `2` aggregate checksum before visitor callbacks or full
+decode allocation, decodes each embedded Phase 2 payload through the normal
+checksum path, and verifies that the decoded chunk totals match the container
+total. The top-level `decode` function accepts both `QATQ` single payloads and
+`QATC` containers. Container decode first indexes embedded chunk headers,
+verifies the declared total value count, applies configurable resource limits,
+then allocates the output vector once and decodes chunks. This avoids repeated
+growth on valid large files while rejecting bogus totals before allocation.
 
-This container is intentionally sequential. It is suitable for runtime
-handoff artifacts and CLI round trips, but it does not yet provide random-access
-indexes or a long-lived streaming service protocol.
+This container is intentionally sequential. It is suitable for runtime handoff
+artifacts, CLI round trips, and bounded library integrations, but it does not
+provide random-access indexes or a long-lived service protocol.
 
 The CLI writes encoded and decoded artifacts through a temporary file and
 renames it only after the full payload has been produced or decoded
-successfully. For `QATC`, decode writes one embedded chunk at a time, keeping
-peak decoded-output memory bounded to one chunk. For all formats, failed
+successfully. For `QATC`, CLI decode reads and writes one embedded chunk at a
+time, keeping peak container-input and decoded-output memory bounded to one
+chunk. For all formats, failed
 checksum or structural validation leaves any existing output file untouched.
 The benchmark harness uses the same temporary-file replacement behavior for
 benchmark, paper-table, and gate reports.
 
-## Phase 1 Quaternion Path
+## Phase 1 Quaternion Predictor Path
 
-The `phase1-q4` mode is the first training-free QATQ implementation. It is
-implemented as a separate mode so the original seed-baseline `lossy-i4`
-baseline remains stable for comparison.
+The `phase1-q4` mode is a training-free lossy predictor and research comparator.
+It is implemented as a separate mode so the original seed-baseline `lossy-i4`
+baseline remains stable for comparison and so Phase 2 can reuse the predictor
+when exact residual coding makes it worthwhile. It is not the main QATQ product
+surface.
 
 Encoding:
 
@@ -101,7 +108,8 @@ The Phase 1 body stores:
 
 This path is intentionally lossy. The side channel is a QJL-inspired experiment
 for reducing reconstruction error and measuring residual structure. It is not
-the Phase 2 bit-identical residual codec.
+the Phase 2 bit-identical residual codec, and lossless QATQ claims do not apply
+to this mode.
 
 ## Lossless Strategy
 
@@ -115,10 +123,11 @@ track therefore needs a residual:
 4. entropy-code that residual;
 5. verify bit-identical reconstruction.
 
-The `phase2-lossless` mode implements the first QATQ-family exact codec. The
-default encoder is latency-oriented: it accepts compression-positive byte-level
-or byte-plane candidates before probing delta-XOR byte-plane residuals or
-spending CPU on the QATQ predictor. Runtime KV-cache captures exposed a
+The `phase2-lossless` mode is the primary QATQ implementation and the only mode
+that carries lossless QATQ claims. The default encoder is latency-oriented: it
+accepts compression-positive byte-level or byte-plane candidates before probing
+delta-XOR byte-plane residuals or spending CPU on the QATQ predictor. Runtime
+KV-cache captures exposed a
 common exact pattern where the high two f32 byte planes vary and the low two
 byte planes are all zero, so Phase 2 also has a `byte-plane-blocks` strategy
 that stores each byte plane as raw, repeated, or zero. The
@@ -224,7 +233,8 @@ Decoder safety bounds:
   captures. It builds the two raw high-byte planes directly from f32 values and
   fuses checksum calculation, avoiding the full raw-bit staging buffer.
 - QATC container decode rejects zero-chunk containers and pre-validates chunk
-  lengths and declared value counts before allocating the output vector.
+  lengths, declared value counts, configurable decode limits, and version `2`
+  aggregate checksums before allocating the output vector.
 - QATC container payload visiting pre-validates the complete chunk layout before
   invoking callbacks, so malformed later chunks cannot cause partial visitor
   side effects.
@@ -245,8 +255,8 @@ Decoder safety bounds:
 Large real tensors can be split with `encode_phase2_lossless_chunks` and
 reassembled with `decode_phase2_lossless_chunks`, or stored as a single
 sequential file with `encode_phase2_lossless_container`. This is exact across
-chunk boundaries. Random-access metadata and a true streaming container remain
-future runtime-integration work.
+chunk boundaries. Random-access metadata remains future runtime-integration
+work.
 
 ## General Compression Scope
 

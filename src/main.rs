@@ -1,18 +1,23 @@
 use std::{
     env, fs,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
 use qatq::{
-    decode, decode_phase2_lossless, for_each_phase2_lossless_container_payload, parse_mode,
-    try_encode, try_encode_phase1_q4_with_config, try_encode_phase2_lossless_with_config,
-    try_encode_turboquant_q4_with_config, CodecMode, Phase1Config, MAX_VALUES_PER_PAYLOAD,
+    decode, decode_phase2_lossless, parse_mode, try_encode, try_encode_phase1_q4_with_config,
+    try_encode_phase2_lossless_with_config, try_encode_turboquant_q4_with_config, CodecMode,
+    Phase1Config, DEFAULT_MAX_QATC_CHUNKS, DEFAULT_MAX_QATC_CHUNK_BYTES, DEFAULT_MAX_QATC_VALUES,
+    MAX_VALUES_PER_PAYLOAD,
 };
 
 const QATC_MAGIC: &[u8; 4] = b"QATC";
-const QATQ_VERSION: u8 = 1;
+const QATC_VERSION: u8 = 2;
+const QATC_HEADER_LEN: usize = 32;
+const QATC_CHUNK_LEN: usize = 4;
 const PHASE2_LOSSLESS_MODE_ID: u8 = 4;
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 fn main() {
     if let Err(error) = run() {
@@ -125,36 +130,128 @@ fn decode_command(args: &[String]) -> Result<(), String> {
         print_usage();
         return Err("usage: qatq decode <input.qatq> <output.f32le>".to_string());
     }
+    if input_has_qatc_magic(&args[0])? {
+        return decode_qatc_file_to_f32le_atomic(&args[0], &args[1]);
+    }
     let payload =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
-    if payload.starts_with(b"QATC") {
-        return decode_container_to_f32le(&payload, &args[1]);
-    }
     let values = decode(&payload).map_err(|error| error.to_string())?;
     write_f32le_atomic(&args[1], &values)
 }
 
-fn decode_container_to_f32le(payload: &[u8], output_path: impl AsRef<Path>) -> Result<(), String> {
+fn input_has_qatc_magic(input_path: impl AsRef<Path>) -> Result<bool, String> {
+    let input_path = input_path.as_ref();
+    let mut file = fs::File::open(input_path)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    let mut magic = [0_u8; 4];
+    let bytes_read = file
+        .read(&mut magic)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    Ok(bytes_read == 4 && &magic == QATC_MAGIC)
+}
+
+fn decode_qatc_file_to_f32le_atomic(
+    input_path: impl AsRef<Path>,
+    output_path: impl AsRef<Path>,
+) -> Result<(), String> {
+    let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
+    let file = fs::File::open(input_path)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    let mut reader = BufReader::new(file);
     write_atomic_with(output_path, |writer| {
-        let mut write_error = None;
-        let result = for_each_phase2_lossless_container_payload(payload, |chunk| {
-            let values = decode_phase2_lossless(chunk)?;
-            write_f32le_values(writer, &values).map_err(|error| {
-                write_error = Some(format!(
-                    "failed to write {}: {error}",
-                    output_path.display()
-                ));
-                qatq::QatqError::InvalidContainer
-            })?;
-            Ok(())
-        });
-        match (result, write_error) {
-            (Ok(()), _) => Ok(()),
-            (Err(_), Some(error)) => Err(error),
-            (Err(error), None) => Err(error.to_string()),
-        }
+        decode_qatc_reader_to_f32le(&mut reader, writer, input_path, output_path)
     })
+}
+
+fn decode_qatc_reader_to_f32le(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    input_path: &Path,
+    output_path: &Path,
+) -> Result<(), String> {
+    let mut header = [0_u8; QATC_HEADER_LEN];
+    reader
+        .read_exact(&mut header)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    if &header[0..4] != QATC_MAGIC {
+        return Err("payload magic is not QATQ or QATC".to_string());
+    }
+    if header[4] != QATC_VERSION {
+        return Err(format!("unsupported QATQ version {}", header[4]));
+    }
+    if header[5] != PHASE2_LOSSLESS_MODE_ID || header[6..8] != [0, 0] || header[20..24] != [0; 4] {
+        return Err("chunked container is invalid".to_string());
+    }
+    let total_values = usize::try_from(u64::from_be_bytes(
+        header[8..16].try_into().expect("fixed container header"),
+    ))
+    .map_err(|_| format!("value count is too large: {}", usize::MAX))?;
+    let chunk_count =
+        u32::from_be_bytes(header[16..20].try_into().expect("fixed container header")) as usize;
+    let expected_checksum =
+        u64::from_be_bytes(header[24..32].try_into().expect("fixed container checksum"));
+    if total_values > DEFAULT_MAX_QATC_VALUES {
+        return Err("chunked container exceeds decode limit: total values".to_string());
+    }
+    if chunk_count == 0 {
+        return Err("chunked container is invalid".to_string());
+    }
+    if chunk_count > DEFAULT_MAX_QATC_CHUNKS {
+        return Err("chunked container exceeds decode limit: chunks".to_string());
+    }
+
+    let mut decoded_values = 0_usize;
+    let mut container_checksum = FNV_OFFSET;
+    let mut len_buf = [0_u8; QATC_CHUNK_LEN];
+    for _ in 0..chunk_count {
+        reader
+            .read_exact(&mut len_buf)
+            .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+        let chunk_len = u32::from_be_bytes(len_buf) as usize;
+        if chunk_len < 36 {
+            return Err("chunked container is invalid".to_string());
+        }
+        if chunk_len > DEFAULT_MAX_QATC_CHUNK_BYTES {
+            return Err("chunked container exceeds decode limit: chunk bytes".to_string());
+        }
+        let mut chunk = Vec::new();
+        chunk
+            .try_reserve_exact(chunk_len)
+            .map_err(|_| "chunked container exceeds decode limit: allocation".to_string())?;
+        chunk.resize(chunk_len, 0);
+        reader
+            .read_exact(&mut chunk)
+            .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+        container_checksum = qatc_checksum_chunk(container_checksum, &chunk);
+        let values = decode_phase2_lossless(&chunk).map_err(|error| error.to_string())?;
+        decoded_values = decoded_values
+            .checked_add(values.len())
+            .ok_or_else(|| "chunked container is invalid".to_string())?;
+        if decoded_values > total_values {
+            return Err("chunked container is invalid".to_string());
+        }
+        write_f32le_values(writer, &values)
+            .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
+    }
+
+    let mut trailing = [0_u8; 1];
+    if reader
+        .read(&mut trailing)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?
+        != 0
+    {
+        return Err("chunked container is invalid".to_string());
+    }
+    if decoded_values != total_values {
+        return Err("chunked container is invalid".to_string());
+    }
+    if container_checksum != expected_checksum {
+        return Err(format!(
+            "checksum mismatch: expected {expected_checksum:016x}, got {container_checksum:016x}"
+        ));
+    }
+    Ok(())
 }
 
 fn fixture_command(args: &[String]) -> Result<(), String> {
@@ -808,28 +905,31 @@ fn encode_f32le_file_to_qatc_atomic(
     })?;
     bytes.resize(chunk_byte_len, 0);
     write_atomic_with(output_path, |writer| {
-        write_qatc_header(writer, value_count, chunk_count)
+        write_qatc_header(writer, value_count, chunk_count, 0)
             .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
+        let mut container_checksum = FNV_OFFSET;
         if value_count == 0 {
             let payload = try_encode_phase2_lossless_with_config(&[], config)
                 .map_err(|error| error.to_string())?;
+            container_checksum = qatc_checksum_chunk(container_checksum, &payload);
             write_qatc_chunk(writer, &payload, output_path)?;
-            return Ok(());
+        } else {
+            let mut remaining_values = value_count;
+            while remaining_values > 0 {
+                let chunk_values = remaining_values.min(max_values_per_chunk);
+                let chunk_bytes = chunk_values * 4;
+                reader
+                    .read_exact(&mut bytes[..chunk_bytes])
+                    .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+                let values = decode_f32le_chunk(&bytes[..chunk_bytes]);
+                let payload = try_encode_phase2_lossless_with_config(&values, config)
+                    .map_err(|error| error.to_string())?;
+                container_checksum = qatc_checksum_chunk(container_checksum, &payload);
+                write_qatc_chunk(writer, &payload, output_path)?;
+                remaining_values -= chunk_values;
+            }
         }
-
-        let mut remaining_values = value_count;
-        while remaining_values > 0 {
-            let chunk_values = remaining_values.min(max_values_per_chunk);
-            let chunk_bytes = chunk_values * 4;
-            reader
-                .read_exact(&mut bytes[..chunk_bytes])
-                .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-            let values = decode_f32le_chunk(&bytes[..chunk_bytes]);
-            let payload = try_encode_phase2_lossless_with_config(&values, config)
-                .map_err(|error| error.to_string())?;
-            write_qatc_chunk(writer, &payload, output_path)?;
-            remaining_values -= chunk_values;
-        }
+        patch_qatc_checksum(writer, container_checksum, output_path)?;
         Ok(())
     })
 }
@@ -846,13 +946,40 @@ fn write_qatc_header(
     writer: &mut impl Write,
     total_values: usize,
     chunk_count: usize,
+    container_checksum: u64,
 ) -> std::io::Result<()> {
     writer.write_all(QATC_MAGIC)?;
-    writer.write_all(&[QATQ_VERSION, PHASE2_LOSSLESS_MODE_ID, 0, 0])?;
+    writer.write_all(&[QATC_VERSION, PHASE2_LOSSLESS_MODE_ID, 0, 0])?;
     writer.write_all(&(total_values as u64).to_be_bytes())?;
     writer.write_all(&(chunk_count as u32).to_be_bytes())?;
     writer.write_all(&[0, 0, 0, 0])?;
+    writer.write_all(&container_checksum.to_be_bytes())?;
     Ok(())
+}
+
+fn patch_qatc_checksum(
+    writer: &mut BufWriter<fs::File>,
+    container_checksum: u64,
+    output_path: &Path,
+) -> Result<(), String> {
+    writer
+        .flush()
+        .and_then(|_| writer.seek(SeekFrom::Start(24)).map(|_| ()))
+        .and_then(|_| writer.write_all(&container_checksum.to_be_bytes()))
+        .and_then(|_| writer.seek(SeekFrom::End(0)).map(|_| ()))
+        .map_err(|error| format!("failed to finalize {}: {error}", output_path.display()))
+}
+
+fn qatc_checksum_chunk(mut hash: u64, payload: &[u8]) -> u64 {
+    for byte in (payload.len() as u32).to_be_bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    for byte in payload {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
 }
 
 fn write_qatc_chunk(

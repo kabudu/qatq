@@ -8,7 +8,7 @@
 - [x] Add exact f32 envelope mode for bit-identical control tests.
 - [x] Document that int4 QATQ is lossy and not the full paper implementation.
 
-## Phase 1 - Paper-Faithful Training-Free QATQ
+## Phase 1 - Lossy Predictor And Comparator Research
 
 - [x] Implement quaternion grouping and Hamilton product rotation.
 - [x] Add deterministic rotation seed/configuration handling.
@@ -18,29 +18,33 @@
 - [x] Benchmark against raw, zstd, lz4, FP8, base TurboQuant-style q4, and the
       seed lossy int4 baseline.
 
-Phase 1 is implemented as the `phase1-q4` mode. The QJL/residual side channel is
-currently a compact global residual-magnitude plus per-coordinate sign-bit
-experiment. It is useful for measurement but does not claim lossless
-reconstruction.
+Phase 1 is implemented as the `phase1-q4` mode. It is retained as a lossy
+predictor and measurement path, not as the main QATQ product surface. The
+QJL/residual side channel is currently a compact global residual-magnitude plus
+per-coordinate sign-bit experiment. It is useful for measurement but does not
+claim lossless reconstruction.
 
-The `turboquant-q4` mode is the current base reference path: deterministic
+The `turboquant-q4` mode is a local base reference path: deterministic
 data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual
 signs for query-side inner-product estimation using a structured signed-Hadamard
-projection. It is included so the quaternion overlay can be measured against a
-non-quaternion baseline.
+projection. It is included so QATQ can measure against a non-quaternion lossy
+baseline. It is not an official Google implementation and is not the default
+QATQ foundation.
 
-## Phase 2 - Lossless QATQ-Family Mode
+## Phase 2 - Primary QATQ Exact Mode
 
 - [x] Define exact reconstruction semantics.
 - [x] Implement residual generation from QATQ reconstruction.
 - [x] Entropy-code residuals and compare against the exact f32 envelope.
 - [x] Add tests for bit-identical f32 reconstruction.
 
-Phase 2 is implemented as `phase2-lossless`. It adaptively stores raw f32 bits,
-byte-RLE, byte-plane RLE, adjacent-bit delta-XOR byte-plane residuals, or the
-Phase 1 predictor plus run-coded XOR residuals and verifies final reconstruction
-with the payload checksum. zstd/lz4 comparison rows are included in all-codec
-benchmark reports as general-purpose byte-compression baselines over raw f32le.
+Phase 2 is implemented as `phase2-lossless` and is the primary QATQ
+implementation. It adaptively stores raw f32 bits, byte-RLE, byte-plane RLE,
+adjacent-bit delta-XOR byte-plane residuals, or the Phase 1 predictor plus
+run-coded XOR residuals and verifies final reconstruction with the payload
+checksum. Lossless QATQ claims are scoped to Phase 2 and its `QATC` container.
+zstd/lz4 comparison rows are included in all-codec benchmark reports as
+general-purpose byte-compression baselines over raw f32le.
 
 ## Phase 3 - Runtime and Service Integration
 
@@ -64,6 +68,8 @@ release hygiene, and comparative paper baselines are finished.
 
 - [x] Prepare public repository hygiene around generated public fixtures.
 - [x] Add CI and fuzzing scaffold.
+- [x] Add scheduled longer fuzzing for decoder and Phase 2 round-trip targets.
+- [x] Add a public end-to-end retrieval task-quality experiment.
 - [ ] Add coverage and supply-chain checks.
 - [ ] Publish to crates.io when the API is stable.
 - [ ] Cut GitHub Releases with binaries once the CLI is useful standalone.

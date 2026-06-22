@@ -25,19 +25,23 @@ Important current-state notes:
 
 - The seed `lossy-i4` path is a retained baseline, not the full
   Quaternion-Augmented TurboQuant design.
-- The `phase1-q4` path now implements quaternion grouping, deterministic
+- The `phase1-q4` path implements quaternion grouping, deterministic
   Hamilton-product rotation, scalar q4 quantization, and a compact residual-sign
-  side channel.
+  side channel. It is a lossy predictor/comparator path, not the product path.
 - The seed `lossless-f32` path is an exact control envelope, not compression.
-- The `phase2-lossless` path is the current exact QATQ-family codec. It stores
+- The `phase2-lossless` path is the primary exact QATQ codec. It stores
   raw bits, byte-RLE, byte-plane RLE, byte-plane blocks, delta-XOR byte-plane
   RLE, or Phase 1 prediction plus run-coded XOR residuals and verifies
-  bit-identical reconstruction.
+  bit-identical reconstruction. Lossless QATQ claims are scoped to this path
+  and the `QATC` container.
 - Production callers should use `try_encode_phase2_lossless_decision_with_config`.
   `Compressed` means store/transmit a QATQ Phase 2 payload. `PassThroughRaw`
   means store/transmit raw f32le bytes and record QATQ pass-through metadata.
 - QATQ now has generated public fixtures under `fixtures/generated/` with
   `fixtures/public.manifest` as the default public corpus.
+- QATQ now has a deterministic public retrieval task-quality report at
+  `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`; it verifies Phase 2 task parity
+  on public fixtures and keeps lossy comparators separate.
 - The `QATC` container wraps multiple Phase 2 payloads for sequential large
   tensor files. Random-access metadata and service-level streaming remain
   future work.

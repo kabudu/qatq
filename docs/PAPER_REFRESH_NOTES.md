@@ -13,6 +13,7 @@ Current source files:
 - Public paper table inputs: `docs/PUBLIC_PAPER_TABLES.md`
 - Public comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`
 - Public quality-proxy experiments: `docs/PUBLIC_QUALITY_EXPERIMENTS.md`
+- Public task-quality experiments: `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`
 - Public production KV gate: `docs/PUBLIC_BENCHMARK_GATE.md`
 - Optional external validation: independently supplied runtime fixture
   manifests and result summaries
@@ -28,6 +29,9 @@ The following claims are supported by the current QATQ repository evidence:
 - Compression-negative generated float32/stress fixtures are correctly passed
   through rather than being counted as failed compression.
 - The public production KV throughput gate passes on the generated corpus.
+- QATQ Phase 2 preserves deterministic top-1 retrieval decisions on the public
+  task-quality experiment because it reconstructs the finite fixture records
+  exactly.
 - `turboquant-q4` and `phase1-q4` now have deterministic codec-level
   inner-product preservation probes over the generated public corpus.
 
@@ -35,6 +39,7 @@ The following claims are not yet supported and should not appear as conclusions:
 
 - QATQ is universally superior to all TurboQuant variants.
 - QATQ improves model quality or perplexity for lossy inference workloads.
+- QATQ's public retrieval proxy is a substitute for real model/task evaluation.
 - QATQ beats zstd, lz4, hardware FP8, or production runtime-specific codecs.
 - The current `QATC` container is a random-access or streaming service format.
 
@@ -82,14 +87,17 @@ described as a random-access service container.
 
 ## Table Plan
 
-Use `docs/PUBLIC_PAPER_TABLES.md` and `docs/PUBLIC_QUALITY_EXPERIMENTS.md` as
-raw table sources and derive five compact tables for the refreshed paper:
+Use `docs/PUBLIC_PAPER_TABLES.md`, `docs/PUBLIC_QUALITY_EXPERIMENTS.md`, and
+`docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md` as raw table sources and derive compact
+tables for the refreshed paper:
 
 - fixture inventory by generated pattern and dtype;
 - raw/fp8/lossy/phase1/phase2 comparative baseline rows;
 - phase-2 compressed versus pass-through decision counts;
 - lossless size ratio and decode throughput for compressed real KV tensors;
 - TurboQuant QJL versus quaternion-overlay inner-product proxy error;
+- Phase 2 exact retrieval-task agreement, with lossy comparators clearly
+  separated;
 - optional external runtime evidence for compressed and pass-through paths.
 
 Keep the full 50-row benchmark table in the companion white-paper or appendix

@@ -36,6 +36,7 @@ cargo run --release --bin qatq-bench -- \
   --output docs/PUBLIC_BENCHMARKS.md \
   --paper-output docs/PUBLIC_PAPER_TABLES.md \
   --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
+  --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md \
   --manifest fixtures/public.manifest
 ```
 

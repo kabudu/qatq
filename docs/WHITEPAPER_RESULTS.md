@@ -22,6 +22,7 @@ comparative baselines remain open.
 - Production gate: `docs/PUBLIC_BENCHMARK_GATE.md`.
 - Comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`.
 - Quality-proxy experiments: `docs/PUBLIC_QUALITY_EXPERIMENTS.md`.
+- Task-quality experiments: `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`.
 - Optional external validation: independently supplied runtime fixture
   manifests and result summaries.
 
@@ -72,11 +73,14 @@ than dense projection loops. These rows are now suitable as runtime-comparator
 measurements, while still remaining a QATQ reference implementation rather than
 official Google code.
 
-`docs/PUBLIC_QUALITY_EXPERIMENTS.md` adds the first paper-facing quality proxy:
-four deterministic finite inner-product probes per public fixture. It compares
-the `turboquant-q4` QJL estimator with the `phase1-q4` decoded-vector inner
-product. This supports discussion of codec-level dot-product preservation, but
-it still does not establish model-quality or perplexity superiority.
+`docs/PUBLIC_QUALITY_EXPERIMENTS.md` records codec-level inner-product probes
+for the lossy reference paths. `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md` adds a
+small end-to-end retrieval proxy: finite fixture values are grouped into
+16-value records, deterministic records are used as queries, and decoded codec
+corpora are checked for top-1 retrieval agreement with the original f32 corpus.
+Phase 2 exact transport is expected to preserve those decisions; lossy
+`turboquant-q4` and `phase1-q4` rows are comparator context only. These reports
+still do not establish model-quality or perplexity superiority.
 
 ## Gate Policy
 
@@ -107,9 +111,10 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
 ## Remaining Work Before A Public Claim
 
 - Compare against runtime-native quantization baselines.
-- Add end-to-end model/task quality experiments before making quality claims
-  against Google's TurboQuant paper.
-- Add model-quality or task-quality evaluation for lossy Phase 1.
+- Add real model/task quality experiments before making quality claims against
+  Google's TurboQuant paper.
+- Add model-quality evaluation for lossy Phase 1 if that path remains in the
+  paper narrative.
 - Expand fuzzing duration in CI and add coverage/supply-chain checks.
 - Define a random-access or streaming container/service format if runtime
   paging is required.

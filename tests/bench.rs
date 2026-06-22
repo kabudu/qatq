@@ -52,7 +52,12 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
     let quality_output = dir.join(format!("{stem}.quality.md"));
-    let values = [0.125_f32, -0.25, 0.5, -1.0, 2.0, -4.0, 0.75, 1.25];
+    let task_quality_output = dir.join(format!("{stem}.task-quality.md"));
+    let values = [
+        0.125_f32, -0.25, 0.5, -1.0, 2.0, -4.0, 0.75, 1.25, 0.375, -0.625, 1.5, -2.5, 3.0, -3.25,
+        0.875, -1.125, -0.125, 0.25, -0.5, 1.0, -2.0, 4.0, -0.75, -1.25, -0.375, 0.625, -1.5, 2.5,
+        -3.0, 3.25, -0.875, 1.125,
+    ];
     let mut input_bytes = Vec::new();
     for value in values {
         input_bytes.extend_from_slice(&value.to_le_bytes());
@@ -75,6 +80,8 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
         .arg(&paper_output)
         .arg("--quality-output")
         .arg(&quality_output)
+        .arg("--task-quality-output")
+        .arg(&task_quality_output)
         .arg("--no-synthetic")
         .arg("--manifest")
         .arg(&manifest)
@@ -100,11 +107,19 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
     assert!(quality.contains("Inner-Product Error Summary"));
     assert!(quality.contains("runtime-kv"));
 
+    let task_quality = fs::read_to_string(&task_quality_output).expect("read task report");
+    assert!(task_quality.contains("# QATQ Task Quality Experiments"));
+    assert!(task_quality.contains("Retrieval Top-1 Agreement"));
+    assert!(task_quality.contains("phase2-lossless"));
+    assert!(task_quality.contains("100.00%"));
+    assert!(task_quality.contains("runtime-kv"));
+
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(manifest);
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
     let _ = fs::remove_file(quality_output);
+    let _ = fs::remove_file(task_quality_output);
 }
 
 #[test]
@@ -115,14 +130,17 @@ fn benchmark_failed_input_does_not_overwrite_existing_reports() {
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
     let quality_output = dir.join(format!("{stem}.quality.md"));
+    let task_quality_output = dir.join(format!("{stem}.task-quality.md"));
     let gate = dir.join(format!("{stem}.gate.md"));
     let output_sentinel = b"keep-existing-benchmark-report";
     let paper_sentinel = b"keep-existing-paper-report";
     let quality_sentinel = b"keep-existing-quality-report";
+    let task_quality_sentinel = b"keep-existing-task-quality-report";
     let gate_sentinel = b"keep-existing-gate-report";
     fs::write(&output, output_sentinel).expect("write output sentinel");
     fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
     fs::write(&quality_output, quality_sentinel).expect("write quality sentinel");
+    fs::write(&task_quality_output, task_quality_sentinel).expect("write task quality sentinel");
     fs::write(&gate, gate_sentinel).expect("write gate sentinel");
 
     let bin = env!("CARGO_BIN_EXE_qatq-bench");
@@ -133,6 +151,8 @@ fn benchmark_failed_input_does_not_overwrite_existing_reports() {
         .arg(&paper_output)
         .arg("--quality-output")
         .arg(&quality_output)
+        .arg("--task-quality-output")
+        .arg(&task_quality_output)
         .arg("--gate-output")
         .arg(&gate)
         .arg("--no-synthetic")
@@ -153,11 +173,16 @@ fn benchmark_failed_input_does_not_overwrite_existing_reports() {
         fs::read(&quality_output).expect("read quality output"),
         quality_sentinel
     );
+    assert_eq!(
+        fs::read(&task_quality_output).expect("read task quality output"),
+        task_quality_sentinel
+    );
     assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
 
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
     let _ = fs::remove_file(quality_output);
+    let _ = fs::remove_file(task_quality_output);
     let _ = fs::remove_file(gate);
 }
 
@@ -169,15 +194,18 @@ fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
     let quality_output = dir.join(format!("{stem}.quality.md"));
+    let task_quality_output = dir.join(format!("{stem}.task-quality.md"));
     let gate = dir.join(format!("{stem}.gate.md"));
     fs::write(&input, [1_u8, 2, 3]).expect("write malformed input");
     let output_sentinel = b"keep-existing-benchmark-report";
     let paper_sentinel = b"keep-existing-paper-report";
     let quality_sentinel = b"keep-existing-quality-report";
+    let task_quality_sentinel = b"keep-existing-task-quality-report";
     let gate_sentinel = b"keep-existing-gate-report";
     fs::write(&output, output_sentinel).expect("write output sentinel");
     fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
     fs::write(&quality_output, quality_sentinel).expect("write quality sentinel");
+    fs::write(&task_quality_output, task_quality_sentinel).expect("write task quality sentinel");
     fs::write(&gate, gate_sentinel).expect("write gate sentinel");
 
     let bin = env!("CARGO_BIN_EXE_qatq-bench");
@@ -188,6 +216,8 @@ fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
         .arg(&paper_output)
         .arg("--quality-output")
         .arg(&quality_output)
+        .arg("--task-quality-output")
+        .arg(&task_quality_output)
         .arg("--gate-output")
         .arg(&gate)
         .arg("--no-synthetic")
@@ -208,12 +238,17 @@ fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
         fs::read(&quality_output).expect("read quality output"),
         quality_sentinel
     );
+    assert_eq!(
+        fs::read(&task_quality_output).expect("read task quality output"),
+        task_quality_sentinel
+    );
     assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
 
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
     let _ = fs::remove_file(quality_output);
+    let _ = fs::remove_file(task_quality_output);
     let _ = fs::remove_file(gate);
 }
 

@@ -1,0 +1,26 @@
+name: fuzz
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: scheduled fuzz
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - decode_payload
+          - phase2_roundtrip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Build fuzz target
+        run: cargo fuzz build ${{ matrix.target }}
+      - name: Run fuzz target
+        run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=900 -timeout=30

@@ -51,17 +51,21 @@ fn run() -> Result<(), String> {
     let should_benchmark = options.output.is_some()
         || options.paper_output.is_some()
         || options.gate_output.is_some()
-        || options.quality_output.is_none();
+        || (options.quality_output.is_none() && options.task_quality_output.is_none());
     let mut benchmarked = Vec::with_capacity(if should_benchmark {
         dataset_specs.len()
     } else {
         0
     });
     let mut quality = Vec::new();
+    let mut task_quality = Vec::new();
     for dataset_spec in dataset_specs {
         let dataset = load_dataset(dataset_spec)?;
         if options.quality_output.is_some() {
             quality.push(quality_dataset(&dataset)?);
+        }
+        if options.task_quality_output.is_some() {
+            task_quality.push(task_quality_dataset(&dataset)?);
         }
         if should_benchmark {
             let summary = dataset.summary();
@@ -80,6 +84,9 @@ fn run() -> Result<(), String> {
     }
     if let Some(path) = options.quality_output.as_ref() {
         write_text_atomic(path, &render_quality_summary(&quality))?;
+    }
+    if let Some(path) = options.task_quality_output.as_ref() {
+        write_text_atomic(path, &render_task_quality_summary(&task_quality))?;
     }
     if let Some(path) = options.gate_output.as_ref() {
         let gate = evaluate_gate(&benchmarked, &options);
@@ -102,6 +109,7 @@ fn parse_options() -> Result<BenchOptions, String> {
     let mut output = None;
     let mut paper_output = None;
     let mut quality_output = None;
+    let mut task_quality_output = None;
     let mut gate_output = None;
     let mut gate_require_external = false;
     let mut gate_policy = GatePolicy::Custom;
@@ -139,6 +147,13 @@ fn parse_options() -> Result<BenchOptions, String> {
                     .get(index)
                     .ok_or_else(|| "--quality-output requires a path".to_string())?;
                 quality_output = Some(PathBuf::from(path));
+            }
+            "--task-quality-output" => {
+                index += 1;
+                let path = args
+                    .get(index)
+                    .ok_or_else(|| "--task-quality-output requires a path".to_string())?;
+                task_quality_output = Some(PathBuf::from(path));
             }
             "--gate-output" => {
                 index += 1;
@@ -225,6 +240,7 @@ fn parse_options() -> Result<BenchOptions, String> {
         output,
         paper_output,
         quality_output,
+        task_quality_output,
         gate_output,
         gate_require_external,
         gate_policy,
@@ -273,13 +289,14 @@ fn parse_fixture_input(spec: &str) -> Result<FixtureInput, String> {
 }
 
 fn usage() -> String {
-    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--quality-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
+    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--quality-output <path>] [--task-quality-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
 }
 
 struct BenchOptions {
     output: Option<PathBuf>,
     paper_output: Option<PathBuf>,
     quality_output: Option<PathBuf>,
+    task_quality_output: Option<PathBuf>,
     gate_output: Option<PathBuf>,
     gate_require_external: bool,
     gate_policy: GatePolicy,
@@ -702,6 +719,26 @@ struct QualityDataset {
     phase1_decoded: QualityMetrics,
 }
 
+struct TaskQualityDataset {
+    group: String,
+    name: String,
+    value_count: usize,
+    non_finite_masked: usize,
+    record_dim: usize,
+    record_count: usize,
+    query_count: usize,
+    rows: Vec<TaskQualityRow>,
+}
+
+struct TaskQualityRow {
+    codec: &'static str,
+    ratio: f64,
+    top1_matches: usize,
+    exact_queries: usize,
+    mean_score_delta: f64,
+    max_score_delta: f64,
+}
+
 #[derive(Clone, Copy)]
 struct QualityMetrics {
     mean_abs_error: f64,
@@ -748,6 +785,164 @@ fn quality_dataset(dataset: &Dataset) -> Result<QualityDataset, String> {
         turboquant_qjl: quality_metrics(&turboquant_errors),
         phase1_decoded: quality_metrics(&phase1_errors),
     })
+}
+
+fn task_quality_dataset(dataset: &Dataset) -> Result<TaskQualityDataset, String> {
+    const RECORD_DIM: usize = 16;
+    let mut finite_values = Vec::with_capacity(dataset.values.len());
+    let mut non_finite_masked = 0_usize;
+    for value in &dataset.values {
+        if value.is_finite() {
+            finite_values.push(*value);
+        } else {
+            finite_values.push(0.0);
+            non_finite_masked += 1;
+        }
+    }
+    let record_count = finite_values.len() / RECORD_DIM;
+    let task_values = &finite_values[..record_count * RECORD_DIM];
+    let query_indices = task_query_indices(record_count);
+
+    let phase2_encoded = encode_phase2_lossless(task_values);
+    let phase2_decoded = decode(&phase2_encoded).map_err(|error| error.to_string())?;
+    let turboquant_encoded = encode_turboquant_q4(task_values);
+    let turboquant_decoded =
+        decode_turboquant_q4(&turboquant_encoded).map_err(|error| error.to_string())?;
+    let phase1_encoded = encode_phase1_q4(task_values);
+    let phase1_decoded = decode_phase1_q4(&phase1_encoded).map_err(|error| error.to_string())?;
+
+    let rows = vec![
+        task_quality_row(
+            "phase2-lossless",
+            compression_ratio(phase2_encoded.len(), task_values.len()),
+            task_values,
+            &phase2_decoded,
+            RECORD_DIM,
+            &query_indices,
+        ),
+        task_quality_row(
+            "turboquant-q4",
+            compression_ratio(turboquant_encoded.len(), task_values.len()),
+            task_values,
+            &turboquant_decoded,
+            RECORD_DIM,
+            &query_indices,
+        ),
+        task_quality_row(
+            "phase1-q4",
+            compression_ratio(phase1_encoded.len(), task_values.len()),
+            task_values,
+            &phase1_decoded,
+            RECORD_DIM,
+            &query_indices,
+        ),
+    ];
+
+    Ok(TaskQualityDataset {
+        group: dataset.group.clone(),
+        name: dataset.name.clone(),
+        value_count: dataset.values.len(),
+        non_finite_masked,
+        record_dim: RECORD_DIM,
+        record_count,
+        query_count: query_indices.len(),
+        rows,
+    })
+}
+
+fn task_query_indices(record_count: usize) -> Vec<usize> {
+    if record_count == 0 {
+        return Vec::new();
+    }
+    let candidates = [
+        0,
+        1.min(record_count - 1),
+        record_count / 4,
+        record_count / 2,
+        (record_count * 3) / 4,
+        record_count.saturating_sub(2),
+        record_count - 1,
+    ];
+    let mut indices = Vec::new();
+    for candidate in candidates {
+        if !indices.contains(&candidate) {
+            indices.push(candidate);
+        }
+    }
+    indices
+}
+
+fn task_quality_row(
+    codec: &'static str,
+    ratio: f64,
+    original: &[f32],
+    decoded: &[f32],
+    record_dim: usize,
+    query_indices: &[usize],
+) -> TaskQualityRow {
+    let mut top1_matches = 0_usize;
+    let mut score_delta_sum = 0.0_f64;
+    let mut max_score_delta = 0.0_f64;
+    for &query_index in query_indices {
+        let query = record_slice(original, record_dim, query_index);
+        let (exact_index, exact_score) = top1_record(original, record_dim, query);
+        let (decoded_index, decoded_score) = top1_record(decoded, record_dim, query);
+        if exact_index == decoded_index {
+            top1_matches += 1;
+        }
+        let score_delta = (decoded_score - exact_score).abs();
+        score_delta_sum += score_delta;
+        max_score_delta = max_score_delta.max(score_delta);
+    }
+
+    TaskQualityRow {
+        codec,
+        ratio,
+        top1_matches,
+        exact_queries: query_indices.len(),
+        mean_score_delta: if query_indices.is_empty() {
+            0.0
+        } else {
+            score_delta_sum / query_indices.len() as f64
+        },
+        max_score_delta,
+    }
+}
+
+fn record_slice(values: &[f32], record_dim: usize, index: usize) -> &[f32] {
+    let start = index * record_dim;
+    &values[start..start + record_dim]
+}
+
+fn top1_record(values: &[f32], record_dim: usize, query: &[f32]) -> (usize, f64) {
+    let mut best_index = 0_usize;
+    let mut best_score = f64::NEG_INFINITY;
+    for (index, record) in values.chunks_exact(record_dim).enumerate() {
+        let score = cosine_similarity(record, query);
+        if score > best_score {
+            best_score = score;
+            best_index = index;
+        }
+    }
+    (best_index, best_score)
+}
+
+fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
+    let mut dot = 0.0_f64;
+    let mut left_norm = 0.0_f64;
+    let mut right_norm = 0.0_f64;
+    for (left, right) in left.iter().zip(right) {
+        let left = *left as f64;
+        let right = *right as f64;
+        dot += left * right;
+        left_norm += left * left;
+        right_norm += right * right;
+    }
+    if left_norm == 0.0 || right_norm == 0.0 {
+        0.0
+    } else {
+        dot / (left_norm.sqrt() * right_norm.sqrt())
+    }
 }
 
 fn quality_query_probes(values: &[f32]) -> Vec<Vec<f32>> {
@@ -1322,7 +1517,7 @@ fn decode_ns_per_value(decode_us: f64, value_count: usize) -> f64 {
 
 fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> String {
     let mut report = String::new();
-    report.push_str("# Phase 1 Benchmarks\n\n");
+    report.push_str("# QATQ Codec Benchmarks\n\n");
     report.push_str(
         "Generated by `cargo run --release --bin qatq-bench -- --output docs/BENCHMARKS.md`.\n\n",
     );
@@ -1391,12 +1586,12 @@ fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOp
     report.push_str("- `zstd-raw-f32le` and `lz4-raw-f32le` are general-purpose byte-compression baselines over the raw little-endian f32 payload.\n");
     report.push_str("- `fp8-e4m3` is a local finite-value software baseline used for directional comparison until hardware/runtime FP8 paths are added.\n");
     report.push_str("- `lossy-i4` is the original seed baseline.\n");
-    report.push_str("- `turboquant-q4` is QATQ's reference base TurboQuant-style q4 path: deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual signs for inner-product estimation, without the quaternion overlay.\n");
-    report.push_str("- `phase1-q4` is the new training-free quaternion rotation plus scalar q4 quantization path with a compact 1-bit residual-sign side channel.\n");
-    report.push_str("- `phase2-lossless` is the default fast exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.\n");
+    report.push_str("- `turboquant-q4` is QATQ's local reference TurboQuant-style q4 comparator: deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual signs for inner-product estimation, without the quaternion overlay. It is not an official Google implementation.\n");
+    report.push_str("- `phase1-q4` is a lossy training-free quaternion predictor/comparator path with a compact 1-bit residual-sign side channel.\n");
+    report.push_str("- `phase2-lossless` is the primary QATQ exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.\n");
     report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
     report.push_str("- `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.\n");
-    report.push_str("- Phase 1 is still lossy. The residual side channel is an experiment for lowering reconstruction error, not a bit-identical lossless design.\n");
+    report.push_str("- Lossless QATQ claims are scoped to `phase2-lossless` and `phase2-lossless-container`; Phase 1 and TurboQuant-style rows are lossy comparator context.\n");
     report.push_str("- Runtime KV-cache results should be added as external fixtures and kept separate from synthetic rows in paper tables.\n");
     report.push_str("- External fixture values are loaded and benchmarked one dataset at a time; reports keep only metadata and result rows so multiple large captures do not remain resident together.\n");
     report
@@ -1466,6 +1661,59 @@ fn render_quality_summary(quality: &[QualityDataset]) -> String {
     out.push_str(
         "- Pair this with real model/task evaluation before making quality-superiority claims.\n",
     );
+    out
+}
+
+fn render_task_quality_summary(task_quality: &[TaskQualityDataset]) -> String {
+    let mut out = String::new();
+    out.push_str("# QATQ Task Quality Experiments\n\n");
+    out.push_str("Generated by `qatq-bench --task-quality-output`. This report runs a deterministic offline retrieval task over the selected fixture corpus: raw f32 values are grouped into 16-value records, several records are used as queries, and each codec is evaluated by whether top-1 cosine retrieval matches the original f32 corpus.\n\n");
+    out.push_str("This is an end-to-end task proxy, not a language-model perplexity or downstream benchmark. It is included to verify that Phase 2 exact transport preserves task decisions and to keep lossy reference paths visibly separate from QATQ's exact product surface.\n\n");
+
+    out.push_str("## Method\n\n");
+    out.push_str("- Non-finite source values are masked to zero for this task proxy so exactness stress fixtures can be ranked with cosine similarity.\n");
+    out.push_str("- Query records are selected deterministically from the start, quartiles, midpoint, and end of each fixture.\n");
+    out.push_str("- `phase2-lossless` is expected to preserve top-1 decisions exactly because it reconstructs the original f32 bits for finite values.\n");
+    out.push_str("- `turboquant-q4` and `phase1-q4` are lossy reference paths and are reported only as quality/task comparators.\n\n");
+
+    out.push_str("## Retrieval Top-1 Agreement\n\n");
+    out.push_str("| group | dataset | values | non-finite masked | record dim | records | queries | codec | ratio | top1 agreement | mean score delta | max score delta |\n");
+    out.push_str(
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |\n",
+    );
+    for dataset in task_quality {
+        for row in &dataset.rows {
+            let agreement = if row.exact_queries == 0 {
+                0.0
+            } else {
+                row.top1_matches as f64 / row.exact_queries as f64
+            };
+            out.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {:.4} | {:.2}% ({}/{}) | {:.6} | {:.6} |\n",
+                dataset.group,
+                dataset.name,
+                dataset.value_count,
+                dataset.non_finite_masked,
+                dataset.record_dim,
+                dataset.record_count,
+                dataset.query_count,
+                row.codec,
+                row.ratio,
+                agreement * 100.0,
+                row.top1_matches,
+                row.exact_queries,
+                row.mean_score_delta,
+                row.max_score_delta
+            ));
+        }
+    }
+
+    out.push_str("\n## Use In Paper Drafts\n\n");
+    out.push_str("- Use Phase 2 rows as evidence that exact QATQ transport preserves this retrieval task on the public fixture corpus.\n");
+    out.push_str(
+        "- Do not use lossy `phase1-q4` or `turboquant-q4` rows as lossless QATQ claims.\n",
+    );
+    out.push_str("- Pair this with real model/task evaluation before making model-quality or perplexity claims.\n");
     out
 }
 

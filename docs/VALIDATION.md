@@ -30,6 +30,7 @@ cargo run --bin qatq -- fixture verify --manifest fixtures/public.manifest --out
 cargo run --release --bin qatq-bench -- --no-synthetic --output docs/PUBLIC_COMPARATIVE_BASELINES.md --paper-output docs/PUBLIC_COMPARATIVE_TABLES.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output docs/PUBLIC_BENCHMARKS.md --paper-output docs/PUBLIC_PAPER_TABLES.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --no-synthetic --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
+cargo run --release --bin qatq-bench -- --no-synthetic --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.96 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 50.00 --max-phase2-container-ratio 0.97 --max-phase2-container-decode-ns-per-value 50.00
 cargo fmt --check
 cargo check --manifest-path fuzz/Cargo.toml
@@ -55,6 +56,7 @@ Results:
 - public comparative baseline report: passed.
 - public benchmark and paper reports: passed.
 - public quality-proxy report: passed.
+- public retrieval task-quality report: passed.
 - latency-budget gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed. This gate is service-budget analysis, not the large-tensor production readiness signal.
 - public production KV throughput gate: passed with the split `production-kv` policy and portable `50.00 ns/value` direct/container decode ceilings.
 - `cargo fmt --check`: passed.
@@ -129,6 +131,10 @@ Coverage added:
   rejection;
 - sequential `QATC` container rejection for nonzero reserved bytes, truncated
   chunk bodies, zero chunk count, total-value mismatches, and trailing data;
+- sequential `QATC` version `2` container checksum verification and legacy
+  version rejection;
+- sequential `QATC` configurable decode limits for total values, chunks, encoded
+  bytes, and chunk bytes;
 - sequential `QATC` encode appends chunk payloads directly to the final
   container buffer instead of staging all encoded chunks separately;
 - sequential `QATC` decode pre-indexes embedded chunk headers and verifies the
@@ -169,8 +175,10 @@ Coverage added:
   output file when chunk configuration validation fails.
 - CLI `QATC` decode writes through a temporary file and preserves an existing
   output file when a corrupt later chunk fails validation.
-- CLI `QATC` decode uses the prevalidated container payload visitor so it avoids
-  building a chunk-index vector while retaining atomic output replacement.
+- CLI `QATC` decode streams the container input chunk by chunk and preserves an
+  existing output file when the version `2` aggregate checksum fails.
+- CLI `QATC` decode uses a streaming file reader so it avoids loading the full
+  container or decoded tensor while retaining atomic output replacement.
 - CLI fixture manifest entry creation for validated raw f32le captures.
 - CLI fixture manifest appends use temporary-file replacement and preserve an
   existing manifest when fixture validation fails.
@@ -221,6 +229,8 @@ Known validation limits:
 - The FP8 comparison is a local finite-value software E4M3 baseline, not a
   hardware/runtime FP8 path.
 - Phase 1 quality metrics are codec reconstruction metrics only. Phase 2 exact
-  metrics prove bit-identical f32 reconstruction locally, but they do not yet
-  measure model perplexity, agent migration fidelity, latency inside
-  external runtimes, residual entropy on real KV tensors, or downstream task success.
+  metrics prove bit-identical f32 reconstruction locally, and the public
+  retrieval proxy verifies top-1 task parity on generated fixtures, but these do
+  not yet measure model perplexity, agent migration fidelity, latency inside
+  external runtimes, residual entropy on real KV tensors, or real downstream
+  task success.

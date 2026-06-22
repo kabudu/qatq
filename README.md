@@ -16,21 +16,24 @@ The current implementation provides:
 
 - deterministic public fixture generation with `qatq fixture generate`;
 - public CI-ready fixture, benchmark, paper-table, and gate reports;
-- production chunk helpers for exact phase-2 storage decisions and restore;
+- the Phase 2 `phase2-lossless` codec as the primary QATQ implementation:
+  adaptive exact storage over raw bits, byte-RLE, byte-plane RLE,
+  adjacent-bit delta-XOR byte-plane residuals, or Phase 1 prediction plus
+  coded XOR residuals for bit-identical f32 reconstruction;
+- a sequential `QATC` chunk container for exact Phase 2 transport of large
+  tensors through the CLI;
+- production chunk helpers for exact Phase 2 storage decisions and restore;
+- an exhaustive Phase 2 encoder variant for research comparisons when payload
+  size search is more important than encode latency;
 - a deterministic lossy signed-int4 tensor codec retained as a seed baseline;
 - a Phase 1 training-free `phase1-q4` codec with quaternion grouping,
   deterministic Hamilton-product rotation, scalar q4 quantization, and a
-  compact 1-bit residual-sign side channel;
-- a Phase 2 `phase2-lossless` codec that adaptively stores raw bits, byte-RLE,
-  byte-plane RLE, or Phase 1 prediction plus coded XOR residuals for
-  bit-identical f32 reconstruction;
-- a sequential `QATC` chunk container for exact Phase 2 transport of large
-  tensors through the CLI;
-- an exhaustive Phase 2 encoder variant for research comparisons when payload
-  size search is more important than encode latency;
+  compact 1-bit residual-sign side channel, retained as a lossy predictor and
+  research comparator rather than the product path;
 - a `turboquant-q4` reference baseline for measuring the base random-rotation
   scalar quantization path plus structured QJL residual inner-product estimator
-  before the quaternion overlay;
+  before the quaternion overlay, not an official Google implementation or the
+  default QATQ foundation;
 - an exact `lossless-f32` envelope for bit-identical f32 transport while the
   residual-compression design is developed;
 - a small CLI for encoding, chunked encoding, and decoding raw f32
@@ -39,10 +42,13 @@ The current implementation provides:
   1 deterministic/configured behavior, production chunk restore, CLI behavior,
   and benchmark gate policy.
 
-Phase 1 is still lossy and experimental. `phase2-lossless` is exact by
-construction and uses a fast strategy policy: compression-positive byte or
-byte-plane candidates are accepted before building the more expensive QATQ
-predictor. The exhaustive encoder remains available for research comparisons.
+`phase2-lossless` and the `QATC` container are the main QATQ product surface.
+They are exact by construction and use a fast strategy policy:
+compression-positive byte or byte-plane candidates are accepted before building
+the more expensive QATQ predictor. Phase 1 is still lossy and experimental; it
+is useful as an internal predictor and comparator, but lossless QATQ claims
+apply only to Phase 2. The exhaustive encoder remains available for research
+comparisons.
 The generated public fixtures are the default reproducible evidence set. Larger
 or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` f32 values each; larger tensors
@@ -75,10 +81,10 @@ and faster to transmit for KV/tensor workloads.
 
 ## CLI
 
-Encode a raw f32 little-endian tensor:
+Encode a raw f32 little-endian tensor with QATQ exact reconstruction:
 
 ```sh
-cargo run -- encode --mode lossy-i4 input.f32le output.qatq
+cargo run -- encode --mode phase2-lossless input.f32le output.qatq
 ```
 
 Decode back to raw f32 little-endian:
@@ -87,37 +93,11 @@ Decode back to raw f32 little-endian:
 cargo run -- decode output.qatq restored.f32le
 ```
 
-Use exact f32 transport:
+Use an explicit seed for reproducible Phase 2 sweeps:
 
 ```sh
-cargo run -- encode --mode lossless-f32 input.f32le output.qatq
+cargo run -- encode --mode phase2-lossless --seed 0x51415451 input.f32le output.qatq
 ```
-
-Use the reference base TurboQuant-style q4 path with QJL residual signs:
-
-```sh
-cargo run -- encode --mode turboquant-q4 input.f32le output.qatq
-```
-
-Use QATQ-family exact reconstruction:
-
-```sh
-cargo run -- encode --mode phase2-lossless input.f32le output.qatq
-```
-
-Use the Phase 1 quaternion path with the default deterministic seed:
-
-```sh
-cargo run -- encode --mode phase1-q4 input.f32le output.qatq
-```
-
-Use an explicit seed for reproducible sweeps:
-
-```sh
-cargo run -- encode --mode phase1-q4 --seed 0x51415451 input.f32le output.qatq
-```
-
-The same seed flag is supported by `phase2-lossless`.
 
 For large tensors, write a Phase 2 chunk container so each embedded payload
 stays inside the decoder safety bound while preserving bit-identical
@@ -129,7 +109,8 @@ cargo run -- encode-chunked --max-values-per-chunk 65536 input.f32le output.qatc
 
 `encode-chunked` reads and encodes one raw `.f32le` chunk at a time, so the CLI
 does not need to hold the full tensor in memory while building the `QATC`
-artifact.
+artifact. `QATC` uses the version `2` container header with an aggregate
+checksum over the ordered chunk length/payload stream.
 
 The normal decode command accepts both `QATQ` single payloads and `QATC`
 containers. CLI encode and decode writes go through a temporary file and replace
@@ -138,6 +119,25 @@ written successfully:
 
 ```sh
 cargo run -- decode output.qatc restored.f32le
+```
+
+Use exact f32 envelope transport as a control baseline:
+
+```sh
+cargo run -- encode --mode lossless-f32 input.f32le output.qatq
+```
+
+Use the reference base TurboQuant-style q4 path only for lossy comparator
+experiments:
+
+```sh
+cargo run -- encode --mode turboquant-q4 input.f32le output.qatq
+```
+
+Use the Phase 1 quaternion path as a lossy predictor/comparator experiment:
+
+```sh
+cargo run -- encode --mode phase1-q4 input.f32le output.qatq
 ```
 
 Generate the public fixture corpus:
@@ -168,6 +168,17 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/public.manifest
 ```
 
+Run the public retrieval task-quality report. This verifies that Phase 2 exact
+transport preserves top-1 retrieval decisions on the public fixture corpus and
+keeps lossy comparator rows separate:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --no-synthetic \
+  --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md \
+  --manifest fixtures/public.manifest
+```
+
 Add optional raw f32 little-endian fixtures from any runtime:
 
 ```sh
@@ -183,6 +194,7 @@ cargo run --release --bin qatq-bench -- \
   --output docs/BENCHMARKS.md \
   --paper-output docs/PAPER_TABLES.md \
   --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
+  --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md \
   --manifest fixtures/public.manifest
 ```
 
@@ -296,18 +308,22 @@ assert_eq!(decoded, values);
 ```
 
 Use the prevalidated container visitor when an integration wants to process
-chunks without allocating a chunk-index vector:
+chunks without allocating the full decoded tensor:
 
 ```rust
 use qatq::{
     decode_phase2_lossless, encode_phase2_lossless_container,
-    for_each_phase2_lossless_container_payload,
+    for_each_phase2_lossless_container_payload_with_limits, QatcDecodeLimits,
 };
 
 let payload = encode_phase2_lossless_container(&[1.0_f32, 2.0, 3.0], 2)?;
 let mut decoded_count = 0;
+let limits = QatcDecodeLimits {
+    max_total_values: 1_000_000,
+    ..QatcDecodeLimits::default()
+};
 
-for_each_phase2_lossless_container_payload(&payload, |chunk| {
+for_each_phase2_lossless_container_payload_with_limits(&payload, limits, |chunk| {
     let values = decode_phase2_lossless(chunk)?;
     decoded_count += values.len();
     Ok(())
