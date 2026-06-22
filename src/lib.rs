@@ -2022,8 +2022,12 @@ fn decode_byte_plane_blocks_to_f32_and_checksum(
     let blocks = parse_byte_plane_blocks(bytes, expected_len, value_count)?;
     let mut checksum = FNV_OFFSET;
     match blocks {
-        [BytePlaneBlock::Raw { offset: first }, BytePlaneBlock::Raw { offset: second }, BytePlaneBlock::Zero, BytePlaneBlock::Zero] =>
-        {
+        [
+            BytePlaneBlock::Raw { offset: first },
+            BytePlaneBlock::Raw { offset: second },
+            BytePlaneBlock::Zero,
+            BytePlaneBlock::Zero,
+        ] => {
             let first_plane = &bytes[first..first + value_count];
             let second_plane = &bytes[second..second + value_count];
             let mut values: Vec<f32> = Vec::with_capacity(value_count);
@@ -2045,8 +2049,12 @@ fn decode_byte_plane_blocks_to_f32_and_checksum(
             unsafe { values.set_len(value_count) };
             Ok((values, checksum))
         }
-        [BytePlaneBlock::Raw { offset: first }, BytePlaneBlock::Raw { offset: second }, BytePlaneBlock::Raw { offset: third }, BytePlaneBlock::Raw { offset: fourth }] =>
-        {
+        [
+            BytePlaneBlock::Raw { offset: first },
+            BytePlaneBlock::Raw { offset: second },
+            BytePlaneBlock::Raw { offset: third },
+            BytePlaneBlock::Raw { offset: fourth },
+        ] => {
             let first_plane = &bytes[first..first + value_count];
             let second_plane = &bytes[second..second + value_count];
             let third_plane = &bytes[third..third + value_count];
@@ -3654,11 +3662,7 @@ fn dot_product(left: &[f32], right: &[f32]) -> f32 {
 }
 
 fn qjl_sign_value(value: bool) -> f32 {
-    if value {
-        1.0
-    } else {
-        -1.0
-    }
+    if value { 1.0 } else { -1.0 }
 }
 
 fn qjl_project_values(values: &[f32], seed: u64) -> Vec<f32> {

@@ -5,7 +5,7 @@ use std::{
 };
 
 use qatq::{
-    decode_qatq_exact_tensor_le, qatq_exact_strategy, try_encode_qatq_exact_tensor_le, TensorDType,
+    TensorDType, decode_qatq_exact_tensor_le, qatq_exact_strategy, try_encode_qatq_exact_tensor_le,
 };
 
 const DEFAULT_ITERS: usize = 5;

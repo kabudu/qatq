@@ -4,11 +4,11 @@ use std::{
 };
 
 use qatq::{
-    decode, decode_qatq_exact, decode_qatq_exact_container,
-    decode_qatq_exact_container_with_limits, encode_qatq_exact_container_with_config,
-    qatq_exact_strategy, restore_production_chunk, try_encode_production_chunk_with_config,
-    try_encode_qatq_exact_exhaustive_with_config, try_encode_qatq_exact_with_config, Phase1Config,
-    QatcDecodeLimits, QatqExactStrategy,
+    Phase1Config, QatcDecodeLimits, QatqExactStrategy, decode, decode_qatq_exact,
+    decode_qatq_exact_container, decode_qatq_exact_container_with_limits,
+    encode_qatq_exact_container_with_config, qatq_exact_strategy, restore_production_chunk,
+    try_encode_production_chunk_with_config, try_encode_qatq_exact_exhaustive_with_config,
+    try_encode_qatq_exact_with_config,
 };
 
 const DEFAULT_CASES: usize = 4_096;

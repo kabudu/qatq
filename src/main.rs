@@ -5,11 +5,11 @@ use std::{
 };
 
 use qatq::{
-    decode, decode_qatq_exact, decode_qatq_exact_tensor_le, parse_mode, try_encode,
-    try_encode_phase1_q4_with_config, try_encode_qatq_exact_tensor_le,
-    try_encode_qatq_exact_with_config, try_encode_turboquant_q4_with_config, CodecMode,
-    Phase1Config, TensorDType, DEFAULT_MAX_QATC_CHUNKS, DEFAULT_MAX_QATC_CHUNK_BYTES,
-    DEFAULT_MAX_QATC_VALUES, MAX_VALUES_PER_PAYLOAD,
+    CodecMode, DEFAULT_MAX_QATC_CHUNK_BYTES, DEFAULT_MAX_QATC_CHUNKS, DEFAULT_MAX_QATC_VALUES,
+    MAX_VALUES_PER_PAYLOAD, Phase1Config, TensorDType, decode, decode_qatq_exact,
+    decode_qatq_exact_tensor_le, parse_mode, try_encode, try_encode_phase1_q4_with_config,
+    try_encode_qatq_exact_tensor_le, try_encode_qatq_exact_with_config,
+    try_encode_turboquant_q4_with_config,
 };
 
 const QATC_MAGIC: &[u8; 4] = b"QATC";
@@ -1287,6 +1287,8 @@ fn print_usage() {
         "  qatq encode-chunked --max-values-per-chunk <usize> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatc>"
     );
     eprintln!("  qatq decode <input.qatq|input.qatc> <output.rawle>");
-    eprintln!("  qatq fixture add --manifest <path> --name <name> --path <tensor.f32le> [--group <group>] [--shape <shape>] [--notes <notes>]");
+    eprintln!(
+        "  qatq fixture add --manifest <path> --name <name> --path <tensor.f32le> [--group <group>] [--shape <shape>] [--notes <notes>]"
+    );
     eprintln!("  qatq fixture verify --manifest <path> [--output <audit.md>]");
 }

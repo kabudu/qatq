@@ -1,4 +1,4 @@
-use qatq::{restore_production_chunk, try_encode_production_chunk, ProductionStorage, QatqError};
+use qatq::{ProductionStorage, QatqError, restore_production_chunk, try_encode_production_chunk};
 
 fn main() -> Result<(), QatqError> {
     let values: Vec<f32> = (0..1024)

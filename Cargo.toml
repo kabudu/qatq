@@ -1,9 +1,9 @@
 [package]
 name = "qatq"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.88"
-description = "Quaternion-Augmented TurboQuant research codec for KV cache and tensor migration"
+description = "Exact tensor-aware compression for exported LLM KV caches and tensor migration"
 license = "Apache-2.0"
 repository = "https://github.com/kabudu/qatq"
 readme = "README.md"
@@ -13,8 +13,14 @@ include = [
     "Cargo.toml",
     "Cargo.lock",
     "LICENSE",
+    "NOTICE",
     "README.md",
     "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "CODE_OF_CONDUCT.md",
+    "assets/**",
     "src/**",
     "examples/**",
     "adapters/**",
@@ -24,6 +30,7 @@ include = [
     "docs/CREDITS.md",
     "docs/FIXTURES.md",
     "docs/API_CLI_FREEZE.md",
+    "docs/BRAND.md",
     "docs/EXTERNAL_RUNTIME_EVIDENCE.md",
     "docs/PRODUCTION_READINESS.md",
     "docs/PUBLIC_*.md",
