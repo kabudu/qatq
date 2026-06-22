@@ -150,6 +150,53 @@ impl fmt::Display for QatqError {
 impl std::error::Error for QatqError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TensorDType {
+    F32,
+    F16,
+    BF16,
+}
+
+impl TensorDType {
+    pub fn element_width(self) -> usize {
+        match self {
+            Self::F32 => 4,
+            Self::F16 | Self::BF16 => 2,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::F16 => "f16",
+            Self::BF16 => "bf16",
+        }
+    }
+
+    fn prefix_bytes(self) -> [u8; 3] {
+        match self {
+            Self::F32 => [0, 0, 0],
+            Self::F16 => [1, 2, 0],
+            Self::BF16 => [2, 2, 0],
+        }
+    }
+
+    fn from_prefix(bytes: [u8; 3]) -> Result<Self, QatqError> {
+        match bytes {
+            [0, 0, 0] => Ok(Self::F32),
+            [1, 2, 0] => Ok(Self::F16),
+            [2, 2, 0] => Ok(Self::BF16),
+            _ => Err(QatqError::InvalidQatqExactBody),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DecodedTensor {
+    pub dtype: TensorDType,
+    pub bytes_le: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct QatcDecodeLimits {
     pub max_total_values: usize,
     pub max_chunks: usize,
@@ -639,6 +686,73 @@ pub fn try_encode_qatq_exact_with_config(
     Ok(encode_qatq_exact_unchecked(values, config))
 }
 
+pub fn encode_qatq_exact_tensor_le(bytes_le: &[u8], dtype: TensorDType) -> Vec<u8> {
+    try_encode_qatq_exact_tensor_le(bytes_le, dtype)
+        .expect("typed tensor exceeds single-payload bound; use chunked APIs")
+}
+
+pub fn try_encode_qatq_exact_tensor_le(
+    bytes_le: &[u8],
+    dtype: TensorDType,
+) -> Result<Vec<u8>, QatqError> {
+    let element_count = validate_typed_tensor_len(bytes_le, dtype)?;
+    if dtype == TensorDType::F32 {
+        let values = decode_f32le_bytes(bytes_le)?;
+        return try_encode_qatq_exact_with_config(&values, Phase1Config::default());
+    }
+    Ok(encode_qatq_exact_tensor_bytes_unchecked(
+        bytes_le,
+        dtype,
+        element_count,
+    ))
+}
+
+pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, QatqError> {
+    let header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
+    let body = &payload[HEADER_LEN..];
+    let (strategy, dtype) = parse_qatq_exact_prefix(body)?;
+    if dtype == TensorDType::F32 {
+        return Ok(DecodedTensor {
+            dtype,
+            bytes_le: encode_f32_bits_le(&decode_qatq_exact(payload)?),
+        });
+    }
+
+    let expected_len = checked_tensor_byte_len(header.value_count, dtype)?;
+    let body = &body[QATQ_EXACT_PREFIX_LEN..];
+    let canonical = match strategy {
+        QatqExactStrategy::RawBits => decode_qatq_exact_tensor_raw_bits(body, expected_len)?,
+        QatqExactStrategy::ByteRle => decode_byte_runs_to_bytes(body, expected_len)?,
+        QatqExactStrategy::BytePlaneRle => {
+            decode_byte_plane_runs_to_bytes_width(body, expected_len, header.value_count, dtype)?
+        }
+        QatqExactStrategy::BytePlanePackedRle => decode_byte_plane_packed_runs_to_bytes_width(
+            body,
+            expected_len,
+            header.value_count,
+            dtype,
+        )?,
+        QatqExactStrategy::BytePlaneZstd => {
+            let plane_bytes = zstd::bulk::decompress(body, expected_len)
+                .map_err(|_| QatqError::InvalidResidualStream)?;
+            byte_plane_bytes_to_bytes(&plane_bytes, expected_len, header.value_count, dtype)?
+        }
+        QatqExactStrategy::PredictorXor
+        | QatqExactStrategy::DeltaXorBytePlaneRle
+        | QatqExactStrategy::BytePlaneBlocks
+        | QatqExactStrategy::QuaternionChainZstd => return Err(QatqError::InvalidQatqExactBody),
+    };
+    let bytes_le = decanonicalize_le_elements(&canonical, dtype);
+    let actual = checksum_bytes(&bytes_le);
+    if actual != header.checksum {
+        return Err(QatqError::ChecksumMismatch {
+            expected: header.checksum,
+            actual,
+        });
+    }
+    Ok(DecodedTensor { dtype, bytes_le })
+}
+
 pub fn encode_qatq_exact_decision(values: &[f32]) -> QatqExactEncodeDecision {
     encode_qatq_exact_decision_with_config(values, Phase1Config::default())
 }
@@ -740,6 +854,79 @@ pub fn restore_production_chunk(
 
 fn encode_qatq_exact_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
     encode_qatq_exact_fast(values, config)
+}
+
+fn encode_qatq_exact_tensor_bytes_unchecked(
+    bytes_le: &[u8],
+    dtype: TensorDType,
+    element_count: usize,
+) -> Vec<u8> {
+    let canonical = canonicalize_le_elements(bytes_le, dtype);
+    let raw_body_len = QATQ_EXACT_PREFIX_LEN + canonical.len();
+    let byte_rle = encode_byte_runs_bounded(&canonical, canonical.len());
+    let byte_rle_body_len = candidate_body_len(byte_rle.as_ref());
+    let byte_plane =
+        encode_byte_plane_runs_bounded_width(&canonical, dtype.element_width(), canonical.len());
+    let byte_plane_body_len = candidate_body_len(byte_plane.as_ref());
+    let byte_plane_packed = encode_byte_plane_packed_runs_bounded_width(
+        &canonical,
+        dtype.element_width(),
+        canonical.len(),
+    );
+    let byte_plane_packed_body_len = candidate_body_len(byte_plane_packed.as_ref());
+    let byte_plane_zstd =
+        encode_byte_plane_zstd_bounded_width(&canonical, dtype.element_width(), canonical.len());
+    let byte_plane_zstd_body_len = candidate_body_len(byte_plane_zstd.as_ref());
+    let mut strategy = QATQ_EXACT_STRATEGY_RAW_BITS;
+    let mut best_body_len = raw_body_len;
+    for (candidate_strategy, candidate_len) in [
+        (QATQ_EXACT_STRATEGY_BYTE_RLE, byte_rle_body_len),
+        (QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE, byte_plane_body_len),
+        (
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE,
+            byte_plane_packed_body_len,
+        ),
+        (
+            QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD,
+            byte_plane_zstd_body_len,
+        ),
+    ] {
+        if candidate_len < best_body_len {
+            strategy = candidate_strategy;
+            best_body_len = candidate_len;
+        }
+    }
+
+    let mut out = Vec::with_capacity(HEADER_LEN + best_body_len);
+    write_header(
+        &mut out,
+        CodecMode::QatqExact,
+        element_count,
+        1.0,
+        checksum_bytes(bytes_le),
+    );
+    write_qatq_exact_typed_prefix(&mut out, strategy, dtype);
+    match strategy {
+        QATQ_EXACT_STRATEGY_RAW_BITS => out.extend_from_slice(&canonical),
+        QATQ_EXACT_STRATEGY_BYTE_RLE => {
+            out.extend_from_slice(byte_rle.as_ref().expect("selected byte-RLE candidate"))
+        }
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => {
+            out.extend_from_slice(byte_plane.as_ref().expect("selected byte-plane candidate"))
+        }
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => out.extend_from_slice(
+            byte_plane_packed
+                .as_ref()
+                .expect("selected packed byte-plane candidate"),
+        ),
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => out.extend_from_slice(
+            byte_plane_zstd
+                .as_ref()
+                .expect("selected zstd byte-plane candidate"),
+        ),
+        _ => unreachable!("typed exact strategy set"),
+    }
+    out
 }
 
 pub fn encode_qatq_exact_exhaustive(values: &[f32]) -> Vec<u8> {
@@ -1334,7 +1521,10 @@ fn for_each_container_chunk_unchecked(
 pub fn decode_qatq_exact(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     let header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
     let body = &payload[HEADER_LEN..];
-    let strategy = parse_qatq_exact_strategy_body(body)?;
+    let (strategy, dtype) = parse_qatq_exact_prefix(body)?;
+    if dtype != TensorDType::F32 {
+        return Err(QatqError::InvalidQatqExactBody);
+    }
     if strategy == QatqExactStrategy::BytePlaneBlocks {
         return decode_qatq_exact_byte_plane_blocks_checked(
             &body[QATQ_EXACT_PREFIX_LEN..],
@@ -1386,6 +1576,10 @@ pub fn qatq_exact_strategy(payload: &[u8]) -> Result<QatqExactStrategy, QatqErro
 }
 
 fn parse_qatq_exact_strategy_body(body: &[u8]) -> Result<QatqExactStrategy, QatqError> {
+    parse_qatq_exact_prefix(body).map(|(strategy, _dtype)| strategy)
+}
+
+fn parse_qatq_exact_prefix(body: &[u8]) -> Result<(QatqExactStrategy, TensorDType), QatqError> {
     if body.len() < QATQ_EXACT_PREFIX_LEN {
         return Err(QatqError::PayloadTooShort {
             actual: body.len(),
@@ -1395,10 +1589,8 @@ fn parse_qatq_exact_strategy_body(body: &[u8]) -> Result<QatqExactStrategy, Qatq
     if &body[0..4] != QATQ_EXACT_BODY_MAGIC {
         return Err(QatqError::InvalidQatqExactBody);
     }
-    if body[5..8] != [0, 0, 0] {
-        return Err(QatqError::InvalidQatqExactBody);
-    }
-    QatqExactStrategy::from_id(body[4])
+    let dtype = TensorDType::from_prefix(body[5..8].try_into().expect("fixed exact prefix"))?;
+    Ok((QatqExactStrategy::from_id(body[4])?, dtype))
 }
 
 fn decode_qatq_exact_predictor_xor(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
@@ -1448,6 +1640,19 @@ fn decode_qatq_exact_raw_bits(body: &[u8], header: &Header) -> Result<Vec<f32>, 
         values.push(f32::from_bits(bits));
     }
     Ok(values)
+}
+
+fn decode_qatq_exact_tensor_raw_bits(
+    body: &[u8],
+    expected_len: usize,
+) -> Result<Vec<u8>, QatqError> {
+    if body.len() != expected_len {
+        return Err(QatqError::LengthMismatch {
+            expected: expected_len,
+            actual: body.len(),
+        });
+    }
+    Ok(body.to_vec())
 }
 
 fn decode_qatq_exact_byte_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
@@ -1553,6 +1758,80 @@ fn byte_plane_bytes_to_words(
     Ok(words)
 }
 
+fn byte_plane_bytes_to_bytes(
+    bytes: &[u8],
+    expected_len: usize,
+    element_count: usize,
+    dtype: TensorDType,
+) -> Result<Vec<u8>, QatqError> {
+    let width = dtype.element_width();
+    if bytes.len() != expected_len || expected_len != element_count * width {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    let mut out = vec![0_u8; expected_len];
+    for (plane_index, byte) in bytes.iter().enumerate() {
+        write_plane_byte(&mut out, plane_index, element_count, width, *byte);
+    }
+    Ok(out)
+}
+
+fn decode_byte_plane_packed_runs_to_bytes_width(
+    bytes: &[u8],
+    expected_len: usize,
+    element_count: usize,
+    dtype: TensorDType,
+) -> Result<Vec<u8>, QatqError> {
+    let width = dtype.element_width();
+    if expected_len != element_count * width {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    let mut out = vec![0_u8; expected_len];
+    let mut decoded_len = 0_usize;
+    let mut offset = 0_usize;
+    while decoded_len < expected_len {
+        if offset >= bytes.len() {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        let token = bytes[offset];
+        offset += 1;
+        let len = (token & PACKED_RUN_LEN_MASK) as usize + 1;
+        if decoded_len + len > expected_len {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        match token & PACKED_RUN_TAG_MASK {
+            PACKED_ZERO_RUN => {
+                decoded_len += len;
+            }
+            PACKED_RAW_RUN => {
+                if offset + len > bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                for byte in &bytes[offset..offset + len] {
+                    write_plane_byte(&mut out, decoded_len, element_count, width, *byte);
+                    decoded_len += 1;
+                }
+                offset += len;
+            }
+            PACKED_REPEAT_RUN => {
+                if offset >= bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                let value = bytes[offset];
+                offset += 1;
+                for _ in 0..len {
+                    write_plane_byte(&mut out, decoded_len, element_count, width, value);
+                    decoded_len += 1;
+                }
+            }
+            _ => return Err(QatqError::InvalidResidualStream),
+        }
+    }
+    if offset != bytes.len() {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    Ok(out)
+}
+
 fn decode_byte_plane_packed_runs_to_words(
     bytes: &[u8],
     expected_len: usize,
@@ -1606,6 +1885,67 @@ fn decode_byte_plane_packed_runs_to_words(
         return Err(QatqError::InvalidResidualStream);
     }
     Ok(words)
+}
+
+fn decode_byte_plane_runs_to_bytes_width(
+    bytes: &[u8],
+    expected_len: usize,
+    element_count: usize,
+    dtype: TensorDType,
+) -> Result<Vec<u8>, QatqError> {
+    let width = dtype.element_width();
+    if expected_len != element_count * width {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    let mut out = vec![0_u8; expected_len];
+    let mut decoded_len = 0_usize;
+    let mut offset = 0_usize;
+    while decoded_len < expected_len {
+        if offset + 3 > bytes.len() {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        let token = bytes[offset];
+        let len = u16::from_be_bytes(
+            bytes[offset + 1..offset + 3]
+                .try_into()
+                .expect("fixed byte run length"),
+        ) as usize;
+        offset += 3;
+        if len == 0 || decoded_len + len > expected_len {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        match token {
+            XOR_ZERO_RUN => {
+                decoded_len += len;
+            }
+            XOR_RAW_RUN => {
+                if offset + len > bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                for byte in &bytes[offset..offset + len] {
+                    write_plane_byte(&mut out, decoded_len, element_count, width, *byte);
+                    decoded_len += 1;
+                }
+                offset += len;
+            }
+            BYTE_REPEAT_RUN => {
+                if offset >= bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                let value = bytes[offset];
+                offset += 1;
+                for _ in 0..len {
+                    write_plane_byte(&mut out, decoded_len, element_count, width, value);
+                    decoded_len += 1;
+                }
+            }
+            _ => return Err(QatqError::InvalidResidualStream),
+        }
+    }
+    if offset != bytes.len() {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    Ok(out)
 }
 
 fn decode_byte_plane_runs_to_words(
@@ -1812,6 +2152,21 @@ fn write_plane_word_byte(words: &mut [u32], plane_index: usize, value_count: usi
     let value_index = plane_index % value_count;
     let shift = (3 - plane) * 8;
     words[value_index] |= (byte as u32) << shift;
+}
+
+fn write_plane_byte(
+    bytes: &mut [u8],
+    plane_index: usize,
+    element_count: usize,
+    element_width: usize,
+    byte: u8,
+) {
+    if byte == 0 {
+        return;
+    }
+    let plane = plane_index / element_count;
+    let element_index = plane_index % element_count;
+    bytes[element_index * element_width + plane] = byte;
 }
 
 fn candidate_body_len(candidate: Option<&Vec<u8>>) -> usize {
@@ -2044,6 +2399,66 @@ fn encode_byte_planes(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+fn encode_byte_plane_runs_bounded_width(
+    bytes: &[u8],
+    element_width: usize,
+    max_encoded_len: usize,
+) -> Option<Vec<u8>> {
+    debug_assert_eq!(bytes.len() % element_width, 0);
+    let mut out = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = plane_byte_width(bytes, element_width, index);
+        if byte == 0 {
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && plane_byte_width(bytes, element_width, index) == 0
+                && index - start < u16::MAX as usize
+            {
+                index += 1;
+            }
+            write_xor_run_header(&mut out, XOR_ZERO_RUN, index - start);
+            if out.len() > max_encoded_len {
+                return None;
+            }
+        } else if repeated_plane_byte_run_len_width(bytes, element_width, index) >= 4 {
+            let value = byte;
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && plane_byte_width(bytes, element_width, index) == value
+                && index - start < u16::MAX as usize
+            {
+                index += 1;
+            }
+            write_xor_run_header(&mut out, BYTE_REPEAT_RUN, index - start);
+            out.push(value);
+            if out.len() > max_encoded_len {
+                return None;
+            }
+        } else {
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && plane_byte_width(bytes, element_width, index) != 0
+                && repeated_plane_byte_run_len_width(bytes, element_width, index) < 4
+                && index - start < u16::MAX as usize
+            {
+                index += 1;
+            }
+            write_xor_run_header(&mut out, XOR_RAW_RUN, index - start);
+            for plane_index in start..index {
+                out.push(plane_byte_width(bytes, element_width, plane_index));
+            }
+            if out.len() > max_encoded_len {
+                return None;
+            }
+        }
+    }
+    Some(out)
+}
+
 fn encode_byte_plane_runs_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<u8>> {
     debug_assert_eq!(bytes.len() % 4, 0);
     let mut out = Vec::new();
@@ -2102,6 +2517,65 @@ fn encode_byte_plane_runs_bounded(bytes: &[u8], max_encoded_len: usize) -> Optio
     Some(out)
 }
 
+fn encode_byte_plane_packed_runs_bounded_width(
+    bytes: &[u8],
+    element_width: usize,
+    max_encoded_len: usize,
+) -> Option<Vec<u8>> {
+    debug_assert_eq!(bytes.len() % element_width, 0);
+    let mut out = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = plane_byte_width(bytes, element_width, index);
+        if byte == 0 {
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && plane_byte_width(bytes, element_width, index) == 0
+                && index - start < PACKED_RUN_MAX_LEN
+            {
+                index += 1;
+            }
+            push_packed_run_header(&mut out, PACKED_ZERO_RUN, index - start);
+        } else if repeated_plane_byte_run_len_width(bytes, element_width, index)
+            .min(PACKED_RUN_MAX_LEN)
+            >= 3
+        {
+            let value = byte;
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && plane_byte_width(bytes, element_width, index) == value
+                && index - start < PACKED_RUN_MAX_LEN
+            {
+                index += 1;
+            }
+            push_packed_run_header(&mut out, PACKED_REPEAT_RUN, index - start);
+            out.push(value);
+        } else {
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && plane_byte_width(bytes, element_width, index) != 0
+                && repeated_plane_byte_run_len_width(bytes, element_width, index)
+                    .min(PACKED_RUN_MAX_LEN)
+                    < 3
+                && index - start < PACKED_RUN_MAX_LEN
+            {
+                index += 1;
+            }
+            push_packed_run_header(&mut out, PACKED_RAW_RUN, index - start);
+            for plane_index in start..index {
+                out.push(plane_byte_width(bytes, element_width, plane_index));
+            }
+        }
+        if out.len() > max_encoded_len {
+            return None;
+        }
+    }
+    Some(out)
+}
+
 fn encode_byte_plane_packed_runs_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<u8>> {
     debug_assert_eq!(bytes.len() % 4, 0);
     let mut out = Vec::new();
@@ -2150,6 +2624,23 @@ fn encode_byte_plane_packed_runs_bounded(bytes: &[u8], max_encoded_len: usize) -
         }
     }
     Some(out)
+}
+
+fn encode_byte_plane_zstd_bounded_width(
+    bytes: &[u8],
+    element_width: usize,
+    max_encoded_len: usize,
+) -> Option<Vec<u8>> {
+    debug_assert_eq!(bytes.len() % element_width, 0);
+    let mut plane_bytes = Vec::with_capacity(bytes.len());
+    for plane_index in 0..bytes.len() {
+        plane_bytes.push(plane_byte_width(bytes, element_width, plane_index));
+    }
+    let encoded = zstd::bulk::compress(&plane_bytes, 3).ok()?;
+    if encoded.len() > max_encoded_len {
+        return None;
+    }
+    Some(encoded)
 }
 
 fn encode_byte_plane_zstd_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<u8>> {
@@ -2408,6 +2899,15 @@ fn plane_byte(bytes: &[u8], plane_index: usize) -> u8 {
     bytes[value_index * 4 + plane]
 }
 
+fn plane_byte_width(bytes: &[u8], element_width: usize, plane_index: usize) -> u8 {
+    debug_assert!(element_width > 0);
+    debug_assert_eq!(bytes.len() % element_width, 0);
+    let element_count = bytes.len() / element_width;
+    let plane = plane_index / element_count;
+    let element_index = plane_index % element_count;
+    bytes[element_index * element_width + plane]
+}
+
 fn delta_xor_plane_byte(values: &[f32], plane_index: usize) -> u8 {
     let value_count = values.len();
     debug_assert!(value_count > 0);
@@ -2427,6 +2927,18 @@ fn repeated_plane_byte_run_len(bytes: &[u8], index: usize) -> usize {
     let mut len = 1;
     while index + len < bytes.len()
         && plane_byte(bytes, index + len) == value
+        && len < u16::MAX as usize
+    {
+        len += 1;
+    }
+    len
+}
+
+fn repeated_plane_byte_run_len_width(bytes: &[u8], element_width: usize, index: usize) -> usize {
+    let value = plane_byte_width(bytes, element_width, index);
+    let mut len = 1;
+    while index + len < bytes.len()
+        && plane_byte_width(bytes, element_width, index + len) == value
         && len < u16::MAX as usize
     {
         len += 1;
@@ -2554,6 +3066,51 @@ fn decode_byte_runs_to_f32(
     Ok(values)
 }
 
+fn decode_byte_runs_to_bytes(bytes: &[u8], expected_len: usize) -> Result<Vec<u8>, QatqError> {
+    let mut out = Vec::with_capacity(expected_len);
+    let mut decoded_len = 0;
+    let mut offset = 0;
+    while decoded_len < expected_len {
+        if offset + 3 > bytes.len() {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        let token = bytes[offset];
+        let len = u16::from_be_bytes(
+            bytes[offset + 1..offset + 3]
+                .try_into()
+                .expect("fixed byte run length"),
+        ) as usize;
+        offset += 3;
+        if len == 0 || decoded_len + len > expected_len {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        match token {
+            XOR_ZERO_RUN => out.resize(out.len() + len, 0),
+            XOR_RAW_RUN => {
+                if offset + len > bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                out.extend_from_slice(&bytes[offset..offset + len]);
+                offset += len;
+            }
+            BYTE_REPEAT_RUN => {
+                if offset >= bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                let value = bytes[offset];
+                offset += 1;
+                out.resize(out.len() + len, value);
+            }
+            _ => return Err(QatqError::InvalidResidualStream),
+        }
+        decoded_len += len;
+    }
+    if offset != bytes.len() || out.len() != expected_len {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    Ok(out)
+}
+
 fn push_decoded_f32_byte(
     byte: u8,
     word: &mut [u8; 4],
@@ -2595,9 +3152,13 @@ fn write_turboquant_metadata_and_payload(out: &mut Vec<u8>, parts: &TurboQuantPa
 }
 
 fn write_qatq_exact_prefix(out: &mut Vec<u8>, strategy: u8) {
+    write_qatq_exact_typed_prefix(out, strategy, TensorDType::F32);
+}
+
+fn write_qatq_exact_typed_prefix(out: &mut Vec<u8>, strategy: u8, dtype: TensorDType) {
     out.extend_from_slice(QATQ_EXACT_BODY_MAGIC);
     out.push(strategy);
-    out.extend_from_slice(&[0, 0, 0]);
+    out.extend_from_slice(&dtype.prefix_bytes());
 }
 
 fn read_phase_parts(
@@ -2901,6 +3462,62 @@ fn checked_value_byte_len(value_count: usize) -> Result<usize, QatqError> {
         .ok_or(QatqError::ValueCountTooLarge(value_count))
 }
 
+fn checked_tensor_byte_len(value_count: usize, dtype: TensorDType) -> Result<usize, QatqError> {
+    value_count
+        .checked_mul(dtype.element_width())
+        .ok_or(QatqError::ValueCountTooLarge(value_count))
+}
+
+fn validate_typed_tensor_len(bytes_le: &[u8], dtype: TensorDType) -> Result<usize, QatqError> {
+    let width = dtype.element_width();
+    if bytes_le.len() % width != 0 {
+        return Err(QatqError::LengthMismatch {
+            expected: bytes_le.len() + (width - bytes_le.len() % width),
+            actual: bytes_le.len(),
+        });
+    }
+    let element_count = bytes_le.len() / width;
+    validate_single_payload_value_count(element_count)?;
+    Ok(element_count)
+}
+
+fn canonicalize_le_elements(bytes_le: &[u8], dtype: TensorDType) -> Vec<u8> {
+    let width = dtype.element_width();
+    let mut out = Vec::with_capacity(bytes_le.len());
+    for chunk in bytes_le.chunks_exact(width) {
+        match dtype {
+            TensorDType::F32 => out.extend_from_slice(&[chunk[3], chunk[2], chunk[1], chunk[0]]),
+            TensorDType::F16 | TensorDType::BF16 => out.extend_from_slice(&[chunk[1], chunk[0]]),
+        }
+    }
+    out
+}
+
+fn decanonicalize_le_elements(canonical: &[u8], dtype: TensorDType) -> Vec<u8> {
+    let width = dtype.element_width();
+    let mut out = Vec::with_capacity(canonical.len());
+    for chunk in canonical.chunks_exact(width) {
+        match dtype {
+            TensorDType::F32 => out.extend_from_slice(&[chunk[3], chunk[2], chunk[1], chunk[0]]),
+            TensorDType::F16 | TensorDType::BF16 => out.extend_from_slice(&[chunk[1], chunk[0]]),
+        }
+    }
+    out
+}
+
+fn decode_f32le_bytes(bytes: &[u8]) -> Result<Vec<f32>, QatqError> {
+    if bytes.len() % 4 != 0 {
+        return Err(QatqError::LengthMismatch {
+            expected: bytes.len() + (4 - bytes.len() % 4),
+            actual: bytes.len(),
+        });
+    }
+    Ok(bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_bits(u32::from_le_bytes(chunk.try_into().expect("fixed f32"))))
+        .collect())
+}
+
 #[derive(Clone, Copy, Debug)]
 enum RotationDirection {
     Forward,
@@ -3149,6 +3766,15 @@ fn checksum_f32_bits(values: &[f32]) -> u64 {
     let mut hash = FNV_OFFSET;
     for value in values {
         hash = checksum_bits_update(hash, value.to_bits());
+    }
+    hash
+}
+
+fn checksum_bytes(bytes: &[u8]) -> u64 {
+    let mut hash = FNV_OFFSET;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
     }
     hash
 }
@@ -3605,6 +4231,50 @@ mod tests {
         let before: Vec<u32> = values.iter().map(|value| value.to_bits()).collect();
         let after: Vec<u32> = decoded.iter().map(|value| value.to_bits()).collect();
         assert_eq!(after, before);
+    }
+
+    #[test]
+    fn qatq_exact_typed_f16_roundtrip_preserves_native_bytes() {
+        let mut bytes = Vec::new();
+        for bits in [
+            0x0000_u16, 0x8000, 0x3c00, 0xbc00, 0x7c00, 0xfc00, 0x7e01, 0x3555, 0x3555, 0x3555,
+        ] {
+            bytes.extend_from_slice(&bits.to_le_bytes());
+        }
+
+        let encoded = encode_qatq_exact_tensor_le(&bytes, TensorDType::F16);
+        let decoded = decode_qatq_exact_tensor_le(&encoded).unwrap();
+
+        assert_eq!(decoded.dtype, TensorDType::F16);
+        assert_eq!(decoded.bytes_le, bytes);
+        assert_eq!(
+            decode_qatq_exact(&encoded),
+            Err(QatqError::InvalidQatqExactBody)
+        );
+    }
+
+    #[test]
+    fn qatq_exact_typed_bf16_roundtrip_preserves_native_bytes() {
+        let mut bytes = Vec::new();
+        for bits in [
+            0x0000_u16, 0x8000, 0x3f80, 0xbf80, 0x7f80, 0xff80, 0x7fc1, 0x3eab, 0x3eab, 0x3eab,
+        ] {
+            bytes.extend_from_slice(&bits.to_le_bytes());
+        }
+
+        let encoded = try_encode_qatq_exact_tensor_le(&bytes, TensorDType::BF16).unwrap();
+        let decoded = decode_qatq_exact_tensor_le(&encoded).unwrap();
+
+        assert_eq!(decoded.dtype, TensorDType::BF16);
+        assert_eq!(decoded.bytes_le, bytes);
+        assert!(matches!(
+            qatq_exact_strategy(&encoded),
+            Ok(QatqExactStrategy::RawBits)
+                | Ok(QatqExactStrategy::ByteRle)
+                | Ok(QatqExactStrategy::BytePlaneRle)
+                | Ok(QatqExactStrategy::BytePlanePackedRle)
+                | Ok(QatqExactStrategy::BytePlaneZstd)
+        ));
     }
 
     #[test]

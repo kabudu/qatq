@@ -201,17 +201,18 @@ payload for research, inspection, and compatibility tests.
 
 Decoder safety bounds:
 
-- payload headers are rejected above `67,108,864` f32 values per payload;
+- payload headers are rejected above `67,108,864` tensor values per payload;
 - single-payload `try_encode*` APIs enforce the same bound before writing a
   header and return `QatqError::ValueCountTooLarge` instead of panicking;
-- f32 byte lengths and Phase 1 padded coordinate counts are checked before use;
+- f32/f16/bf16 byte lengths and Phase 1 padded coordinate counts are checked
+  before use;
 - QATQ exact reserved prefix bytes, unknown strategy bytes, unknown run tags,
   zero-length runs, truncated runs, and trailing run data are rejected;
 - run decoders grow output only as validated runs are consumed, avoiding large
   upfront allocations for malformed streams.
-- QATQ exact byte-RLE strategy probes are bounded to the raw f32 bitstream size, so
-  incompressible byte streams are abandoned before they can become selected
-  candidates.
+- QATQ exact byte-RLE strategy probes are bounded to the raw tensor bitstream
+  size, so incompressible byte streams are abandoned before they can become
+  selected candidates.
 - QATQ exact byte-plane strategy probes run directly over plane order without
   materializing a full byte-plane buffer, and they use the same bounded-abandon
   rule as byte-RLE probes.
@@ -246,8 +247,9 @@ Decoder safety bounds:
   side effects.
 - QATC container encode writes each QATQ exact chunk directly into the final
   container buffer instead of staging a `Vec<Vec<u8>>` of encoded chunks.
-- CLI `encode-chunked` streams raw `.f32le` input into one QATQ exact chunk at a
-  time, then writes each payload into the `QATC` artifact through the atomic
+- CLI `encode-chunked` streams raw `.f32le`, `.f16le`, or `.bf16le` input into
+  one QATQ exact chunk at a time, then writes each payload into the `QATC`
+  artifact through the atomic
   output path.
 - The benchmark harness can run with `--no-synthetic` for external-fixture-only
   smoke checks, and it preflights external fixture metadata before timing work

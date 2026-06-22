@@ -37,8 +37,8 @@ The current implementation provides:
   default QATQ foundation;
 - an exact `lossless-f32` envelope for bit-identical f32 transport while the
   residual-compression design is developed;
-- a small CLI for encoding, chunked encoding, and decoding raw f32
-  little-endian files;
+- a small CLI for encoding, chunked encoding, and decoding raw f32, f16, and
+  bf16 little-endian tensor files;
 - tests for payload validation, lossy round trips, exact f32 round trips, Phase
   1 deterministic/configured behavior, production chunk restore, CLI behavior,
   and benchmark gate policy.
@@ -52,7 +52,7 @@ internal predictor and comparator, but lossless QATQ claims apply only to Phase
 2. The exhaustive encoder remains available for research comparisons.
 The generated public fixtures are the default reproducible evidence set. Larger
 or private runtime captures can be added as optional external manifests. Current
-single payloads are bounded to `67,108,864` f32 values each; larger tensors
+single payloads are bounded to `67,108,864` tensor values each; larger tensors
 should use the QATQ exact `QATC` chunk container.
 
 ## Attribution
@@ -94,6 +94,19 @@ Decode back to raw f32 little-endian:
 cargo run -- decode output.qatq restored.f32le
 ```
 
+Encode native raw bf16 or f16 little-endian tensors without widening to f32:
+
+```sh
+cargo run -- encode --mode qatq-exact --dtype bf16 input.bf16le output.qatq
+cargo run -- encode --mode qatq-exact --dtype f16 input.f16le output.qatq
+```
+
+Decode writes the same native little-endian tensor bytes that were encoded:
+
+```sh
+cargo run -- decode output.qatq restored.bf16le
+```
+
 Use an explicit seed for reproducible QATQ exact sweeps:
 
 ```sh
@@ -108,7 +121,14 @@ reconstruction across chunk boundaries:
 cargo run -- encode-chunked --max-values-per-chunk 65536 input.f32le output.qatc
 ```
 
-`encode-chunked` reads and encodes one raw `.f32le` chunk at a time, so the CLI
+For native half-precision captures, pass `--dtype` to the same chunked path:
+
+```sh
+cargo run -- encode-chunked --max-values-per-chunk 65536 \
+  --dtype bf16 input.bf16le output.qatc
+```
+
+`encode-chunked` reads and encodes one raw tensor chunk at a time, so the CLI
 does not need to hold the full tensor in memory while building the `QATC`
 artifact. `QATC` uses the version `2` container header with an aggregate
 checksum over the ordered chunk length/payload stream.
@@ -121,6 +141,11 @@ written successfully:
 ```sh
 cargo run -- decode output.qatc restored.f32le
 ```
+
+For runtime KV-cache capture work, the preferred route is a llama.cpp adapter
+that exports internal K/V cache tensors as raw `.f16le`, `.bf16le`, or `.f32le`
+files and then compresses them with QATQ exact. See
+[`docs/LLAMA_CPP_KV_CAPTURE.md`](docs/LLAMA_CPP_KV_CAPTURE.md).
 
 Use exact f32 envelope transport as a control baseline:
 
@@ -183,7 +208,9 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/public.manifest
 ```
 
-Add optional raw f32 little-endian fixtures from any runtime:
+Add optional raw f32 little-endian fixtures from any runtime. Native f16/bf16
+runtime captures should use the QATQ CLI `--dtype` path and carry dtype metadata
+in their runtime adapter manifest:
 
 ```sh
 cargo run --release --bin qatq-bench -- \

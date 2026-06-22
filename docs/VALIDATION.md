@@ -70,6 +70,9 @@ Results:
   Sampled payload/container mutations were rejected, bounded container limits
   rejected oversized decode attempts, and the default encoder was checked
   against exhaustive encoding on the first 512 eligible cases.
+- native typed tensor exact paths: passed API and CLI round trips for bf16
+  single-payload encoding and f16 chunked `QATC` encoding, preserving raw
+  little-endian element bytes without widening to f32.
 - deterministic KV stress matrix in release mode: passed across the same 4,096
   cases with aggregate ratio `0.1441`, encode throughput `62.09 ns/value`, and
   decode throughput `7.25 ns/value`.
