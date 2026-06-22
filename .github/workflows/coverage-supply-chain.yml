@@ -1,0 +1,40 @@
+name: coverage-supply-chain
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Coverage gate
+        run: cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 75
+
+  supply-chain:
+    name: supply-chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Locked dependency metadata
+        run: cargo metadata --locked --format-version 1
+      - name: Duplicate dependency check
+        run: cargo tree -d
+      - name: RustSec advisory audit
+        run: cargo audit

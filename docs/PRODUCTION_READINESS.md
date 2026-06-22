@@ -14,7 +14,9 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | Direct llama.cpp KV ingestion | proven | `docs/LLAMA_CPP_KV_COMPRESSION_REPORT.md`. |
 | Broad llama.cpp KV matrix | reproducible | `scripts/llama_cpp_kv_matrix.py`; report generated when local models are present. |
 | External live migration | proven for one scoped run | `docs/EXTERNAL_RUNTIME_EVIDENCE.md`. |
-| API/CLI naming | frozen for RC | `docs/API_CLI_FREEZE.md`. |
+| API/CLI naming | accepted for v0.1.0 | `docs/API_CLI_FREEZE.md`. |
+| Coverage checks | wired in CI | `.github/workflows/coverage-supply-chain.yml`; line coverage gate `75%`. |
+| Supply-chain checks | wired in CI | `.github/workflows/coverage-supply-chain.yml`; RustSec audit, locked metadata, duplicate dependency check. |
 
 ## Remaining Production Gates
 
@@ -25,7 +27,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | Adapter maintenance | Keep the llama.cpp patch version-pinned and refresh it whenever the target llama.cpp commit changes. |
 | Fuzzing | Keep scheduled fuzzing green and review crashes before releases. |
 | Security review | Re-run malicious/corrupt QATC tests and fuzz targets before tagging. |
-| API stability | Do not publish to crates.io until `docs/API_CLI_FREEZE.md` has been accepted without pending renames. |
+| Release publication | Do not publish to crates.io until the release owner explicitly performs and records that publication step. |
 
 ## Current Claim
 

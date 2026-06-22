@@ -106,6 +106,7 @@ not just access to exported tensors.
       preserved exact continuation behavior and beat raw, zstd, and lz4
       transfer-size baselines.
 - [x] Freeze source-release API/CLI names before crates.io publish.
-- [ ] Add coverage and supply-chain checks.
-- [ ] Publish to crates.io when the API is stable.
+- [x] Add coverage and supply-chain checks.
+- [ ] Publish to crates.io when the release owner performs and records the
+      publication step.
 - [ ] Cut GitHub Releases with binaries once the CLI is useful standalone.

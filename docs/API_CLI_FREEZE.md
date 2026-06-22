@@ -1,7 +1,8 @@
 # API and CLI Freeze
 
-QATQ is still a source release candidate. Do not publish to crates.io until this
-surface is intentionally accepted as stable.
+The QATQ v0.1.0 source-release API and CLI surface is accepted as frozen.
+Do not rename the surfaces below before crates.io publication without opening a
+new freeze record and documenting the compatibility impact.
 
 ## Stable Product Surface For v0.1.0
 
@@ -36,16 +37,26 @@ surface is intentionally accepted as stable.
 - Lower-level code may retain implementation-specific internal names only when
   they are private and not part of the API/CLI contract.
 
-## Pre-Publish Freeze Gate
+## Accepted Freeze Gate
 
-Before crates.io publishing:
+Accepted on 2026-06-22:
 
-- external runtime integration feedback has either been incorporated or
-  explicitly deferred;
-- no CLI command or mode renames without a changelog entry;
-- all stable functions intended for external users have rustdoc examples or are
-  documented in `README.md`;
-- no docs claim a default mode that differs from the CLI/API;
-- `cargo package --allow-dirty` succeeds from a clean source release candidate;
+- external runtime integration feedback was incorporated into
+  `docs/EXTERNAL_RUNTIME_EVIDENCE.md`;
+- the stable CLI command and mode names above are accepted for v0.1.0;
+- stable functions intended for external users are documented in `README.md` or
+  companion docs;
+- docs state `qatq-exact` and `QATC` as the default exact product surface;
+- `cargo package --allow-dirty` succeeds from the source release candidate;
+- coverage and supply-chain checks are wired into CI;
 - `docs/PRODUCTION_READINESS.md` is updated with current evidence and open
   blockers.
+
+## Post-Freeze Change Policy
+
+Before crates.io publication, any API or CLI rename must include:
+
+- an explicit changelog entry;
+- a compatibility note in this file;
+- regenerated package checks;
+- a decision on whether the freeze acceptance must be renewed.

@@ -135,6 +135,7 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
   before making quality claims against Google's TurboQuant paper.
 - Add model-quality evaluation for lossy Phase 1 if that path remains in the
   paper narrative.
-- Expand fuzzing duration in CI and add coverage/supply-chain checks.
+- Keep scheduled fuzzing, coverage, and supply-chain checks green before
+  release tags.
 - Define a random-access or streaming container/service format if runtime
   paging is required.

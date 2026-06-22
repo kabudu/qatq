@@ -1,7 +1,7 @@
 # Release Checklist
 
-QATQ is not published to crates.io yet. Until the crate has a stable public API
-and an explicit publishing owner, releases are source releases only.
+QATQ is not published to crates.io yet. Until an explicit publishing owner
+performs and records the publication step, releases are source releases only.
 
 ## Required Before Tagging
 
@@ -11,6 +11,10 @@ Run from the repository root:
 cargo fmt --check
 cargo check --all-targets
 cargo test
+cargo metadata --locked --format-version 1
+cargo tree -d
+cargo audit
+cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 75
 cargo run --bin qatq -- fixture verify \
   --manifest fixtures/public.manifest \
   --output docs/PUBLIC_FIXTURE_AUDIT.md
@@ -73,6 +77,10 @@ Do not tag a public release if:
 
 - generated public fixtures cannot be regenerated and verified;
 - `cargo test` fails;
+- the coverage/supply-chain CI workflow is failing;
+- `cargo audit` reports a vulnerability;
+- `cargo tree -d` reports duplicate dependency versions without a documented
+  reason;
 - the deterministic KV stress matrix fails;
 - the llama.cpp KV smoke matrix cannot run in an environment with patched
   llama.cpp and local GGUF models;
