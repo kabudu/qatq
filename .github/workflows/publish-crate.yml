@@ -6,7 +6,7 @@ on:
       expected_version:
         description: "Cargo package version to publish"
         required: true
-        default: "0.1.0"
+        default: "0.1.1"
 
 permissions:
   contents: read
@@ -34,6 +34,14 @@ jobs:
         run: cargo check --all-targets --locked
       - name: Test
         run: cargo test --locked
+      - name: Reject local paths
+        shell: bash
+        run: |
+          if command -v rg >/dev/null 2>&1; then
+            ! rg -n "/Users/kabudu|deliberium-group|/home/kabudu" --glob '!target/**' --glob '!.git/**' .
+          else
+            ! grep -R -n -E --exclude-dir=.git --exclude-dir=target "/Users/kabudu|deliberium-group|/home/kabudu" .
+          fi
       - name: Package
         run: cargo package --locked
       - name: Publish dry run

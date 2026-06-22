@@ -4,6 +4,14 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.1.1 - 2026-06-23
+
+### Fixed
+
+- Removed local absolute llama.cpp/model paths from scripts and documentation
+  included in the crates.io source package. Runtime benchmark scripts now use
+  documented environment variables for local model locations.
+
 ## 0.1.0 - 2026-06-22
 
 ### Added
