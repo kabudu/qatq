@@ -36,6 +36,7 @@ cargo run --release --bin qatq-bench -- \
   --output docs/PUBLIC_BENCHMARKS.md \
   --paper-output docs/PUBLIC_PAPER_TABLES.md \
   --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
+  --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md \
   --manifest fixtures/public.manifest
 ```
 
@@ -57,17 +58,30 @@ thresholds:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --phase2-only \
+  --exact-only \
   --no-synthetic \
   --manifest fixtures/public.manifest \
   --gate-output docs/PUBLIC_BENCHMARK_GATE.md \
   --gate-require-external \
   --gate-policy production-kv \
-  --max-phase2-ratio 0.96 \
-  --max-phase2-encode-us 5000 \
-  --max-phase2-decode-ns-per-value 50.00 \
-  --max-phase2-container-ratio 0.97 \
-  --max-phase2-container-decode-ns-per-value 50.00
+  --max-exact-ratio 0.96 \
+  --max-exact-encode-us 5000 \
+  --max-exact-decode-ns-per-value 50.00 \
+  --max-exact-container-ratio 0.97 \
+  --max-exact-container-decode-ns-per-value 50.00
+```
+
+Run the competitive compression gate to refuse public fixture regressions
+against the best zstd/lz4 raw-f32 baseline:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --exact-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
+  --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
+  --gate-require-external \
+  --gate-policy competitive-compression
 ```
 
 Run a fixed absolute-latency gate separately only when you need small-tensor or
@@ -75,20 +89,20 @@ deployment-specific service-budget analysis:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --phase2-only \
+  --exact-only \
   --no-synthetic \
   --manifest fixtures/public.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
   --gate-policy latency-budget \
-  --max-phase2-ratio 0.95 \
-  --max-phase2-encode-us 5000 \
-  --max-phase2-decode-us 1000 \
-  --max-phase2-container-ratio 0.96 \
-  --max-phase2-container-decode-us 1200
+  --max-exact-ratio 0.95 \
+  --max-exact-encode-us 5000 \
+  --max-exact-decode-us 1000 \
+  --max-exact-container-ratio 0.96 \
+  --max-exact-container-decode-us 1200
 ```
 
-The gate checks bit-identical `phase2-lossless` and `QATC` container
+The gate checks bit-identical `qatq-exact` and `QATC` container
 reconstruction plus any configured ratio or latency thresholds. It writes a
 markdown report and exits nonzero when the criteria fail.
 

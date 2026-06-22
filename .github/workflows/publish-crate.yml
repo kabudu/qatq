@@ -1,0 +1,44 @@
+name: Publish crate
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: "Cargo package version to publish"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish crates.io
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Require master
+        run: test "${GITHUB_REF_NAME}" = "master"
+      - name: Verify requested version
+        shell: bash
+        run: |
+          actual="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "qatq") | .version')"
+          test "$actual" = "${{ inputs.expected_version }}"
+      - name: Format
+        run: cargo fmt --check
+      - name: Check
+        run: cargo check --all-targets --locked
+      - name: Test
+        run: cargo test --locked
+      - name: Package
+        run: cargo package --locked
+      - name: Publish dry run
+        run: cargo publish --locked --dry-run
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked

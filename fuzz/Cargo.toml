@@ -19,8 +19,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "phase2_roundtrip"
-path = "fuzz_targets/phase2_roundtrip.rs"
+name = "qatq_exact_roundtrip"
+path = "fuzz_targets/qatq_exact_roundtrip.rs"
 test = false
 doc = false
 bench = false

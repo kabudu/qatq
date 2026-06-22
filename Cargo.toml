@@ -1,9 +1,9 @@
 [package]
 name = "qatq"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.88"
-description = "Quaternion-Augmented TurboQuant research codec for KV cache and tensor migration"
+edition = "2024"
+rust-version = "1.96"
+description = "Exact tensor-aware compression for LLM KV caches and runtime migration"
 license = "Apache-2.0"
 repository = "https://github.com/kabudu/qatq"
 readme = "README.md"
@@ -13,20 +13,33 @@ include = [
     "Cargo.toml",
     "Cargo.lock",
     "LICENSE",
+    "NOTICE",
     "README.md",
     "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "CODE_OF_CONDUCT.md",
+    "assets/**",
     "src/**",
     "examples/**",
+    "adapters/**",
     "tests/**",
+    "scripts/**",
     "docs/ARCHITECTURE.md",
     "docs/CREDITS.md",
     "docs/FIXTURES.md",
+    "docs/API_CLI_FREEZE.md",
+    "docs/BRAND.md",
+    "docs/EXTERNAL_RUNTIME_EVIDENCE.md",
+    "docs/PRODUCTION_READINESS.md",
     "docs/PUBLIC_*.md",
     "docs/PUBLIC_COMPARATIVE_*.md",
     "docs/PAPER_REFRESH_NOTES.md",
     "docs/WHITEPAPER_RESULTS.md",
     "docs/VALIDATION.md",
-    "docs/RUNTIME_ADAPTERS.md",
+    "docs/RUNTIME_*.md",
+    "docs/LLAMA_CPP_*.md",
     "docs/RELEASE_CHECKLIST.md",
     "fixtures/public.manifest",
     "fixtures/generated/**",
@@ -43,3 +56,8 @@ path = "src/main.rs"
 [dependencies]
 lz4_flex = "0.13.1"
 zstd = "0.13.3"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

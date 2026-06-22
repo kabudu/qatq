@@ -100,9 +100,9 @@ fn cli_encodes_and_decodes_phase1_q4_with_seed() {
 }
 
 #[test]
-fn cli_encodes_and_decodes_phase2_lossless_with_seed_exactly() {
+fn cli_encodes_and_decodes_qatq_exact_with_seed_exactly() {
     let dir = std::env::temp_dir();
-    let stem = format!("qatq-cli-phase2-{}", std::process::id());
+    let stem = format!("qatq-cli-exact-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
     let encoded = dir.join(format!("{stem}.qatq"));
     let decoded = dir.join(format!("{stem}.decoded.f32le"));
@@ -124,7 +124,7 @@ fn cli_encodes_and_decodes_phase2_lossless_with_seed_exactly() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg("--seed")
         .arg("0x51415451")
         .arg(&input)
@@ -154,9 +154,111 @@ fn cli_encodes_and_decodes_phase2_lossless_with_seed_exactly() {
 }
 
 #[test]
+fn cli_encodes_and_decodes_qatq_exact_bf16_native_bytes() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-exact-bf16-{}", std::process::id());
+    let input = dir.join(format!("{stem}.bf16le"));
+    let encoded = dir.join(format!("{stem}.qatq"));
+    let decoded = dir.join(format!("{stem}.decoded.bf16le"));
+    let mut input_bytes = Vec::new();
+    for bits in [
+        0x0000_u16, 0x8000, 0x3f80, 0xbf80, 0x7f80, 0xff80, 0x7fc1, 0x3eab, 0x3eab, 0x3eab,
+    ] {
+        input_bytes.extend_from_slice(&bits.to_le_bytes());
+    }
+    fs::write(&input, &input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode")
+        .arg("--mode")
+        .arg("qatq-exact")
+        .arg("--dtype")
+        .arg("bf16")
+        .arg(&input)
+        .arg(&encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run encode");
+    assert!(encode_status.success());
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(decode_status.success());
+
+    assert_eq!(fs::read(&decoded).expect("read decoded"), input_bytes);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_encodes_chunked_qatq_exact_f16_native_bytes() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-chunked-f16-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f16le"));
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f16le"));
+    let mut input_bytes = Vec::new();
+    for index in 0..130_u16 {
+        let bits = match index % 9 {
+            0 => 0x0000,
+            1 => 0x8000,
+            2 => 0x3c00,
+            3 => 0xbc00,
+            4 => 0x7c00,
+            5 => 0xfc00,
+            6 => 0x7e01,
+            _ => 0x3000 + index,
+        };
+        input_bytes.extend_from_slice(&bits.to_le_bytes());
+    }
+    fs::write(&input, &input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode-chunked")
+        .arg("--max-values-per-chunk")
+        .arg("31")
+        .arg("--dtype")
+        .arg("f16")
+        .arg(&input)
+        .arg(&encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run encode-chunked");
+    assert!(encode_status.success());
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(decode_status.success());
+
+    assert_eq!(fs::read(&decoded).expect("read decoded"), input_bytes);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
 fn cli_corrupt_qatq_decode_does_not_overwrite_existing_output() {
     let dir = std::env::temp_dir();
-    let stem = format!("qatq-cli-corrupt-phase2-{}", std::process::id());
+    let stem = format!("qatq-cli-corrupt-exact-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
     let encoded = dir.join(format!("{stem}.qatq"));
     let decoded = dir.join(format!("{stem}.decoded.f32le"));
@@ -171,7 +273,7 @@ fn cli_corrupt_qatq_decode_does_not_overwrite_existing_output() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg(&input)
         .arg(&encoded)
         .stdout(Stdio::null())
@@ -221,7 +323,7 @@ fn cli_failed_encode_does_not_overwrite_existing_output() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg(&input)
         .arg(&encoded)
         .stdout(Stdio::null())
@@ -254,7 +356,7 @@ fn cli_oversized_single_payload_encode_fails_before_overwriting_output() {
     let encode_status = Command::new(bin)
         .arg("encode")
         .arg("--mode")
-        .arg("phase2-lossless")
+        .arg("qatq-exact")
         .arg(&input)
         .arg(&encoded)
         .stdout(Stdio::null())
@@ -271,7 +373,7 @@ fn cli_oversized_single_payload_encode_fails_before_overwriting_output() {
 }
 
 #[test]
-fn cli_encodes_chunked_phase2_container_and_decodes_exactly() {
+fn cli_encodes_chunked_exact_container_and_decodes_exactly() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-cli-chunked-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
@@ -309,6 +411,8 @@ fn cli_encodes_chunked_phase2_container_and_decodes_exactly() {
 
     let encoded_bytes = fs::read(&encoded).expect("read encoded");
     assert_eq!(&encoded_bytes[0..4], b"QATC");
+    assert_eq!(encoded_bytes[4], 2);
+    assert_ne!(&encoded_bytes[24..32], &[0_u8; 8]);
 
     let decode_status = Command::new(bin)
         .arg("decode")
@@ -413,6 +517,137 @@ fn cli_corrupt_qatc_decode_does_not_overwrite_existing_output() {
     assert_eq!(decoded_bytes, sentinel);
 
     let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_qatc_checksum_mismatch_does_not_overwrite_existing_output() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-corrupt-qatchash-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+    let values: Vec<f32> = (0..130).map(|index| (index as f32).cos()).collect();
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, &input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode-chunked")
+        .arg("--max-values-per-chunk")
+        .arg("32")
+        .arg(&input)
+        .arg(&encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run encode-chunked");
+    assert!(encode_status.success());
+
+    let mut encoded_bytes = fs::read(&encoded).expect("read encoded");
+    encoded_bytes[31] ^= 0x01;
+    fs::write(&encoded, encoded_bytes).expect("write corrupt encoded");
+
+    let sentinel = b"keep-existing-output";
+    fs::write(&decoded, sentinel).expect("write sentinel output");
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(!decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes, sentinel);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_qatc_rejects_huge_chunk_count_without_overwriting_output() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-hostile-qatchunks-{}", std::process::id());
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"QATC");
+    payload.push(2);
+    payload.push(4);
+    payload.extend_from_slice(&[0, 0]);
+    payload.extend_from_slice(&1_u64.to_be_bytes());
+    payload.extend_from_slice(&u32::MAX.to_be_bytes());
+    payload.extend_from_slice(&[0; 4]);
+    payload.extend_from_slice(&0_u64.to_be_bytes());
+    fs::write(&encoded, payload).expect("write hostile container");
+
+    let sentinel = b"keep-existing-output";
+    fs::write(&decoded, sentinel).expect("write sentinel output");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(!decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes, sentinel);
+
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_qatc_rejects_huge_chunk_len_without_overwriting_output() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-hostile-qatclen-{}", std::process::id());
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"QATC");
+    payload.push(2);
+    payload.push(4);
+    payload.extend_from_slice(&[0, 0]);
+    payload.extend_from_slice(&1_u64.to_be_bytes());
+    payload.extend_from_slice(&1_u32.to_be_bytes());
+    payload.extend_from_slice(&[0; 4]);
+    payload.extend_from_slice(&0_u64.to_be_bytes());
+    payload.extend_from_slice(&u32::MAX.to_be_bytes());
+    fs::write(&encoded, payload).expect("write hostile container");
+
+    let sentinel = b"keep-existing-output";
+    fs::write(&decoded, sentinel).expect("write sentinel output");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(!decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes, sentinel);
+
     let _ = fs::remove_file(encoded);
     let _ = fs::remove_file(decoded);
 }

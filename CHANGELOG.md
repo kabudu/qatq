@@ -11,3 +11,5 @@ All notable changes to QATQ are recorded here.
 - Added production chunk metadata/restore helpers for runtime integrations.
 - Added CI, fuzz-target scaffolding, release checklist, and public paper/
   white-paper result notes.
+- Added open-source readiness files, issue/PR templates, Dependabot
+  configuration, and QATQ starter brand assets.

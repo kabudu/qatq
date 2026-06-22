@@ -1,18 +1,24 @@
 use std::{
     env, fs,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
 use qatq::{
-    decode, decode_phase2_lossless, for_each_phase2_lossless_container_payload, parse_mode,
-    try_encode, try_encode_phase1_q4_with_config, try_encode_phase2_lossless_with_config,
-    try_encode_turboquant_q4_with_config, CodecMode, Phase1Config, MAX_VALUES_PER_PAYLOAD,
+    CodecMode, DEFAULT_MAX_QATC_CHUNK_BYTES, DEFAULT_MAX_QATC_CHUNKS, DEFAULT_MAX_QATC_VALUES,
+    MAX_VALUES_PER_PAYLOAD, Phase1Config, TensorDType, decode, decode_qatq_exact,
+    decode_qatq_exact_tensor_le, parse_mode, try_encode, try_encode_phase1_q4_with_config,
+    try_encode_qatq_exact_tensor_le, try_encode_qatq_exact_with_config,
+    try_encode_turboquant_q4_with_config,
 };
 
 const QATC_MAGIC: &[u8; 4] = b"QATC";
-const QATQ_VERSION: u8 = 1;
-const PHASE2_LOSSLESS_MODE_ID: u8 = 4;
+const QATC_VERSION: u8 = 2;
+const QATC_HEADER_LEN: usize = 32;
+const QATC_CHUNK_LEN: usize = 4;
+const QATQ_EXACT_MODE_ID: u8 = 4;
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 fn main() {
     if let Err(error) = run() {
@@ -36,10 +42,10 @@ fn run() -> Result<(), String> {
 }
 
 fn encode_command(args: &[String]) -> Result<(), String> {
-    if args.len() != 4 && args.len() != 6 {
+    if args.len() < 4 {
         print_usage();
         return Err(
-            "usage: qatq encode --mode <mode> [--seed <u64>] <input.f32le> <output.qatq>"
+            "usage: qatq encode --mode <mode> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
                 .to_string(),
         );
     }
@@ -49,24 +55,49 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     }
 
     let mode = parse_mode(&args[1]).map_err(|error| error.to_string())?;
-    let (seed, input_path, output_path) = if args.len() == 6 {
-        if args[2] != "--seed" {
-            print_usage();
-            return Err("optional encode configuration must be --seed <u64>".to_string());
+    let mut dtype = TensorDType::F32;
+    let mut seed = None;
+    let mut index = 2;
+    while index < args.len() && args[index].starts_with("--") {
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("{} requires a value", args[index]))?;
+        match args[index].as_str() {
+            "--dtype" => dtype = parse_dtype(value)?,
+            "--seed" => seed = Some(parse_seed(value)?),
+            other => return Err(format!("unknown encode option {other}")),
         }
-        if mode != CodecMode::TurboQuantQ4
-            && mode != CodecMode::Phase1Q4
-            && mode != CodecMode::Phase2Lossless
-        {
-            return Err(
-                "--seed is only supported with turboquant-q4, phase1-q4, and phase2-lossless"
-                    .to_string(),
-            );
-        }
-        (Some(parse_seed(&args[3])?), &args[4], &args[5])
-    } else {
-        (None, &args[2], &args[3])
-    };
+        index += 2;
+    }
+    if args.len() - index != 2 {
+        print_usage();
+        return Err("usage: qatq encode --mode <mode> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>".to_string());
+    }
+    if dtype != TensorDType::F32 && mode != CodecMode::QatqExact {
+        return Err("--dtype f16/bf16 is only supported with qatq-exact".to_string());
+    }
+    if dtype != TensorDType::F32 && seed.is_some() {
+        return Err(
+            "--seed is only supported for f32 qatq-exact, turboquant-q4, and phase1-q4".to_string(),
+        );
+    }
+    if seed.is_some()
+        && mode != CodecMode::TurboQuantQ4
+        && mode != CodecMode::Phase1Q4
+        && mode != CodecMode::QatqExact
+    {
+        return Err(
+            "--seed is only supported with turboquant-q4, phase1-q4, and qatq-exact".to_string(),
+        );
+    }
+    let input_path = &args[index];
+    let output_path = &args[index + 1];
+    if dtype != TensorDType::F32 {
+        let bytes = read_typed_tensor_bytes(input_path, dtype, Some(MAX_VALUES_PER_PAYLOAD))?;
+        let payload =
+            try_encode_qatq_exact_tensor_le(&bytes, dtype).map_err(|error| error.to_string())?;
+        return write_bytes_atomic(output_path, &payload);
+    }
     let values = read_f32le(input_path, Some(MAX_VALUES_PER_PAYLOAD))?;
     let payload = match (mode, seed) {
         (CodecMode::Phase1Q4, Some(seed)) => {
@@ -77,8 +108,8 @@ fn encode_command(args: &[String]) -> Result<(), String> {
             try_encode_turboquant_q4_with_config(&values, Phase1Config { seed })
                 .map_err(|error| error.to_string())?
         }
-        (CodecMode::Phase2Lossless, Some(seed)) => {
-            try_encode_phase2_lossless_with_config(&values, Phase1Config { seed })
+        (CodecMode::QatqExact, Some(seed)) => {
+            try_encode_qatq_exact_with_config(&values, Phase1Config { seed })
                 .map_err(|error| error.to_string())?
         }
         _ => try_encode(&values, mode).map_err(|error| error.to_string())?,
@@ -87,10 +118,10 @@ fn encode_command(args: &[String]) -> Result<(), String> {
 }
 
 fn encode_chunked_command(args: &[String]) -> Result<(), String> {
-    if args.len() != 4 && args.len() != 6 {
+    if args.len() < 4 {
         print_usage();
         return Err(
-            "usage: qatq encode-chunked --max-values-per-chunk <usize> [--seed <u64>] <input.f32le> <output.qatc>"
+            "usage: qatq encode-chunked --max-values-per-chunk <usize> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatc>"
                 .to_string(),
         );
     }
@@ -102,22 +133,42 @@ fn encode_chunked_command(args: &[String]) -> Result<(), String> {
     let max_values_per_chunk = args[1]
         .parse::<usize>()
         .map_err(|error| format!("invalid --max-values-per-chunk {}: {error}", args[1]))?;
-    let (seed, input_path, output_path) = if args.len() == 6 {
-        if args[2] != "--seed" {
-            print_usage();
-            return Err("optional encode-chunked configuration must be --seed <u64>".to_string());
+    let mut dtype = TensorDType::F32;
+    let mut seed = None;
+    let mut index = 2;
+    while index < args.len() && args[index].starts_with("--") {
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("{} requires a value", args[index]))?;
+        match args[index].as_str() {
+            "--dtype" => dtype = parse_dtype(value)?,
+            "--seed" => seed = Some(parse_seed(value)?),
+            other => return Err(format!("unknown encode-chunked option {other}")),
         }
-        (parse_seed(&args[3])?, &args[4], &args[5])
-    } else {
-        (Phase1Config::default().seed, &args[2], &args[3])
-    };
+        index += 2;
+    }
+    if args.len() - index != 2 {
+        print_usage();
+        return Err("usage: qatq encode-chunked --max-values-per-chunk <usize> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatc>".to_string());
+    }
+    if dtype != TensorDType::F32 && seed.is_some() {
+        return Err("--seed is only supported for f32 chunked exact encoding".to_string());
+    }
 
-    encode_f32le_file_to_qatc_atomic(
-        input_path,
-        output_path,
-        max_values_per_chunk,
-        Phase1Config { seed },
-    )
+    let input_path = &args[index];
+    let output_path = &args[index + 1];
+    if dtype == TensorDType::F32 {
+        encode_f32le_file_to_qatc_atomic(
+            input_path,
+            output_path,
+            max_values_per_chunk,
+            Phase1Config {
+                seed: seed.unwrap_or_else(|| Phase1Config::default().seed),
+            },
+        )
+    } else {
+        encode_typed_file_to_qatc_atomic(input_path, output_path, max_values_per_chunk, dtype)
+    }
 }
 
 fn decode_command(args: &[String]) -> Result<(), String> {
@@ -125,36 +176,159 @@ fn decode_command(args: &[String]) -> Result<(), String> {
         print_usage();
         return Err("usage: qatq decode <input.qatq> <output.f32le>".to_string());
     }
+    if input_has_qatc_magic(&args[0])? {
+        return decode_qatc_file_to_f32le_atomic(&args[0], &args[1]);
+    }
     let payload =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
-    if payload.starts_with(b"QATC") {
-        return decode_container_to_f32le(&payload, &args[1]);
+    if let Ok(tensor) = decode_qatq_exact_tensor_le(&payload) {
+        return write_bytes_atomic(&args[1], &tensor.bytes_le);
     }
     let values = decode(&payload).map_err(|error| error.to_string())?;
     write_f32le_atomic(&args[1], &values)
 }
 
-fn decode_container_to_f32le(payload: &[u8], output_path: impl AsRef<Path>) -> Result<(), String> {
+fn input_has_qatc_magic(input_path: impl AsRef<Path>) -> Result<bool, String> {
+    let input_path = input_path.as_ref();
+    let mut file = fs::File::open(input_path)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    let mut magic = [0_u8; 4];
+    let bytes_read = file
+        .read(&mut magic)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    Ok(bytes_read == 4 && &magic == QATC_MAGIC)
+}
+
+fn decode_qatc_file_to_f32le_atomic(
+    input_path: impl AsRef<Path>,
+    output_path: impl AsRef<Path>,
+) -> Result<(), String> {
+    let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
+    let file = fs::File::open(input_path)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    let mut reader = BufReader::new(file);
     write_atomic_with(output_path, |writer| {
-        let mut write_error = None;
-        let result = for_each_phase2_lossless_container_payload(payload, |chunk| {
-            let values = decode_phase2_lossless(chunk)?;
-            write_f32le_values(writer, &values).map_err(|error| {
-                write_error = Some(format!(
-                    "failed to write {}: {error}",
-                    output_path.display()
-                ));
-                qatq::QatqError::InvalidContainer
-            })?;
-            Ok(())
-        });
-        match (result, write_error) {
-            (Ok(()), _) => Ok(()),
-            (Err(_), Some(error)) => Err(error),
-            (Err(error), None) => Err(error.to_string()),
-        }
+        decode_qatc_reader_to_f32le(&mut reader, writer, input_path, output_path)
     })
+}
+
+fn decode_qatc_reader_to_f32le(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    input_path: &Path,
+    output_path: &Path,
+) -> Result<(), String> {
+    let mut header = [0_u8; QATC_HEADER_LEN];
+    reader
+        .read_exact(&mut header)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    if &header[0..4] != QATC_MAGIC {
+        return Err("payload magic is not QATQ or QATC".to_string());
+    }
+    if header[4] != QATC_VERSION {
+        return Err(format!("unsupported QATQ version {}", header[4]));
+    }
+    if header[5] != QATQ_EXACT_MODE_ID || header[6..8] != [0, 0] || header[20..24] != [0; 4] {
+        return Err("chunked container is invalid".to_string());
+    }
+    let total_values = usize::try_from(u64::from_be_bytes(
+        header[8..16].try_into().expect("fixed container header"),
+    ))
+    .map_err(|_| format!("value count is too large: {}", usize::MAX))?;
+    let chunk_count =
+        u32::from_be_bytes(header[16..20].try_into().expect("fixed container header")) as usize;
+    let expected_checksum =
+        u64::from_be_bytes(header[24..32].try_into().expect("fixed container checksum"));
+    if total_values > DEFAULT_MAX_QATC_VALUES {
+        return Err("chunked container exceeds decode limit: total values".to_string());
+    }
+    if chunk_count == 0 {
+        return Err("chunked container is invalid".to_string());
+    }
+    if chunk_count > DEFAULT_MAX_QATC_CHUNKS {
+        return Err("chunked container exceeds decode limit: chunks".to_string());
+    }
+
+    let mut decoded_values = 0_usize;
+    let mut output_dtype = None;
+    let mut container_checksum = FNV_OFFSET;
+    let mut len_buf = [0_u8; QATC_CHUNK_LEN];
+    for _ in 0..chunk_count {
+        reader
+            .read_exact(&mut len_buf)
+            .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+        let chunk_len = u32::from_be_bytes(len_buf) as usize;
+        if chunk_len < 36 {
+            return Err("chunked container is invalid".to_string());
+        }
+        if chunk_len > DEFAULT_MAX_QATC_CHUNK_BYTES {
+            return Err("chunked container exceeds decode limit: chunk bytes".to_string());
+        }
+        let mut chunk = Vec::new();
+        chunk
+            .try_reserve_exact(chunk_len)
+            .map_err(|_| "chunked container exceeds decode limit: allocation".to_string())?;
+        chunk.resize(chunk_len, 0);
+        reader
+            .read_exact(&mut chunk)
+            .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+        container_checksum = qatc_checksum_chunk(container_checksum, &chunk);
+        if let Ok(tensor) = decode_qatq_exact_tensor_le(&chunk) {
+            if let Some(existing) = output_dtype {
+                if existing != tensor.dtype {
+                    return Err("chunked container has mixed tensor dtypes".to_string());
+                }
+            } else {
+                output_dtype = Some(tensor.dtype);
+            }
+            let values = tensor.bytes_le.len() / tensor.dtype.element_width();
+            decoded_values = decoded_values
+                .checked_add(values)
+                .ok_or_else(|| "chunked container is invalid".to_string())?;
+            if decoded_values > total_values {
+                return Err("chunked container is invalid".to_string());
+            }
+            writer
+                .write_all(&tensor.bytes_le)
+                .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
+        } else {
+            if let Some(existing) = output_dtype {
+                if existing != TensorDType::F32 {
+                    return Err("chunked container has mixed tensor dtypes".to_string());
+                }
+            } else {
+                output_dtype = Some(TensorDType::F32);
+            }
+            let values = decode_qatq_exact(&chunk).map_err(|error| error.to_string())?;
+            decoded_values = decoded_values
+                .checked_add(values.len())
+                .ok_or_else(|| "chunked container is invalid".to_string())?;
+            if decoded_values > total_values {
+                return Err("chunked container is invalid".to_string());
+            }
+            write_f32le_values(writer, &values)
+                .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
+        }
+    }
+
+    let mut trailing = [0_u8; 1];
+    if reader
+        .read(&mut trailing)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?
+        != 0
+    {
+        return Err("chunked container is invalid".to_string());
+    }
+    if decoded_values != total_values {
+        return Err("chunked container is invalid".to_string());
+    }
+    if container_checksum != expected_checksum {
+        return Err(format!(
+            "checksum mismatch: expected {expected_checksum:016x}, got {container_checksum:016x}"
+        ));
+    }
+    Ok(())
 }
 
 fn fixture_command(args: &[String]) -> Result<(), String> {
@@ -235,13 +409,13 @@ fn generated_fixture_specs() -> Vec<GeneratedFixture> {
         GeneratedFixture {
             name: "bf16-kv-wave-128x8x16",
             shape: "[tokens=128, heads=8, dim=16]",
-            notes: "generated public bfloat16-like KV wave; compression-positive phase2 fixture",
+            notes: "generated public bfloat16-like KV wave; compression-positive exact fixture",
             values: generated_bf16_wave_values(128 * 8 * 16),
         },
         GeneratedFixture {
             name: "f32-noisy-pass-through-64x12x16",
             shape: "[tokens=64, heads=12, dim=16]",
-            notes: "generated public float32 noisy fixture; expected no-compress pass-through candidate",
+            notes: "generated public float32 noisy fixture; exact compression stress candidate",
             values: generated_noisy_f32_values(64 * 12 * 16, 0x9e37_79b9),
         },
         GeneratedFixture {
@@ -753,6 +927,33 @@ fn read_f32le(path: impl AsRef<Path>, max_values: Option<usize>) -> Result<Vec<f
     Ok(values)
 }
 
+fn read_typed_tensor_bytes(
+    path: impl AsRef<Path>,
+    dtype: TensorDType,
+    max_values: Option<usize>,
+) -> Result<Vec<u8>, String> {
+    let path = path.as_ref();
+    let (byte_len, value_count) = validate_typed_tensor_file_metadata(path, dtype)?;
+    if let Some(max_values) = max_values {
+        if value_count > max_values {
+            return Err(format!(
+                "{} contains {value_count} {} values, exceeding the single-payload limit of {max_values}; use encode-chunked for large tensors",
+                path.display(),
+                dtype.as_str()
+            ));
+        }
+    }
+    fs::read(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))
+        .and_then(|bytes| {
+            if bytes.len() == byte_len {
+                Ok(bytes)
+            } else {
+                Err(format!("failed to read complete {}", path.display()))
+            }
+        })
+}
+
 fn validate_f32le_file_metadata(path: &Path) -> Result<(usize, usize), String> {
     let metadata = fs::metadata(path)
         .map_err(|error| format!("failed to stat {}: {error}", path.display()))?;
@@ -770,6 +971,30 @@ fn validate_f32le_file_metadata(path: &Path) -> Result<(usize, usize), String> {
     }
     let value_count = byte_len / 4;
     Ok((byte_len, value_count))
+}
+
+fn validate_typed_tensor_file_metadata(
+    path: &Path,
+    dtype: TensorDType,
+) -> Result<(usize, usize), String> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("failed to stat {}: {error}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("{} is not a file", path.display()));
+    }
+    let byte_len = usize::try_from(metadata.len())
+        .map_err(|_| format!("{} is too large for this platform", path.display()))?;
+    let width = dtype.element_width();
+    if byte_len % width != 0 {
+        return Err(format!(
+            "{} is not a raw {}le file: byte length {} is not divisible by {}",
+            path.display(),
+            dtype.as_str(),
+            byte_len,
+            width
+        ));
+    }
+    Ok((byte_len, byte_len / width))
 }
 
 fn encode_f32le_file_to_qatc_atomic(
@@ -808,28 +1033,95 @@ fn encode_f32le_file_to_qatc_atomic(
     })?;
     bytes.resize(chunk_byte_len, 0);
     write_atomic_with(output_path, |writer| {
-        write_qatc_header(writer, value_count, chunk_count)
+        write_qatc_header(writer, value_count, chunk_count, 0)
             .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
+        let mut container_checksum = FNV_OFFSET;
         if value_count == 0 {
-            let payload = try_encode_phase2_lossless_with_config(&[], config)
+            let payload = try_encode_qatq_exact_with_config(&[], config)
                 .map_err(|error| error.to_string())?;
+            container_checksum = qatc_checksum_chunk(container_checksum, &payload);
             write_qatc_chunk(writer, &payload, output_path)?;
-            return Ok(());
+        } else {
+            let mut remaining_values = value_count;
+            while remaining_values > 0 {
+                let chunk_values = remaining_values.min(max_values_per_chunk);
+                let chunk_bytes = chunk_values * 4;
+                reader
+                    .read_exact(&mut bytes[..chunk_bytes])
+                    .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+                let values = decode_f32le_chunk(&bytes[..chunk_bytes]);
+                let payload = try_encode_qatq_exact_with_config(&values, config)
+                    .map_err(|error| error.to_string())?;
+                container_checksum = qatc_checksum_chunk(container_checksum, &payload);
+                write_qatc_chunk(writer, &payload, output_path)?;
+                remaining_values -= chunk_values;
+            }
         }
+        patch_qatc_checksum(writer, container_checksum, output_path)?;
+        Ok(())
+    })
+}
 
-        let mut remaining_values = value_count;
-        while remaining_values > 0 {
-            let chunk_values = remaining_values.min(max_values_per_chunk);
-            let chunk_bytes = chunk_values * 4;
-            reader
-                .read_exact(&mut bytes[..chunk_bytes])
-                .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-            let values = decode_f32le_chunk(&bytes[..chunk_bytes]);
-            let payload = try_encode_phase2_lossless_with_config(&values, config)
-                .map_err(|error| error.to_string())?;
+fn encode_typed_file_to_qatc_atomic(
+    input_path: impl AsRef<Path>,
+    output_path: impl AsRef<Path>,
+    max_values_per_chunk: usize,
+    dtype: TensorDType,
+) -> Result<(), String> {
+    let input_path = input_path.as_ref();
+    let output_path = output_path.as_ref();
+    if max_values_per_chunk == 0 || max_values_per_chunk > MAX_VALUES_PER_PAYLOAD {
+        return Err(format!("chunk size is invalid: {max_values_per_chunk}"));
+    }
+    let (_, value_count) = validate_typed_tensor_file_metadata(input_path, dtype)?;
+    let chunk_count = if value_count == 0 {
+        1
+    } else {
+        value_count.div_ceil(max_values_per_chunk)
+    };
+    if chunk_count > u32::MAX as usize {
+        return Err("chunked container is invalid".to_string());
+    }
+
+    let file = fs::File::open(input_path)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+    let mut reader = BufReader::new(file);
+    let chunk_byte_len = max_values_per_chunk
+        .checked_mul(dtype.element_width())
+        .ok_or_else(|| format!("chunk size is invalid: {max_values_per_chunk}"))?;
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(chunk_byte_len).map_err(|_| {
+        format!(
+            "failed to allocate chunk buffer for {}",
+            input_path.display()
+        )
+    })?;
+    bytes.resize(chunk_byte_len, 0);
+    write_atomic_with(output_path, |writer| {
+        write_qatc_header(writer, value_count, chunk_count, 0)
+            .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
+        let mut container_checksum = FNV_OFFSET;
+        if value_count == 0 {
+            let payload =
+                try_encode_qatq_exact_tensor_le(&[], dtype).map_err(|error| error.to_string())?;
+            container_checksum = qatc_checksum_chunk(container_checksum, &payload);
             write_qatc_chunk(writer, &payload, output_path)?;
-            remaining_values -= chunk_values;
+        } else {
+            let mut remaining_values = value_count;
+            while remaining_values > 0 {
+                let chunk_values = remaining_values.min(max_values_per_chunk);
+                let chunk_bytes = chunk_values * dtype.element_width();
+                reader
+                    .read_exact(&mut bytes[..chunk_bytes])
+                    .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+                let payload = try_encode_qatq_exact_tensor_le(&bytes[..chunk_bytes], dtype)
+                    .map_err(|error| error.to_string())?;
+                container_checksum = qatc_checksum_chunk(container_checksum, &payload);
+                write_qatc_chunk(writer, &payload, output_path)?;
+                remaining_values -= chunk_values;
+            }
         }
+        patch_qatc_checksum(writer, container_checksum, output_path)?;
         Ok(())
     })
 }
@@ -846,13 +1138,40 @@ fn write_qatc_header(
     writer: &mut impl Write,
     total_values: usize,
     chunk_count: usize,
+    container_checksum: u64,
 ) -> std::io::Result<()> {
     writer.write_all(QATC_MAGIC)?;
-    writer.write_all(&[QATQ_VERSION, PHASE2_LOSSLESS_MODE_ID, 0, 0])?;
+    writer.write_all(&[QATC_VERSION, QATQ_EXACT_MODE_ID, 0, 0])?;
     writer.write_all(&(total_values as u64).to_be_bytes())?;
     writer.write_all(&(chunk_count as u32).to_be_bytes())?;
     writer.write_all(&[0, 0, 0, 0])?;
+    writer.write_all(&container_checksum.to_be_bytes())?;
     Ok(())
+}
+
+fn patch_qatc_checksum(
+    writer: &mut BufWriter<fs::File>,
+    container_checksum: u64,
+    output_path: &Path,
+) -> Result<(), String> {
+    writer
+        .flush()
+        .and_then(|_| writer.seek(SeekFrom::Start(24)).map(|_| ()))
+        .and_then(|_| writer.write_all(&container_checksum.to_be_bytes()))
+        .and_then(|_| writer.seek(SeekFrom::End(0)).map(|_| ()))
+        .map_err(|error| format!("failed to finalize {}: {error}", output_path.display()))
+}
+
+fn qatc_checksum_chunk(mut hash: u64, payload: &[u8]) -> u64 {
+    for byte in (payload.len() as u32).to_be_bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    for byte in payload {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
 }
 
 fn write_qatc_chunk(
@@ -948,15 +1267,28 @@ fn parse_seed(value: &str) -> Result<u64, String> {
     }
 }
 
+fn parse_dtype(value: &str) -> Result<TensorDType, String> {
+    match value {
+        "f32" => Ok(TensorDType::F32),
+        "f16" => Ok(TensorDType::F16),
+        "bf16" => Ok(TensorDType::BF16),
+        other => Err(format!(
+            "unsupported dtype {other}; expected f32, f16, or bf16"
+        )),
+    }
+}
+
 fn print_usage() {
     eprintln!("usage:");
     eprintln!(
-        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|phase2-lossless> [--seed <u64>] <input.f32le> <output.qatq>"
+        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|qatq-exact> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
     );
     eprintln!(
-        "  qatq encode-chunked --max-values-per-chunk <usize> [--seed <u64>] <input.f32le> <output.qatc>"
+        "  qatq encode-chunked --max-values-per-chunk <usize> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatc>"
     );
-    eprintln!("  qatq decode <input.qatq> <output.f32le>");
-    eprintln!("  qatq fixture add --manifest <path> --name <name> --path <tensor.f32le> [--group <group>] [--shape <shape>] [--notes <notes>]");
+    eprintln!("  qatq decode <input.qatq|input.qatc> <output.rawle>");
+    eprintln!(
+        "  qatq fixture add --manifest <path> --name <name> --path <tensor.f32le> [--group <group>] [--shape <shape>] [--notes <notes>]"
+    );
     eprintln!("  qatq fixture verify --manifest <path> [--output <audit.md>]");
 }

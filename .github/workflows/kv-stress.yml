@@ -1,0 +1,16 @@
+name: kv-stress
+
+on:
+  schedule:
+    - cron: "41 4 * * 2"
+  workflow_dispatch:
+
+jobs:
+  kv-stress:
+    name: deterministic KV stress matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run deterministic KV stress matrix
+        run: cargo test --test kv_stress -- --ignored --nocapture

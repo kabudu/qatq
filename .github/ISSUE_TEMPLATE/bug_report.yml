@@ -1,0 +1,39 @@
+name: Bug Report
+description: Report a reproducible QATQ bug.
+title: "[bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What failed, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include commands, input shape, dtype, and whether the input is public or private.
+      placeholder: |
+        cargo run -- encode --mode qatq-exact --dtype f16 input.f16le output.qatq
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: QATQ Version Or Commit
+    validations:
+      required: true
+  - type: input
+    id: rust
+    attributes:
+      label: Rust Version
+      placeholder: rustc --version
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Do not include private captures, credentials, or cloud logs.
+      render: text

@@ -21,14 +21,14 @@ let values = qatq::restore_production_chunk(&metadata, bytes)?;
 
 Supported storage labels:
 
-- `qatq-phase2`: `bytes` is a QATQ phase-2 exact payload.
+- `qatq-exact`: `bytes` is a QATQ exact payload.
 - `raw-f32le-pass-through`: `bytes` is raw little-endian f32.
 
 Adapters must preserve:
 
 - `storage`
 - `raw_f32le_len`
-- optional phase-2 `strategy`
+- optional QATQ exact `strategy`
 - byte payload without transcoding
 
 ## Required Runtime Behavior

@@ -6,7 +6,7 @@ This white-paper draft records what the current standalone QATQ implementation
 can claim from its generated public fixture corpus. External runtime evidence is
 appendix material rather than a project dependency.
 
-QATQ is not complete as a final public product. The exact phase-2 codec,
+QATQ is not complete as a final public product. The exact QATQ exact codec,
 production decision API, public fixtures, CI, fuzz scaffold, and release
 checklist now exist, but random-access/streaming container work and broader
 comparative baselines remain open.
@@ -18,53 +18,64 @@ comparative baselines remain open.
 - Patterns represented: bfloat16-like KV ramp, bfloat16-like KV wave, noisy
   float32 pass-through, and signed-zero/NaN/infinity exactness stress.
 - Gate input: `fixtures/public.manifest`.
-- Benchmark mode: `phase2-only`, `--no-synthetic`.
+- Benchmark mode: `exact-only`, `--no-synthetic`.
 - Production gate: `docs/PUBLIC_BENCHMARK_GATE.md`.
+- Competitive compression gate: `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`.
+- Compression summary: `docs/PUBLIC_COMPRESSION_SUMMARY.md`.
 - Comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`.
 - Quality-proxy experiments: `docs/PUBLIC_QUALITY_EXPERIMENTS.md`.
+- Task-quality experiments: `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`.
+- Runtime model-output task experiment:
+  `docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md`.
 - Optional external validation: independently supplied runtime fixture
   manifests and result summaries.
 
 ## Production Decision Behavior
 
-QATQ phase 2 now exposes a production decision API:
+QATQ exact now exposes a production decision API:
 
 ```rust
-qatq::try_encode_phase2_lossless_decision_with_config(values, config)
+qatq::try_encode_qatq_exact_decision_with_config(values, config)
 ```
 
 The decision has two valid production outcomes:
 
-- `Compressed`: transmit/store a QATQ phase-2 payload.
+- `Compressed`: transmit/store a QATQ exact payload.
 - `PassThroughRaw`: transmit/store raw f32le bytes with pass-through metadata.
 
-The generated public corpus exercises both outcomes: bfloat16-like KV fixtures
-compress, while noisy float32 and exactness-stress fixtures pass through.
+The generated public corpus currently compresses under the QATQ exact path.
+The production API still keeps `PassThroughRaw` as the correct outcome for
+future compression-negative tensors.
 
 ## Benchmark Results
 
 | Metric | Result |
 | --- | ---: |
 | Public fixtures | 4 |
-| Compressed decisions | 2 |
-| Raw pass-through decisions | 2 |
-| Average direct compressed ratio | 0.5009 |
-| Average direct compressed reduction | 49.91% |
-| Maximum direct decode throughput | 2.0411 ns/value |
-| Maximum QATC decode throughput | 2.1015 ns/value |
+| Compressed decisions | 4 |
+| Raw pass-through decisions | 0 |
+| Average direct compressed ratio | 0.2906 |
+| Average direct compressed reduction | 70.94% |
+| Maximum direct decode throughput | 10.0976 ns/value |
+| Maximum QATC decode throughput | 13.9664 ns/value |
 
-All phase-2 and QATC rows in the current evidence bundle report exact bit
-reconstruction. Pass-through rows are not compression misses; they are the
-expected production decision when phase-2 compression would not reduce payload
-size.
+All QATQ exact and QATC rows in the current evidence bundle report exact bit
+reconstruction. Raw pass-through remains part of the production API for future
+compression-negative tensors, but the current public corpus selects compressed
+QATQ exact storage for all rows.
 
 `docs/PUBLIC_COMPARATIVE_BASELINES.md` contains the public all-codec comparison
-against raw f32, software FP8 e4m3, seed lossy-i4, phase1-q4, phase2-lossless,
-phase2 exhaustive, and QATC container rows. These are codec-level baselines, not
+against raw f32, software FP8 e4m3, seed lossy-i4, phase1-q4, qatq-exact,
+qatq_exact exhaustive, and QATC container rows. These are codec-level baselines, not
 runtime-native hardware comparisons. The comparison now includes zstd/lz4
 raw-f32le byte-compression rows and a `turboquant-q4` base reference row. The
 `turboquant-q4` row is a QATQ reference comparator with QJL residual signs for
 inner-product estimation, not an official Google implementation.
+
+The exact QATQ exact selector now includes a reversible quaternion-chain residual
+candidate. It wins on the public wave and exactness-stress fixtures while
+remaining bit-for-bit reversible; byte-plane zstd remains smaller on the ramp
+and noisy fixtures.
 
 The QJL reference path uses bounded deterministic signed-Hadamard projections,
 so QJL projection and correction are structured O(d log d) operations rather
@@ -72,11 +83,21 @@ than dense projection loops. These rows are now suitable as runtime-comparator
 measurements, while still remaining a QATQ reference implementation rather than
 official Google code.
 
-`docs/PUBLIC_QUALITY_EXPERIMENTS.md` adds the first paper-facing quality proxy:
-four deterministic finite inner-product probes per public fixture. It compares
-the `turboquant-q4` QJL estimator with the `phase1-q4` decoded-vector inner
-product. This supports discussion of codec-level dot-product preservation, but
-it still does not establish model-quality or perplexity superiority.
+`docs/PUBLIC_QUALITY_EXPERIMENTS.md` records codec-level inner-product probes
+for the lossy reference paths. `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md` adds a
+small end-to-end retrieval proxy: finite fixture values are grouped into
+16-value records, deterministic records are used as queries, and decoded codec
+corpora are checked for top-1 retrieval agreement with the original f32 corpus.
+QATQ exact transport is expected to preserve those decisions; lossy
+`turboquant-q4` and `phase1-q4` rows are comparator context only. These reports
+still do not establish model-quality or perplexity superiority.
+
+`docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md` adds a local Ollama model-output
+task: `phi4-mini:latest` generates a 12-query by 24-document relevance-score
+tensor, QATQ ingests it as a runtime fixture, and QATQ exact transport
+preserves the generated tensor bits and all raw top-1 retrieval decisions. This
+is real model-output task evidence, but it is not direct live KV-cache
+extraction or a language-model perplexity benchmark.
 
 ## Gate Policy
 
@@ -85,6 +106,9 @@ The gate policy is now split:
 - `production-kv`: production readiness for generated or external KV-like
   tensors. The public CI gate uses portable `50.00 ns/value` direct and QATC
   decode ceilings.
+- `competitive-compression`: compression regression protection. Every
+  compression-positive QATQ exact row must be at or below the best zstd/lz4 raw-f32
+  baseline for the same fixture.
 - `latency-budget`: fixed absolute microsecond analysis for small tensors or
   deployment-specific service envelopes. This gate currently fails on large
   tensors because fixed `1000us/1200us` decode ceilings scale poorly with
@@ -95,10 +119,10 @@ readiness result for large KV tensors.
 
 ## Interpretation
 
-The strongest current result is conservative: QATQ phase 2 is an exact,
-production-callable storage decision path that can compress bfloat16-like KV
-tensors to roughly half of raw f32 size and can safely pass through
-compression-negative float32/stress tensors.
+The strongest current result is conservative: QATQ exact is an exact,
+production-callable storage decision path that compresses every generated
+public fixture below the best zstd/lz4 raw-f32 baseline for the same row, while
+retaining raw f32 pass-through for future compression-negative tensors.
 
 This is enough to justify a standalone open-source QATQ release candidate and a
 refreshed paper section around reproducible exact transport results. It is not
@@ -107,9 +131,11 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
 ## Remaining Work Before A Public Claim
 
 - Compare against runtime-native quantization baselines.
-- Add end-to-end model/task quality experiments before making quality claims
-  against Google's TurboQuant paper.
-- Add model-quality or task-quality evaluation for lossy Phase 1.
-- Expand fuzzing duration in CI and add coverage/supply-chain checks.
+- Add language-model perplexity and direct live KV-cache extraction experiments
+  before making quality claims against Google's TurboQuant paper.
+- Add model-quality evaluation for lossy Phase 1 if that path remains in the
+  paper narrative.
+- Keep scheduled fuzzing, coverage, and supply-chain checks green before
+  release tags.
 - Define a random-access or streaming container/service format if runtime
   paging is required.
