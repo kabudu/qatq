@@ -17,7 +17,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | API/CLI naming | accepted for v0.1.0 | `docs/API_CLI_FREEZE.md`. |
 | Coverage checks | wired in CI | `.github/workflows/coverage-supply-chain.yml`; line coverage gate `75%`. |
 | Supply-chain checks | wired in CI | `.github/workflows/coverage-supply-chain.yml`; RustSec audit, locked metadata, duplicate dependency check. |
-| GitHub Release binaries | wired in CI | `.github/workflows/release.yml`; cargo-dist archives, installers, and checksums from annotated tags. |
+| GitHub Release binaries | wired in CI | `.github/workflows/release.yml`; cargo-dist archives, installers, checksums, and signed/notarized macOS zip archives from annotated tags. |
 | crates.io publication | manually gated | `.github/workflows/publish-crate.yml`; requires `crates-io` environment approval. |
 
 ## Remaining Production Gates

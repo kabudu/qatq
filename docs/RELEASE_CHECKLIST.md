@@ -106,6 +106,11 @@ cargo-dist. The workflow publishes:
 - shell and PowerShell installers;
 - per-archive `.sha256` files and a unified `sha256.sum`.
 
+macOS release binaries are codesigned by cargo-dist using the Apple Developer ID
+certificate configured in GitHub secrets. The macOS zip archives are then
+submitted to Apple notarization with `xcrun notarytool` before they are uploaded
+to the GitHub Release.
+
 The binary archives also include auxiliary benchmark binaries from the crate.
 Only `qatq` is the supported end-user CLI; `qatq-bench` and `qatq-kv-bench` are
 developer/release validation utilities.
@@ -130,11 +135,33 @@ Publishing to crates.io is manual:
 2. Confirm the release commit is on `master`.
 3. Confirm `CARGO_REGISTRY_TOKEN` is configured as a repository or organization
    secret.
-4. Confirm the repository has a protected GitHub environment named `crates-io`
+4. Confirm the Apple signing/notarization secrets and variables listed below
+   are configured before tagging a release with macOS binaries.
+5. Confirm the repository has a protected GitHub environment named `crates-io`
    with required reviewer approval.
-5. Run the `Publish crate` workflow from `master`.
-6. Enter the expected package version, for example `0.1.0`.
-7. Approve the `crates-io` environment deployment.
+6. Run the `Publish crate` workflow from `master`.
+7. Enter the expected package version, for example `0.1.0`.
+8. Approve the `crates-io` environment deployment.
 
 The workflow runs format, check, test, package, and `cargo publish --dry-run`
 before running `cargo publish --locked`.
+
+## Required GitHub Secrets And Variables
+
+Secrets:
+
+- `CARGO_REGISTRY_TOKEN`: crates.io token for manual crate publication.
+- `APPLE_CERTIFICATE`: base64-encoded Developer ID Application `.p12`
+  certificate.
+- `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12` certificate.
+- `APPLE_SIGNING_IDENTITY`: Developer ID Application signing identity, unless
+  provided as a repository/environment variable.
+- `APPLE_ID`: Apple ID used for notarization.
+- `APPLE_PASSWORD`: app-specific password for notarization.
+- `APPLE_TEAM_ID`: Apple Developer Team ID, unless provided as a
+  repository/environment variable.
+
+Variables:
+
+- `APPLE_SIGNING_IDENTITY`: optional non-secret signing identity override.
+- `APPLE_TEAM_ID`: optional non-secret Team ID override.

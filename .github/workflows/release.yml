@@ -119,6 +119,13 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+      CODESIGN_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      CODESIGN_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY || secrets.APPLE_SIGNING_IDENTITY }}
+      CODESIGN_OPTIONS: runtime
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
     steps:
       - name: enable windows longpaths
         run: |
@@ -147,11 +154,41 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
+      - name: Validate Apple signing configuration
+        if: ${{ needs.plan.outputs.publishing == 'true' && contains(join(matrix.targets, ','), 'apple-darwin') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CODESIGN_CERTIFICATE:?APPLE_CERTIFICATE must be configured}"
+          : "${CODESIGN_CERTIFICATE_PASSWORD:?APPLE_CERTIFICATE_PASSWORD must be configured}"
+          : "${CODESIGN_IDENTITY:?APPLE_SIGNING_IDENTITY must be configured}"
+          : "${APPLE_ID:?APPLE_ID must be configured}"
+          : "${APPLE_PASSWORD:?APPLE_PASSWORD must be configured}"
+          : "${APPLE_TEAM_ID:?APPLE_TEAM_ID must be configured}"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      - name: Notarize macOS archives
+        if: ${{ needs.plan.outputs.publishing == 'true' && contains(join(matrix.targets, ','), 'apple-darwin') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t archives < <(jq -r '.upload_files[] | select(endswith(".zip") and contains("apple-darwin"))' dist-manifest.json)
+          if [[ "${#archives[@]}" -eq 0 ]]; then
+            echo "No macOS zip archives found in dist manifest" >&2
+            exit 1
+          fi
+
+          for archive in "${archives[@]}"; do
+            echo "Submitting $archive for Apple notarization"
+            xcrun notarytool submit "$archive" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+          done
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
