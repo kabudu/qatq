@@ -7,9 +7,10 @@ The recommended logo direction is a technical mark, not a mascot:
 - compressed vertical byte-plane bars for the exact codec surface;
 - dark neutral background with teal and amber accents.
 
-The starter SVG is `assets/qatq-logo.svg`. It is intentionally simple so it can
-be rendered in README files, release notes, and social cards without requiring a
-design system.
+The primary logo is `assets/qatqLogoFinal.png`. It should be used for the
+README, release notes, social cards, and project profiles. The older
+`assets/qatq-logo.svg` remains a simple fallback mark for contexts that require
+an SVG.
 
 Recommended GitHub/social description:
 

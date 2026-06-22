@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/qatq-logo.svg" alt="QATQ logo" width="520">
+  <img src="assets/qatqLogoFinal.png" alt="QATQ logo" width="520">
 </p>
 
 # QATQ
