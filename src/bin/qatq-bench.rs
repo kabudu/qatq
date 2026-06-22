@@ -289,7 +289,7 @@ fn parse_fixture_input(spec: &str) -> Result<FixtureInput, String> {
 }
 
 fn usage() -> String {
-    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--quality-output <path>] [--task-quality-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
+    "usage: qatq-bench [--output <path>] [--paper-output <path>] [--quality-output <path>] [--task-quality-output <path>] [--gate-output <path>] [--gate-require-external] [--gate-policy custom|production-kv|latency-budget|competitive-compression] [--no-synthetic] [--phase2-only] [--max-phase2-ratio <f64>] [--max-phase2-encode-us <f64>] [--max-phase2-decode-us <f64>] [--max-phase2-decode-ns-per-value <f64>] [--max-phase2-container-ratio <f64>] [--max-phase2-container-decode-us <f64>] [--max-phase2-container-decode-ns-per-value <f64>] [--input <name>:<path.f32le>]... [--manifest <path>]...".to_string()
 }
 
 struct BenchOptions {
@@ -318,6 +318,7 @@ enum GatePolicy {
     Custom,
     ProductionKv,
     LatencyBudget,
+    CompetitiveCompression,
 }
 
 impl GatePolicy {
@@ -326,6 +327,7 @@ impl GatePolicy {
             GatePolicy::Custom => "custom",
             GatePolicy::ProductionKv => "production-kv",
             GatePolicy::LatencyBudget => "latency-budget",
+            GatePolicy::CompetitiveCompression => "competitive-compression",
         }
     }
 
@@ -338,6 +340,9 @@ impl GatePolicy {
             GatePolicy::LatencyBudget => {
                 "service-budget analysis; fixed absolute microsecond ceilings are not the large-tensor production readiness gate"
             }
+            GatePolicy::CompetitiveCompression => {
+                "competitive compression regression gate; compression-positive Phase 2 rows must beat zstd/lz4 raw-f32le baselines"
+            }
         }
     }
 }
@@ -348,8 +353,9 @@ fn parse_gate_policy(value: Option<&String>) -> Result<GatePolicy, String> {
         "custom" => Ok(GatePolicy::Custom),
         "production-kv" => Ok(GatePolicy::ProductionKv),
         "latency-budget" => Ok(GatePolicy::LatencyBudget),
+        "competitive-compression" => Ok(GatePolicy::CompetitiveCompression),
         other => Err(format!(
-            "invalid --gate-policy value {other}; expected custom, production-kv, or latency-budget"
+            "invalid --gate-policy value {other}; expected custom, production-kv, latency-budget, or competitive-compression"
         )),
     }
 }
@@ -556,6 +562,10 @@ fn benchmark_dataset(dataset: &Dataset, phase2_only: bool) -> Result<Vec<BenchRe
 }
 
 fn benchmark_phase2_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, String> {
+    let zstd_encoded = encode_zstd_raw_f32le(&dataset.values)?;
+    let zstd_decoded = decode_zstd_raw_f32le(&zstd_encoded).map_err(|error| error.to_string())?;
+    let lz4_encoded = encode_lz4_raw_f32le(&dataset.values);
+    let lz4_decoded = decode_lz4_raw_f32le(&lz4_encoded).map_err(|error| error.to_string())?;
     let phase2_encoded = encode_phase2_lossless(&dataset.values);
     let phase2_decoded = decode(&phase2_encoded).map_err(|error| error.to_string())?;
     let phase2_container_encoded =
@@ -565,6 +575,26 @@ fn benchmark_phase2_dataset(dataset: &Dataset) -> Result<Vec<BenchResult>, Strin
         decode(&phase2_container_encoded).map_err(|error| error.to_string())?;
 
     Ok(vec![
+        BenchResult::new(
+            "zstd-raw-f32le",
+            zstd_encoded.len(),
+            dataset.values.len(),
+            None,
+            time_encode(|| encode_zstd_raw_f32le(&dataset.values).expect("zstd encode")),
+            time_decode(|| decode_zstd_raw_f32le(&zstd_encoded).expect("zstd decode")),
+            &dataset.values,
+            &zstd_decoded,
+        ),
+        BenchResult::new(
+            "lz4-raw-f32le",
+            lz4_encoded.len(),
+            dataset.values.len(),
+            None,
+            time_encode(|| encode_lz4_raw_f32le(&dataset.values)),
+            time_decode(|| decode_lz4_raw_f32le(&lz4_encoded).expect("lz4 decode")),
+            &dataset.values,
+            &lz4_decoded,
+        ),
         BenchResult::new(
             "phase2-lossless",
             phase2_encoded.len(),
@@ -1350,6 +1380,32 @@ fn evaluate_gate(benchmarked: &[BenchmarkedDataset], options: &BenchOptions) -> 
                 }
             }
         }
+        if options.gate_policy == GatePolicy::CompetitiveCompression && !phase2_no_compress {
+            match (
+                find_result(&dataset.results, "zstd-raw-f32le"),
+                find_result(&dataset.results, "lz4-raw-f32le"),
+            ) {
+                (Some(zstd), Some(lz4)) => {
+                    let best_baseline = zstd.ratio.min(lz4.ratio);
+                    if phase2.ratio > best_baseline {
+                        dataset_passed = false;
+                        reasons.push(format!(
+                            "competitive ratio {:.4} > best(zstd {:.4}, lz4 {:.4})",
+                            phase2.ratio, zstd.ratio, lz4.ratio
+                        ));
+                    } else {
+                        reasons.push(format!(
+                            "competitive ratio {:.4} <= best(zstd {:.4}, lz4 {:.4})",
+                            phase2.ratio, zstd.ratio, lz4.ratio
+                        ));
+                    }
+                }
+                _ => {
+                    dataset_passed = false;
+                    reasons.push("missing zstd/lz4 baseline rows for competitive gate".to_string());
+                }
+            }
+        }
         if !dataset_passed {
             passed = false;
         }
@@ -1588,7 +1644,7 @@ fn render_benchmark_report(benchmarked: &[BenchmarkedDataset], options: &BenchOp
     report.push_str("- `lossy-i4` is the original seed baseline.\n");
     report.push_str("- `turboquant-q4` is QATQ's local reference TurboQuant-style q4 comparator: deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual signs for inner-product estimation, without the quaternion overlay. It is not an official Google implementation.\n");
     report.push_str("- `phase1-q4` is a lossy training-free quaternion predictor/comparator path with a compact 1-bit residual-sign side channel.\n");
-    report.push_str("- `phase2-lossless` is the primary QATQ exact path: it accepts compression-positive byte-plane block, byte-RLE, or byte-plane RLE candidates before probing adjacent-bit delta-XOR byte-plane RLE and the more expensive Phase 1 predictor. `raw-bits` is an explicit no-compress fallback for exact but compression-negative tensors.\n");
+    report.push_str("- `phase2-lossless` is the primary QATQ exact path: it selects the smallest bit-identical Phase 2 candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, and the Phase 1 predictor residual path.\n");
     report.push_str("- `phase2-lossless-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.\n");
     report.push_str("- `phase2-lossless-container` wraps exact Phase 2 payloads in the sequential `QATC` large-tensor file container.\n");
     report.push_str("- Lossless QATQ claims are scoped to `phase2-lossless` and `phase2-lossless-container`; Phase 1 and TurboQuant-style rows are lossy comparator context.\n");

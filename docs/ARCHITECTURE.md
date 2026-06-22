@@ -124,15 +124,14 @@ track therefore needs a residual:
 5. verify bit-identical reconstruction.
 
 The `phase2-lossless` mode is the primary QATQ implementation and the only mode
-that carries lossless QATQ claims. The default encoder is latency-oriented: it
-accepts compression-positive byte-level or byte-plane candidates before probing
-delta-XOR byte-plane residuals or spending CPU on the QATQ predictor. Runtime
-KV-cache captures exposed a
-common exact pattern where the high two f32 byte planes vary and the low two
-byte planes are all zero, so Phase 2 also has a `byte-plane-blocks` strategy
-that stores each byte plane as raw, repeated, or zero. The
-`encode_phase2_lossless_exhaustive` path keeps the deeper full-candidate
-strategy search available for research comparisons.
+that carries lossless QATQ claims. The default encoder selects the smallest
+bit-identical candidate from byte-level, byte-plane, reversible
+quaternion-chain, delta-XOR, and predictor-residual strategies. Runtime KV-cache
+captures exposed a common exact pattern where the high two f32 byte planes vary
+and the low two byte planes are all zero, so Phase 2 also has a
+`byte-plane-blocks` strategy that stores each byte plane as raw, repeated, or
+zero. The `encode_phase2_lossless_exhaustive` path keeps the deeper
+full-candidate strategy search available for research comparisons.
 
 Phase 2 can store:
 
@@ -143,6 +142,11 @@ Phase 2 can store:
 - byte-plane block coding, which stores each f32 byte plane as zero, repeated,
   or raw without run metadata when whole-plane structure is stronger than local
   runs;
+- byte-plane zstd entropy coding, which first groups f32 bytes by plane and
+  then entropy-codes the tensor-aware stream;
+- reversible quaternion-chain zstd coding, which groups values into
+  four-coordinate quaternion lanes and stores exact wrapping residuals
+  `[a - previous_d, b - a, c - b, d - c]` before byte-plane entropy coding;
 - adjacent-bit delta-XOR byte-plane run coding, which stores the first f32 bit
   pattern followed by `current_bits ^ previous_bits` residuals in byte-plane
   order;
@@ -166,6 +170,8 @@ The Phase 2 body stores:
   - raw f32 bits;
   - byte-level run stream;
   - byte-plane run stream;
+  - byte-plane zstd stream;
+  - reversible quaternion-chain zstd stream;
   - byte-plane block stream;
   - adjacent-bit delta-XOR byte-plane run stream;
   - or deterministic rotation seed, residual magnitude scale, packed q4

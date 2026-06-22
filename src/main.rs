@@ -338,7 +338,7 @@ fn generated_fixture_specs() -> Vec<GeneratedFixture> {
         GeneratedFixture {
             name: "f32-noisy-pass-through-64x12x16",
             shape: "[tokens=64, heads=12, dim=16]",
-            notes: "generated public float32 noisy fixture; expected no-compress pass-through candidate",
+            notes: "generated public float32 noisy fixture; exact compression stress candidate",
             values: generated_noisy_f32_values(64 * 12 * 16, 0x9e37_79b9),
         },
         GeneratedFixture {

@@ -20,6 +20,8 @@ comparative baselines remain open.
 - Gate input: `fixtures/public.manifest`.
 - Benchmark mode: `phase2-only`, `--no-synthetic`.
 - Production gate: `docs/PUBLIC_BENCHMARK_GATE.md`.
+- Competitive compression gate: `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`.
+- Compression summary: `docs/PUBLIC_COMPRESSION_SUMMARY.md`.
 - Comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`.
 - Quality-proxy experiments: `docs/PUBLIC_QUALITY_EXPERIMENTS.md`.
 - Task-quality experiments: `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`.
@@ -39,25 +41,26 @@ The decision has two valid production outcomes:
 - `Compressed`: transmit/store a QATQ phase-2 payload.
 - `PassThroughRaw`: transmit/store raw f32le bytes with pass-through metadata.
 
-The generated public corpus exercises both outcomes: bfloat16-like KV fixtures
-compress, while noisy float32 and exactness-stress fixtures pass through.
+The generated public corpus currently compresses under the Phase 2 exact path.
+The production API still keeps `PassThroughRaw` as the correct outcome for
+future compression-negative tensors.
 
 ## Benchmark Results
 
 | Metric | Result |
 | --- | ---: |
 | Public fixtures | 4 |
-| Compressed decisions | 2 |
-| Raw pass-through decisions | 2 |
-| Average direct compressed ratio | 0.5009 |
-| Average direct compressed reduction | 49.91% |
-| Maximum direct decode throughput | 2.0411 ns/value |
-| Maximum QATC decode throughput | 2.1015 ns/value |
+| Compressed decisions | 4 |
+| Raw pass-through decisions | 0 |
+| Average direct compressed ratio | 0.2906 |
+| Average direct compressed reduction | 70.94% |
+| Maximum direct decode throughput | 10.0976 ns/value |
+| Maximum QATC decode throughput | 13.9664 ns/value |
 
 All phase-2 and QATC rows in the current evidence bundle report exact bit
-reconstruction. Pass-through rows are not compression misses; they are the
-expected production decision when phase-2 compression would not reduce payload
-size.
+reconstruction. Raw pass-through remains part of the production API for future
+compression-negative tensors, but the current public corpus selects compressed
+Phase 2 storage for all rows.
 
 `docs/PUBLIC_COMPARATIVE_BASELINES.md` contains the public all-codec comparison
 against raw f32, software FP8 e4m3, seed lossy-i4, phase1-q4, phase2-lossless,
@@ -66,6 +69,11 @@ runtime-native hardware comparisons. The comparison now includes zstd/lz4
 raw-f32le byte-compression rows and a `turboquant-q4` base reference row. The
 `turboquant-q4` row is a QATQ reference comparator with QJL residual signs for
 inner-product estimation, not an official Google implementation.
+
+The exact Phase 2 selector now includes a reversible quaternion-chain residual
+candidate. It wins on the public wave and exactness-stress fixtures while
+remaining bit-for-bit reversible; byte-plane zstd remains smaller on the ramp
+and noisy fixtures.
 
 The QJL reference path uses bounded deterministic signed-Hadamard projections,
 so QJL projection and correction are structured O(d log d) operations rather
@@ -89,6 +97,9 @@ The gate policy is now split:
 - `production-kv`: production readiness for generated or external KV-like
   tensors. The public CI gate uses portable `50.00 ns/value` direct and QATC
   decode ceilings.
+- `competitive-compression`: compression regression protection. Every
+  compression-positive Phase 2 row must be at or below the best zstd/lz4 raw-f32
+  baseline for the same fixture.
 - `latency-budget`: fixed absolute microsecond analysis for small tensors or
   deployment-specific service envelopes. This gate currently fails on large
   tensors because fixed `1000us/1200us` decode ceilings scale poorly with
@@ -100,9 +111,9 @@ readiness result for large KV tensors.
 ## Interpretation
 
 The strongest current result is conservative: QATQ phase 2 is an exact,
-production-callable storage decision path that can compress bfloat16-like KV
-tensors to roughly half of raw f32 size and can safely pass through
-compression-negative float32/stress tensors.
+production-callable storage decision path that compresses every generated
+public fixture below the best zstd/lz4 raw-f32 baseline for the same row, while
+retaining raw f32 pass-through for future compression-negative tensors.
 
 This is enough to justify a standalone open-source QATQ release candidate and a
 refreshed paper section around reproducible exact transport results. It is not

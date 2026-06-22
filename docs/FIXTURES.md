@@ -71,6 +71,19 @@ cargo run --release --bin qatq-bench -- \
   --max-phase2-container-decode-ns-per-value 50.00
 ```
 
+Run the competitive compression gate to refuse public fixture regressions
+against the best zstd/lz4 raw-f32 baseline:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
+  --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
+  --gate-require-external \
+  --gate-policy competitive-compression
+```
+
 Run a fixed absolute-latency gate separately only when you need small-tensor or
 deployment-specific service-budget analysis:
 

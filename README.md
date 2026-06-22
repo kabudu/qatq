@@ -18,8 +18,9 @@ The current implementation provides:
 - public CI-ready fixture, benchmark, paper-table, and gate reports;
 - the Phase 2 `phase2-lossless` codec as the primary QATQ implementation:
   adaptive exact storage over raw bits, byte-RLE, byte-plane RLE,
-  adjacent-bit delta-XOR byte-plane residuals, or Phase 1 prediction plus
-  coded XOR residuals for bit-identical f32 reconstruction;
+  byte-plane zstd entropy coding, reversible quaternion-chain residual coding,
+  adjacent-bit delta-XOR byte-plane residuals, or Phase 1 prediction plus coded
+  XOR residuals for bit-identical f32 reconstruction;
 - a sequential `QATC` chunk container for exact Phase 2 transport of large
   tensors through the CLI;
 - production chunk helpers for exact Phase 2 storage decisions and restore;
@@ -44,11 +45,11 @@ The current implementation provides:
 
 `phase2-lossless` and the `QATC` container are the main QATQ product surface.
 They are exact by construction and use a fast strategy policy:
-compression-positive byte or byte-plane candidates are accepted before building
-the more expensive QATQ predictor. Phase 1 is still lossy and experimental; it
-is useful as an internal predictor and comparator, but lossless QATQ claims
-apply only to Phase 2. The exhaustive encoder remains available for research
-comparisons.
+the encoder selects the smallest bit-identical Phase 2 candidate, including a
+reversible quaternion-chain residual path when it beats simpler byte-plane
+transforms. Phase 1 is still lossy and experimental; it is useful as an
+internal predictor and comparator, but lossless QATQ claims apply only to Phase
+2. The exhaustive encoder remains available for research comparisons.
 The generated public fixtures are the default reproducible evidence set. Larger
 or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` f32 values each; larger tensors
@@ -159,6 +160,9 @@ cargo run --release --bin qatq-bench -- \
   --manifest fixtures/public.manifest
 ```
 
+The short release-facing compression table is maintained in
+[`docs/PUBLIC_COMPRESSION_SUMMARY.md`](docs/PUBLIC_COMPRESSION_SUMMARY.md).
+
 Run the public quality-proxy report:
 
 ```sh
@@ -242,6 +246,20 @@ cargo run --release --bin qatq-bench -- \
   --max-phase2-decode-ns-per-value 50.00 \
   --max-phase2-container-ratio 0.97 \
   --max-phase2-container-decode-ns-per-value 50.00
+```
+
+Run the competitive compression gate. This refuses regressions where a
+compression-positive Phase 2 row is larger than the best of the `zstd-raw-f32le`
+and `lz4-raw-f32le` baselines over the same public raw f32 fixture:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
+  --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
+  --gate-require-external \
+  --gate-policy competitive-compression
 ```
 
 Run the fixed absolute-latency gate only as service-budget analysis for small

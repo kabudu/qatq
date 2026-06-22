@@ -20,7 +20,7 @@ group = "qatq-public"
 name = "f32-noisy-pass-through-64x12x16"
 path = "generated/f32-noisy-pass-through-64x12x16.f32le"
 shape = "[tokens=64, heads=12, dim=16]"
-notes = "generated public float32 noisy fixture; expected no-compress pass-through candidate; values=12288"
+notes = "generated public float32 noisy fixture; exact compression stress candidate; values=12288"
 
 [fixture]
 group = "qatq-public"

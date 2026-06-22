@@ -424,6 +424,46 @@ fn benchmark_production_kv_gate_requires_throughput_decode_thresholds() {
 }
 
 #[test]
+fn benchmark_competitive_compression_gate_compares_phase2_to_zstd_lz4() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-competitive-gate-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let mut input_bytes = Vec::new();
+    for index in 0..4096_u32 {
+        let value = ((index as f32) * 0.03125).sin();
+        let value = f32::from_bits(value.to_bits() & 0xffff_0000);
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("competitive-pass:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .arg("--gate-policy")
+        .arg("competitive-compression")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run competitive compression gate");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `pass`"));
+    assert!(report.contains("policy: `competitive-compression`"));
+    assert!(report.contains("competitive ratio"));
+    assert!(report.contains("best(zstd"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
 fn benchmark_production_kv_gate_passes_with_throughput_policy() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-bench-production-gate-pass-{}", std::process::id());
@@ -498,6 +538,8 @@ fn benchmark_phase2_only_limits_report_to_gated_rows() {
 
     let report = fs::read_to_string(&output).expect("read benchmark report");
     assert!(report.contains("benchmark mode: `phase2-only`"));
+    assert!(report.contains("zstd-raw-f32le"));
+    assert!(report.contains("lz4-raw-f32le"));
     assert!(report.contains("phase2-lossless"));
     assert!(report.contains("phase2-lossless-container"));
     assert!(!report.contains("| lossless-f32 |"));

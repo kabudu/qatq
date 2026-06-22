@@ -32,6 +32,7 @@ cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --output do
 cargo run --release --bin qatq-bench -- --no-synthetic --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --no-synthetic --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md --manifest fixtures/public.manifest
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_BENCHMARK_GATE.md --gate-require-external --gate-policy production-kv --max-phase2-ratio 0.96 --max-phase2-encode-us 5000 --max-phase2-decode-ns-per-value 50.00 --max-phase2-container-ratio 0.97 --max-phase2-container-decode-ns-per-value 50.00
+cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md --gate-require-external --gate-policy competitive-compression
 cargo fmt --check
 cargo check --manifest-path fuzz/Cargo.toml
 cargo package --allow-dirty
@@ -59,17 +60,19 @@ Results:
 - public retrieval task-quality report: passed.
 - latency-budget gate: failed as expected on large-tensor fixed decode ceilings; exactness, ratio, and encode checks passed. This gate is service-budget analysis, not the large-tensor production readiness signal.
 - public production KV throughput gate: passed with the split `production-kv` policy and portable `50.00 ns/value` direct/container decode ceilings.
+- public competitive compression gate: passed; every compression-positive public Phase 2 row is at or below the best zstd/lz4 raw-f32 baseline for the same fixture.
 - `cargo fmt --check`: passed.
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
 - `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
 - `cargo package --list --allow-dirty`: passed.
-- Tests: 101 passed, 0 failed.
-  - library tests: 72 passed.
-  - benchmark integration tests: 13 passed.
-  - CLI integration tests: 16 passed.
+- Tests: 109 passed, 0 failed.
+  - library tests: 78 passed.
+  - benchmark integration tests: 14 passed.
+  - CLI integration tests: 17 passed.
 - Public benchmark report: regenerated at [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md).
 - Public paper table report: regenerated at [PUBLIC_PAPER_TABLES.md](PUBLIC_PAPER_TABLES.md).
 - Public production KV throughput gate report: regenerated at [PUBLIC_BENCHMARK_GATE.md](PUBLIC_BENCHMARK_GATE.md).
+- Public competitive compression gate report: regenerated at [PUBLIC_COMPETITIVE_COMPRESSION_GATE.md](PUBLIC_COMPETITIVE_COMPRESSION_GATE.md).
 
 Coverage added:
 
@@ -94,7 +97,9 @@ Coverage added:
 - `phase2-lossless` bit-identical reconstruction including signed zero,
   infinities, and NaN payload bits;
 - `phase2-lossless` deterministic seed/config behavior;
-- adaptive Phase 2 raw-bit, byte-RLE, and byte-plane RLE strategy selection;
+- adaptive Phase 2 exact strategy selection across raw-bit, byte-RLE,
+  byte-plane RLE, byte-plane zstd, and reversible quaternion-chain zstd
+  candidates;
 - byte-plane block strategy selection for repetitive whole-plane f32 byte
   layouts in bfloat16-derived runtime captures;
 - adjacent-bit Phase 2 delta-XOR byte-plane RLE strategy selection for
@@ -119,8 +124,8 @@ Coverage added:
   calculation and byte-for-byte equivalence against the general block encoder;
 - preallocated Phase 2 byte-plane run decode buffer from bounded payload
   metadata;
-- fast Phase 2 exact encoding with compression-positive byte-plane
-  short-circuiting;
+- fast Phase 2 exact encoding with compression-positive selection across
+  byte-plane and reversible quaternion-chain entropy-coded candidates;
 - exhaustive Phase 2 exact encoding for deeper strategy comparison;
 - chunked Phase 2 exact encode/decode round trip across partial chunk
   boundaries;

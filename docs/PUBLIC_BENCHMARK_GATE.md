@@ -19,11 +19,11 @@
 
 | dataset | check | status | details |
 | --- | --- | --- | --- |
-| qatq-public / bf16-kv-ramp-64x8x16 | phase2-lossless | pass | values 8192, strategy byte-plane-blocks, ratio 0.5012, encode 19.26us, decode 17.15us (2.0934ns/value), exact_bits=true |
-| qatq-public / bf16-kv-ramp-64x8x16 | phase2-lossless-container | pass | values 8192, ratio 0.5021, decode 17.54us (2.1410ns/value), exact_bits=true |
-| qatq-public / bf16-kv-wave-128x8x16 | phase2-lossless | pass | values 16384, strategy byte-plane-blocks, ratio 0.5006, encode 35.34us, decode 33.45us (2.0414ns/value), exact_bits=true |
-| qatq-public / bf16-kv-wave-128x8x16 | phase2-lossless-container | pass | values 16384, ratio 0.5010, decode 34.13us (2.0832ns/value), exact_bits=true |
-| qatq-public / f32-noisy-pass-through-64x12x16 | phase2-lossless | pass | values 12288, strategy raw-bits, ratio 1.0007, encode 423.95us, decode 55.47us (4.5140ns/value), exact_bits=true; no-compress bypass selected |
-| qatq-public / f32-noisy-pass-through-64x12x16 | phase2-lossless-container | pass | values 12288, ratio 1.0013, decode 54.40us (4.4272ns/value), exact_bits=true; no-compress bypass selected |
-| qatq-public / stress-signed-zero-nan-inf | phase2-lossless | pass | values 4096, strategy raw-bits, ratio 1.0022, encode 108.43us, decode 17.23us (4.2058ns/value), exact_bits=true; no-compress bypass selected |
-| qatq-public / stress-signed-zero-nan-inf | phase2-lossless-container | pass | values 4096, ratio 1.0039, decode 17.86us (4.3614ns/value), exact_bits=true; no-compress bypass selected |
+| qatq-public / bf16-kv-ramp-64x8x16 | phase2-lossless | pass | values 8192, strategy byte-plane-zstd, ratio 0.3817, encode 399.83us, decode 69.88us (8.5308ns/value), exact_bits=true |
+| qatq-public / bf16-kv-ramp-64x8x16 | phase2-lossless-container | pass | values 8192, ratio 0.3828, decode 77.73us (9.4884ns/value), exact_bits=true |
+| qatq-public / bf16-kv-wave-128x8x16 | phase2-lossless | pass | values 16384, strategy quaternion-chain-zstd, ratio 0.1153, encode 731.13us, decode 124.22us (7.5816ns/value), exact_bits=true |
+| qatq-public / bf16-kv-wave-128x8x16 | phase2-lossless-container | pass | values 16384, ratio 0.1158, decode 124.40us (7.5925ns/value), exact_bits=true |
+| qatq-public / f32-noisy-pass-through-64x12x16 | phase2-lossless | pass | values 12288, strategy byte-plane-zstd, ratio 0.6532, encode 805.00us, decode 124.08us (10.0976ns/value), exact_bits=true |
+| qatq-public / f32-noisy-pass-through-64x12x16 | phase2-lossless-container | pass | values 12288, ratio 0.6540, decode 171.62us (13.9664ns/value), exact_bits=true |
+| qatq-public / stress-signed-zero-nan-inf | phase2-lossless | pass | values 4096, strategy quaternion-chain-zstd, ratio 0.0121, encode 201.27us, decode 32.31us (7.8885ns/value), exact_bits=true |
+| qatq-public / stress-signed-zero-nan-inf | phase2-lossless-container | pass | values 4096, ratio 0.0143, decode 32.86us (8.0216ns/value), exact_bits=true |

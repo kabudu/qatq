@@ -45,7 +45,18 @@ cargo run --release --bin qatq-bench -- \
   --max-phase2-decode-ns-per-value 50.00 \
   --max-phase2-container-ratio 0.97 \
   --max-phase2-container-decode-ns-per-value 50.00
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
+  --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
+  --gate-require-external \
+  --gate-policy competitive-compression
 ```
+
+After regenerating benchmark outputs, review
+[`PUBLIC_COMPRESSION_SUMMARY.md`](PUBLIC_COMPRESSION_SUMMARY.md) and update it
+if the public fixture ratios changed.
 
 Optional external runtime validation:
 
@@ -60,6 +71,7 @@ Do not tag a public release if:
 - generated public fixtures cannot be regenerated and verified;
 - `cargo test` fails;
 - the public production gate fails;
+- the public competitive compression gate fails;
 - docs claim external runtime data is required for QATQ to operate;
 - raw private captures are staged.
 

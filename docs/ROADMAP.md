@@ -40,11 +40,13 @@ QATQ foundation.
 
 Phase 2 is implemented as `phase2-lossless` and is the primary QATQ
 implementation. It adaptively stores raw f32 bits, byte-RLE, byte-plane RLE,
-adjacent-bit delta-XOR byte-plane residuals, or the Phase 1 predictor plus
-run-coded XOR residuals and verifies final reconstruction with the payload
-checksum. Lossless QATQ claims are scoped to Phase 2 and its `QATC` container.
-zstd/lz4 comparison rows are included in all-codec benchmark reports as
-general-purpose byte-compression baselines over raw f32le.
+byte-plane zstd, reversible quaternion-chain zstd, adjacent-bit delta-XOR
+byte-plane residuals, or the Phase 1 predictor plus run-coded XOR residuals and
+verifies final reconstruction with the payload checksum. Lossless QATQ claims
+are scoped to Phase 2 and its `QATC` container. zstd/lz4 comparison rows are
+included in benchmark reports as general-purpose byte-compression baselines over
+raw f32le, and the competitive compression gate rejects public fixture
+regressions against those baselines.
 
 ## Phase 3 - Runtime and Service Integration
 
