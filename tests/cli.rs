@@ -6,6 +6,53 @@ use std::{
 use qatq::MAX_VALUES_PER_PAYLOAD;
 
 #[test]
+fn cli_encodes_and_decodes_turboquant_q4_with_seed() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-turboquant-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let encoded = dir.join(format!("{stem}.qatq"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+    let values = [0.25_f32, -0.5, 1.0, 2.0, -3.5, 0.125];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode")
+        .arg("--mode")
+        .arg("turboquant-q4")
+        .arg("--seed")
+        .arg("0x51415451")
+        .arg(&input)
+        .arg(&encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run encode");
+    assert!(encode_status.success());
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes.len(), values.len() * 4);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
 fn cli_encodes_and_decodes_phase1_q4_with_seed() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-cli-{}", std::process::id());
@@ -394,7 +441,7 @@ fn cli_fixture_add_validates_and_appends_manifest_entry() {
         .arg("--path")
         .arg(&input)
         .arg("--group")
-        .arg("permeantos-kv")
+        .arg("runtime-kv")
         .arg("--shape")
         .arg("[heads=1, tokens=2, dim=2]")
         .arg("--notes")
@@ -407,13 +454,64 @@ fn cli_fixture_add_validates_and_appends_manifest_entry() {
 
     let manifest_text = fs::read_to_string(&manifest).expect("read manifest");
     assert!(manifest_text.contains("[fixture]"));
-    assert!(manifest_text.contains("group = \"permeantos-kv\""));
+    assert!(manifest_text.contains("group = \"runtime-kv\""));
     assert!(manifest_text.contains("name = \"layer0-k\""));
     assert!(manifest_text.contains("shape = \"[heads=1, tokens=2, dim=2]\""));
     assert!(manifest_text.contains("notes = \"unit capture; values=4\""));
 
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(manifest);
+}
+
+#[test]
+fn cli_fixture_generate_writes_public_manifest_and_fixtures() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-generate-fixtures-{}", std::process::id());
+    let fixture_dir = dir.join(format!("{stem}-fixtures"));
+    let manifest = dir.join(format!("{stem}.manifest"));
+    let audit = dir.join(format!("{stem}.audit.md"));
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let generate_status = Command::new(bin)
+        .arg("fixture")
+        .arg("generate")
+        .arg("--manifest")
+        .arg(&manifest)
+        .arg("--dir")
+        .arg(&fixture_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run fixture generate");
+    assert!(generate_status.success());
+
+    let manifest_text = fs::read_to_string(&manifest).expect("read manifest");
+    assert!(manifest_text.contains("group = \"qatq-public\""));
+    assert!(manifest_text.contains("bf16-kv-ramp-64x8x16"));
+    assert!(manifest_text.contains("f32-noisy-pass-through-64x12x16"));
+    assert!(manifest_text.contains("stress-signed-zero-nan-inf"));
+    assert!(fixture_dir.join("bf16-kv-ramp-64x8x16.f32le").is_file());
+
+    let verify_status = Command::new(bin)
+        .arg("fixture")
+        .arg("verify")
+        .arg("--manifest")
+        .arg(&manifest)
+        .arg("--output")
+        .arg(&audit)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run fixture verify");
+    assert!(verify_status.success());
+
+    let audit_text = fs::read_to_string(&audit).expect("read audit");
+    assert!(audit_text.contains("fixtures: `4`"));
+    assert!(audit_text.contains("qatq-public"));
+
+    let _ = fs::remove_file(manifest);
+    let _ = fs::remove_file(audit);
+    let _ = fs::remove_dir_all(fixture_dir);
 }
 
 #[test]
@@ -491,7 +589,7 @@ fn cli_fixture_verify_writes_audit_report() {
     fs::write(
         &manifest,
         format!(
-            "[fixture]\ngroup = \"permeantos-kv\"\nname = \"layer0-v\"\npath = \"{}\"\nshape = \"[3]\"\nnotes = \"unit verify\"\n",
+            "[fixture]\ngroup = \"runtime-kv\"\nname = \"layer0-v\"\npath = \"{}\"\nshape = \"[3]\"\nnotes = \"unit verify\"\n",
             input.display()
         ),
     )
@@ -516,7 +614,7 @@ fn cli_fixture_verify_writes_audit_report() {
     assert!(audit_text.contains("fixtures: `1`"));
     assert!(audit_text.contains("total values: `3`"));
     assert!(audit_text.contains(&format!("{:016x}", fnv1a64(&input_bytes))));
-    assert!(audit_text.contains("permeantos-kv"));
+    assert!(audit_text.contains("runtime-kv"));
     assert!(audit_text.contains("layer0-v"));
     assert!(audit_text.contains("unit verify"));
 

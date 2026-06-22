@@ -10,6 +10,13 @@ The proposal combines ideas from:
 - quaternion-valued representation: treating groups of four channels as a
   quaternion so cross-component structure can be transformed jointly.
 
+Credit TurboQuant to the Google Research / Google DeepMind / NYU work by Amir
+Zandieh, Majid Daliri, Majid Hadian, and Vahab Mirrokni. Credit the mathematical
+quaternion/Hamilton-product foundation to William Rowan Hamilton, and credit
+the neural-network framing of quaternion entities to prior quaternion neural
+network work, including Parcollet, Ravanelli, Morchid, Linarès, Trabelsi, De
+Mori, and Bengio. Keep `docs/CREDITS.md` aligned with the paper bibliography.
+
 ## Implementation Target
 
 The first paper-faithful implementation should support the training-free
@@ -23,8 +30,13 @@ variant:
 5. carry a compact QJL/residual side channel;
 6. invert the pipeline and measure model/runtime fidelity.
 
-The PermeantOS seed implementation did not perform this full pipeline; it used
-a deterministic signed-int4 approximation to validate real migration plumbing.
+The original seed implementation did not perform this full pipeline; it used a
+deterministic signed-int4 approximation to validate migration-style plumbing.
+
+The `turboquant-q4` mode is now the base TurboQuant-style comparator. It uses
+deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and a
+structured QJL residual sign estimator without the quaternion overlay. It is
+not an official Google implementation.
 
 ## Current Implementation Notes
 
@@ -47,8 +59,16 @@ delta-XOR byte-plane residuals for correlated exact streams, and otherwise falls
 back to exact raw-bit, byte-RLE, or byte-plane RLE strategies. It is
 bit-identical for `f32` payloads, including signed zero, infinities, and NaN
 payload bits. The `QATC` container carries large tensors as sequential Phase 2
-chunks for CLI and PermeantOS handoff use.
+chunks for CLI and runtime handoff use.
 
-The next paper-refresh step is to test Phase 1, Phase 2, and the exact controls
-on real KV-cache tensors and PermeantOS migration paths, then replace synthetic
-tables with fixture-backed evidence.
+The first real-data paper-refresh step is now complete for Phase 2 exact
+transport. The current paper inputs are:
+
+- `docs/PAPER_REFRESH_NOTES.md`
+- `docs/WHITEPAPER_RESULTS.md`
+- `docs/PAPER_TABLES.md`
+- `docs/PUBLIC_BENCHMARKS.md`
+- `docs/PUBLIC_PAPER_TABLES.md`
+
+Phase 1 remains a lossy method experiment. Phase 2 is the evidence-backed exact
+transport path for refreshed paper claims.

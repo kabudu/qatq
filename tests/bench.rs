@@ -31,6 +31,9 @@ fn benchmark_accepts_external_f32le_fixture() {
     let report = fs::read_to_string(&output).expect("read benchmark report");
     assert!(report.contains("fixture"));
     assert!(report.contains("tiny"));
+    assert!(report.contains("zstd-raw-f32le"));
+    assert!(report.contains("lz4-raw-f32le"));
+    assert!(report.contains("turboquant-q4"));
     assert!(report.contains("phase1-q4"));
     assert!(report.contains("phase2 strategy"));
     assert!(report.contains("bit-delta"));
@@ -48,6 +51,7 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
     let manifest = dir.join(format!("{stem}.manifest"));
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
+    let quality_output = dir.join(format!("{stem}.quality.md"));
     let values = [0.125_f32, -0.25, 0.5, -1.0, 2.0, -4.0, 0.75, 1.25];
     let mut input_bytes = Vec::new();
     for value in values {
@@ -57,7 +61,7 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
     fs::write(
         &manifest,
         format!(
-            "[fixture]\nname = tiny-kv\ngroup = permeantos-kv\npath = \"{}\"\nshape = \"[1, 8]\"\nnotes = \"test fixture\"\n",
+            "[fixture]\nname = tiny-kv\ngroup = runtime-kv\npath = \"{}\"\nshape = \"[1, 8]\"\nnotes = \"test fixture\"\n",
             input.file_name().unwrap().to_string_lossy()
         ),
     )
@@ -69,6 +73,8 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
         .arg(&output)
         .arg("--paper-output")
         .arg(&paper_output)
+        .arg("--quality-output")
+        .arg(&quality_output)
         .arg("--no-synthetic")
         .arg("--manifest")
         .arg(&manifest)
@@ -79,18 +85,26 @@ fn benchmark_accepts_manifest_and_writes_paper_summary() {
     assert!(status.success());
 
     let report = fs::read_to_string(&output).expect("read benchmark report");
-    assert!(report.contains("permeantos-kv"));
+    assert!(report.contains("runtime-kv"));
     assert!(report.contains("tiny-kv"));
 
     let paper = fs::read_to_string(&paper_output).expect("read paper report");
     assert!(paper.contains("# Paper Tables"));
-    assert!(paper.contains("Phase 1 Versus Seed Baseline"));
-    assert!(paper.contains("permeantos-kv"));
+    assert!(paper.contains("Base TurboQuant Reference Versus Quaternion Overlay"));
+    assert!(paper.contains("runtime-kv"));
+
+    let quality = fs::read_to_string(&quality_output).expect("read quality report");
+    assert!(quality.contains("# QATQ Quality Experiments"));
+    assert!(quality.contains("turboquant-q4"));
+    assert!(quality.contains("phase1-q4"));
+    assert!(quality.contains("Inner-Product Error Summary"));
+    assert!(quality.contains("runtime-kv"));
 
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(manifest);
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(quality_output);
 }
 
 #[test]
@@ -100,12 +114,15 @@ fn benchmark_failed_input_does_not_overwrite_existing_reports() {
     let missing = dir.join(format!("{stem}.missing.f32le"));
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
+    let quality_output = dir.join(format!("{stem}.quality.md"));
     let gate = dir.join(format!("{stem}.gate.md"));
     let output_sentinel = b"keep-existing-benchmark-report";
     let paper_sentinel = b"keep-existing-paper-report";
+    let quality_sentinel = b"keep-existing-quality-report";
     let gate_sentinel = b"keep-existing-gate-report";
     fs::write(&output, output_sentinel).expect("write output sentinel");
     fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
+    fs::write(&quality_output, quality_sentinel).expect("write quality sentinel");
     fs::write(&gate, gate_sentinel).expect("write gate sentinel");
 
     let bin = env!("CARGO_BIN_EXE_qatq-bench");
@@ -114,6 +131,8 @@ fn benchmark_failed_input_does_not_overwrite_existing_reports() {
         .arg(&output)
         .arg("--paper-output")
         .arg(&paper_output)
+        .arg("--quality-output")
+        .arg(&quality_output)
         .arg("--gate-output")
         .arg(&gate)
         .arg("--no-synthetic")
@@ -130,10 +149,15 @@ fn benchmark_failed_input_does_not_overwrite_existing_reports() {
         fs::read(&paper_output).expect("read paper output"),
         paper_sentinel
     );
+    assert_eq!(
+        fs::read(&quality_output).expect("read quality output"),
+        quality_sentinel
+    );
     assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
 
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(quality_output);
     let _ = fs::remove_file(gate);
 }
 
@@ -144,13 +168,16 @@ fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
     let input = dir.join(format!("{stem}.bad"));
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
+    let quality_output = dir.join(format!("{stem}.quality.md"));
     let gate = dir.join(format!("{stem}.gate.md"));
     fs::write(&input, [1_u8, 2, 3]).expect("write malformed input");
     let output_sentinel = b"keep-existing-benchmark-report";
     let paper_sentinel = b"keep-existing-paper-report";
+    let quality_sentinel = b"keep-existing-quality-report";
     let gate_sentinel = b"keep-existing-gate-report";
     fs::write(&output, output_sentinel).expect("write output sentinel");
     fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
+    fs::write(&quality_output, quality_sentinel).expect("write quality sentinel");
     fs::write(&gate, gate_sentinel).expect("write gate sentinel");
 
     let bin = env!("CARGO_BIN_EXE_qatq-bench");
@@ -159,6 +186,8 @@ fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
         .arg(&output)
         .arg("--paper-output")
         .arg(&paper_output)
+        .arg("--quality-output")
+        .arg(&quality_output)
         .arg("--gate-output")
         .arg(&gate)
         .arg("--no-synthetic")
@@ -175,11 +204,16 @@ fn benchmark_malformed_f32le_input_does_not_overwrite_existing_reports() {
         fs::read(&paper_output).expect("read paper output"),
         paper_sentinel
     );
+    assert_eq!(
+        fs::read(&quality_output).expect("read quality output"),
+        quality_sentinel
+    );
     assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
 
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(quality_output);
     let _ = fs::remove_file(gate);
 }
 
@@ -192,6 +226,7 @@ fn benchmark_manifest_failure_after_partial_work_preserves_reports() {
     let manifest = dir.join(format!("{stem}.manifest"));
     let output = dir.join(format!("{stem}.md"));
     let paper_output = dir.join(format!("{stem}.paper.md"));
+    let quality_output = dir.join(format!("{stem}.quality.md"));
     let gate = dir.join(format!("{stem}.gate.md"));
     let values = [0.125_f32, -0.25, 0.5, -1.0, 2.0, -4.0, 0.75, 1.25];
     let mut input_bytes = Vec::new();
@@ -202,7 +237,7 @@ fn benchmark_manifest_failure_after_partial_work_preserves_reports() {
     fs::write(
         &manifest,
         format!(
-            "[fixture]\nname = valid-first\ngroup = permeantos-kv\npath = \"{}\"\n\n[fixture]\nname = missing-second\ngroup = permeantos-kv\npath = \"{}\"\n",
+            "[fixture]\nname = valid-first\ngroup = runtime-kv\npath = \"{}\"\n\n[fixture]\nname = missing-second\ngroup = runtime-kv\npath = \"{}\"\n",
             input.file_name().unwrap().to_string_lossy(),
             missing.file_name().unwrap().to_string_lossy()
         ),
@@ -210,9 +245,11 @@ fn benchmark_manifest_failure_after_partial_work_preserves_reports() {
     .expect("write manifest");
     let output_sentinel = b"keep-existing-benchmark-report";
     let paper_sentinel = b"keep-existing-paper-report";
+    let quality_sentinel = b"keep-existing-quality-report";
     let gate_sentinel = b"keep-existing-gate-report";
     fs::write(&output, output_sentinel).expect("write output sentinel");
     fs::write(&paper_output, paper_sentinel).expect("write paper sentinel");
+    fs::write(&quality_output, quality_sentinel).expect("write quality sentinel");
     fs::write(&gate, gate_sentinel).expect("write gate sentinel");
 
     let bin = env!("CARGO_BIN_EXE_qatq-bench");
@@ -221,6 +258,8 @@ fn benchmark_manifest_failure_after_partial_work_preserves_reports() {
         .arg(&output)
         .arg("--paper-output")
         .arg(&paper_output)
+        .arg("--quality-output")
+        .arg(&quality_output)
         .arg("--gate-output")
         .arg(&gate)
         .arg("--no-synthetic")
@@ -237,12 +276,17 @@ fn benchmark_manifest_failure_after_partial_work_preserves_reports() {
         fs::read(&paper_output).expect("read paper output"),
         paper_sentinel
     );
+    assert_eq!(
+        fs::read(&quality_output).expect("read quality output"),
+        quality_sentinel
+    );
     assert_eq!(fs::read(&gate).expect("read gate"), gate_sentinel);
 
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(manifest);
     let _ = fs::remove_file(output);
     let _ = fs::remove_file(paper_output);
+    let _ = fs::remove_file(quality_output);
     let _ = fs::remove_file(gate);
 }
 
@@ -273,9 +317,13 @@ fn benchmark_gate_passes_with_loose_thresholds() {
         .arg("1000000")
         .arg("--max-phase2-decode-us")
         .arg("1000000")
+        .arg("--max-phase2-decode-ns-per-value")
+        .arg("1000000")
         .arg("--max-phase2-container-ratio")
         .arg("10.0")
         .arg("--max-phase2-container-decode-us")
+        .arg("1000000")
+        .arg("--max-phase2-container-decode-ns-per-value")
         .arg("1000000")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -287,6 +335,217 @@ fn benchmark_gate_passes_with_loose_thresholds() {
     assert!(report.contains("status: `pass`"));
     assert!(report.contains("gate-pass"));
     assert!(report.contains("phase2-lossless-container"));
+    assert!(report.contains("ns/value"));
+    assert!(report.contains("exact_bits=true"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_production_kv_gate_requires_throughput_decode_thresholds() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-production-gate-policy-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let values = vec![0.0_f32; 128];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("production-policy:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .arg("--gate-policy")
+        .arg("production-kv")
+        .arg("--max-phase2-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-decode-us")
+        .arg("1000000")
+        .arg("--max-phase2-container-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-container-decode-ns-per-value")
+        .arg("1000000")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run production policy gate");
+    assert!(!status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `fail`"));
+    assert!(report.contains("policy: `production-kv`"));
+    assert!(report.contains("production KV readiness requires decode ns/value ceilings"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_production_kv_gate_passes_with_throughput_policy() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-production-gate-pass-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let values = vec![0.0_f32; 128];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("production-pass:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .arg("--gate-policy")
+        .arg("production-kv")
+        .arg("--max-phase2-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-decode-ns-per-value")
+        .arg("1000000")
+        .arg("--max-phase2-container-ratio")
+        .arg("10.0")
+        .arg("--max-phase2-container-decode-ns-per-value")
+        .arg("1000000")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run production policy gate");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `pass`"));
+    assert!(report.contains("policy: `production-kv`"));
+    assert!(report.contains("production readiness for mixed-size external KV tensors"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(gate);
+}
+
+#[test]
+fn benchmark_phase2_only_limits_report_to_gated_rows() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-phase2-only-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let output = dir.join(format!("{stem}.md"));
+    let values = [0.0_f32, 0.25, -0.5, 1.0, 2.0, -4.0, 8.0, -16.0];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--output")
+        .arg(&output)
+        .arg("--input")
+        .arg(format!("phase2-only:{}", input.display()))
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run phase2-only benchmark");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&output).expect("read benchmark report");
+    assert!(report.contains("benchmark mode: `phase2-only`"));
+    assert!(report.contains("phase2-lossless"));
+    assert!(report.contains("phase2-lossless-container"));
+    assert!(!report.contains("| lossless-f32 |"));
+    assert!(!report.contains("| phase1-q4 |"));
+    assert!(!report.contains("| lossy-i4 |"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(output);
+}
+
+#[test]
+fn benchmark_phase2_only_paper_summary_keeps_lossless_envelope_rows() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-phase2-only-paper-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let paper = dir.join(format!("{stem}.paper.md"));
+    let values = [0.0_f32, 0.25, -0.5, 1.0, 2.0, -4.0, 8.0, -16.0];
+    let mut input_bytes = Vec::new();
+    for value in values {
+        input_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--paper-output")
+        .arg(&paper)
+        .arg("--input")
+        .arg(format!("phase2-only-paper:{}", input.display()))
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run phase2-only paper benchmark");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&paper).expect("read paper report");
+    assert!(report.contains("## Lossless Envelope Comparison"));
+    assert!(report.contains("phase2-only-paper"));
+    assert!(report.contains("raw-f32"));
+    assert!(report.contains("phase2-lossless ratio"));
+    assert!(!report.contains("missing comparison rows"));
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(paper);
+}
+
+#[test]
+fn benchmark_gate_treats_raw_bits_as_no_compress_bypass() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-bench-no-compress-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let gate = dir.join(format!("{stem}.gate.md"));
+    let mut input_bytes = Vec::new();
+    for index in 0..128_u32 {
+        let bits = index.wrapping_mul(0x9e37_79b9).rotate_left(index % 31) ^ 0x1357_2468;
+        input_bytes.extend_from_slice(&f32::from_bits(bits).to_le_bytes());
+    }
+    fs::write(&input, input_bytes).expect("write fixture");
+
+    let bin = env!("CARGO_BIN_EXE_qatq-bench");
+    let status = Command::new(bin)
+        .arg("--input")
+        .arg(format!("no-compress:{}", input.display()))
+        .arg("--gate-output")
+        .arg(&gate)
+        .arg("--no-synthetic")
+        .arg("--phase2-only")
+        .arg("--max-phase2-ratio")
+        .arg("0.01")
+        .arg("--max-phase2-container-ratio")
+        .arg("0.01")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run no-compress benchmark gate");
+    assert!(status.success());
+
+    let report = fs::read_to_string(&gate).expect("read gate report");
+    assert!(report.contains("status: `pass`"));
+    assert!(report.contains("raw-bits"));
+    assert!(report.contains("no-compress bypass selected"));
     assert!(report.contains("exact_bits=true"));
 
     let _ = fs::remove_file(input);
@@ -339,7 +598,7 @@ fn benchmark_gate_fails_with_strict_ratio_threshold() {
     let stem = format!("qatq-bench-gate-fail-{}", std::process::id());
     let input = dir.join(format!("{stem}.f32le"));
     let gate = dir.join(format!("{stem}.gate.md"));
-    let values = [1.0_f32, 2.0, 3.0, 4.0];
+    let values = vec![0.0_f32; 128];
     let mut input_bytes = Vec::new();
     for value in values {
         input_bytes.extend_from_slice(&value.to_le_bytes());

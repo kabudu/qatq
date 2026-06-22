@@ -1,22 +1,28 @@
 # Fixture Manifest
 
-Use fixture manifests to keep real PermeantOS or KV-cache tensor metadata
-separate from benchmark code. Tensor files should be raw little-endian `f32`
-streams. Large or private tensors do not need to be committed.
+Use fixture manifests to keep tensor metadata separate from benchmark code.
+Tensor files should be raw little-endian `f32` streams. QATQ ships with a small
+generated public corpus so the project can validate itself without any external
+runtime.
 
-For the full PermeantOS workflow, see
-[PERMEANTOS_HANDOFF.md](PERMEANTOS_HANDOFF.md).
+Generate the public corpus:
+
+```sh
+cargo run --bin qatq -- fixture generate \
+  --manifest fixtures/public.manifest \
+  --dir fixtures/generated
+```
 
 Add a validated fixture entry:
 
 ```sh
 cargo run -- fixture add \
-  --manifest fixtures/permeantos.manifest \
-  --group permeantos-kv \
+  --manifest fixtures/runtime.manifest \
+  --group runtime-kv \
   --name llama-layer12-k \
   --path captures/llama-layer12-k.f32le \
   --shape "[layers=1, heads=32, tokens=128, dim=128]" \
-  --notes "MLX source capture before migration"
+  --notes "runtime source capture"
 ```
 
 The command checks that the fixture path exists and that the byte length is
@@ -27,17 +33,18 @@ Run a manifest:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --output docs/BENCHMARKS.md \
-  --paper-output docs/PAPER_TABLES.md \
-  --manifest fixtures/permeantos.manifest
+  --output docs/PUBLIC_BENCHMARKS.md \
+  --paper-output docs/PUBLIC_PAPER_TABLES.md \
+  --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
+  --manifest fixtures/public.manifest
 ```
 
 Verify fixture files and produce an audit report:
 
 ```sh
 cargo run -- fixture verify \
-  --manifest fixtures/permeantos.manifest \
-  --output docs/FIXTURE_AUDIT.md
+  --manifest fixtures/public.manifest \
+  --output docs/PUBLIC_FIXTURE_AUDIT.md
 ```
 
 Verification checks that every manifest entry has a readable raw `f32le` file
@@ -45,13 +52,35 @@ whose byte length is divisible by four. The audit report records total fixtures,
 total values, total bytes, and an FNV-1a 64-bit fingerprint for each file. Use
 this report with benchmark tables when preparing paper or white-paper evidence.
 
-Run a benchmark gate with explicit readiness thresholds:
+Run the production KV readiness gate with explicit throughput-normalized decode
+thresholds:
 
 ```sh
 cargo run --release --bin qatq-bench -- \
-  --manifest fixtures/permeantos.manifest \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
+  --gate-output docs/PUBLIC_BENCHMARK_GATE.md \
+  --gate-require-external \
+  --gate-policy production-kv \
+  --max-phase2-ratio 0.96 \
+  --max-phase2-encode-us 5000 \
+  --max-phase2-decode-ns-per-value 50.00 \
+  --max-phase2-container-ratio 0.97 \
+  --max-phase2-container-decode-ns-per-value 50.00
+```
+
+Run a fixed absolute-latency gate separately only when you need small-tensor or
+deployment-specific service-budget analysis:
+
+```sh
+cargo run --release --bin qatq-bench -- \
+  --phase2-only \
+  --no-synthetic \
+  --manifest fixtures/public.manifest \
   --gate-output docs/BENCHMARK_GATE.md \
   --gate-require-external \
+  --gate-policy latency-budget \
   --max-phase2-ratio 0.95 \
   --max-phase2-encode-us 5000 \
   --max-phase2-decode-us 1000 \
@@ -67,18 +96,18 @@ Manifest format:
 
 ```text
 [fixture]
-group = "permeantos-kv"
+group = "runtime-kv"
 name = "llama-layer12-k"
 path = "../fixtures/llama-layer12-k.f32le"
 shape = "[layers=1, heads=32, tokens=128, dim=128]"
-notes = "MLX source capture before migration"
+notes = "runtime source capture"
 
 [fixture]
-group = "permeantos-kv"
+group = "runtime-kv"
 name = "llama-layer12-v"
 path = "../fixtures/llama-layer12-v.f32le"
 shape = "[layers=1, heads=32, tokens=128, dim=128]"
-notes = "vLLM destination validation capture"
+notes = "runtime destination validation capture"
 ```
 
 Rules:
@@ -90,9 +119,10 @@ Rules:
 - The parser intentionally supports only this small format so the benchmark
   harness stays dependency-free.
 
-Recommended real-data groups:
+Recommended groups:
 
-- `permeantos-kv`: actual KV-cache captures from migration experiments.
-- `permeantos-activation`: activation-like intermediate tensors.
+- `qatq-public`: generated public fixtures committed with the repository.
+- `runtime-kv`: actual KV-cache captures from runtime experiments.
+- `runtime-activation`: activation-like intermediate tensors.
 - `embedding`: vector/embedding payloads.
 - `stress`: known outlier-heavy or adversarial numeric tensors.

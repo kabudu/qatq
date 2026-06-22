@@ -7,11 +7,15 @@ const HEADER_LEN: usize = 28;
 const CONTAINER_HEADER_LEN: usize = 24;
 const CONTAINER_CHUNK_LEN: usize = 4;
 const PHASE1_BODY_MAGIC: &[u8; 4] = b"P1Q4";
+const TURBOQUANT_BODY_MAGIC: &[u8; 4] = b"TQ4R";
 const PHASE2_BODY_MAGIC: &[u8; 4] = b"P2L1";
 const PHASE1_METADATA_LEN: usize = 20;
+const TURBOQUANT_METADATA_LEN: usize = 20;
 const PHASE2_PREFIX_LEN: usize = 8;
 const PHASE2_PREDICTOR_METADATA_LEN: usize = 12;
 const DEFAULT_PHASE1_SEED: u64 = 0x5141_5451_c0de_0001;
+const TURBOQUANT_QJL_MAX_PROJECTIONS: usize = 256;
+const TURBOQUANT_QJL_SEED_XOR: u64 = 0x514a_4c5f_5352_4854;
 const XOR_ZERO_RUN: u8 = 0;
 const XOR_RAW_RUN: u8 = 1;
 const BYTE_REPEAT_RUN: u8 = 2;
@@ -20,6 +24,14 @@ const PHASE2_STRATEGY_RAW_BITS: u8 = 1;
 const PHASE2_STRATEGY_BYTE_RLE: u8 = 2;
 const PHASE2_STRATEGY_BYTE_PLANE_RLE: u8 = 3;
 const PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE: u8 = 4;
+const PHASE2_STRATEGY_BYTE_PLANE_BLOCKS: u8 = 5;
+const BYTE_PLANE_BLOCK_ZERO: u8 = 0;
+const BYTE_PLANE_BLOCK_RAW: u8 = 1;
+const BYTE_PLANE_BLOCK_REPEAT: u8 = 2;
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+const FNV_PRIME_SQUARED: u64 = FNV_PRIME.wrapping_mul(FNV_PRIME);
+const SQRT_PI_OVER_TWO: f32 = 1.253_314_1;
 pub const MAX_VALUES_PER_PAYLOAD: usize = 1 << 26;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,6 +40,7 @@ pub enum CodecMode {
     LosslessF32,
     Phase1Q4,
     Phase2Lossless,
+    TurboQuantQ4,
 }
 
 impl CodecMode {
@@ -37,6 +50,7 @@ impl CodecMode {
             Self::LosslessF32 => 2,
             Self::Phase1Q4 => 3,
             Self::Phase2Lossless => 4,
+            Self::TurboQuantQ4 => 5,
         }
     }
 
@@ -46,6 +60,7 @@ impl CodecMode {
             2 => Ok(Self::LosslessF32),
             3 => Ok(Self::Phase1Q4),
             4 => Ok(Self::Phase2Lossless),
+            5 => Ok(Self::TurboQuantQ4),
             other => Err(QatqError::UnsupportedMode(other)),
         }
     }
@@ -63,6 +78,7 @@ pub enum QatqError {
     InvalidResidualScale(u32),
     InvalidHeader,
     InvalidPhase1Body,
+    InvalidTurboQuantBody,
     InvalidPhase2Body,
     InvalidResidualStream,
     InvalidChunkSize(usize),
@@ -96,6 +112,7 @@ impl fmt::Display for QatqError {
             }
             Self::InvalidHeader => write!(f, "payload header is invalid"),
             Self::InvalidPhase1Body => write!(f, "phase1 payload body is invalid"),
+            Self::InvalidTurboQuantBody => write!(f, "turboquant payload body is invalid"),
             Self::InvalidPhase2Body => write!(f, "phase2 payload body is invalid"),
             Self::InvalidResidualStream => write!(f, "phase2 residual stream is invalid"),
             Self::InvalidChunkSize(size) => write!(f, "chunk size is invalid: {size}"),
@@ -118,6 +135,7 @@ pub fn parse_mode(mode: &str) -> Result<CodecMode, QatqError> {
         "" => Err(QatqError::EmptyMode),
         "lossy-i4" | "i4" | "qatq-i4" => Ok(CodecMode::LossyI4),
         "lossless-f32" | "f32" | "exact-f32" => Ok(CodecMode::LosslessF32),
+        "turboquant-q4" | "standard-turboquant-q4" | "tq-q4" => Ok(CodecMode::TurboQuantQ4),
         "phase1-q4" | "qatq-phase1" | "qatq-q4" | "quaternion-q4" => Ok(CodecMode::Phase1Q4),
         "phase2-lossless" | "qatq-lossless" | "lossless-qatq" | "qres-lossless" => {
             Ok(CodecMode::Phase2Lossless)
@@ -146,6 +164,7 @@ fn encode_unchecked(values: &[f32], mode: CodecMode) -> Vec<u8> {
     match mode {
         CodecMode::LossyI4 => encode_lossy_i4_unchecked(values),
         CodecMode::LosslessF32 => encode_lossless_f32_unchecked(values),
+        CodecMode::TurboQuantQ4 => encode_turboquant_q4_unchecked(values, Phase1Config::default()),
         CodecMode::Phase1Q4 => encode_phase1_q4_unchecked(values, Phase1Config::default()),
         CodecMode::Phase2Lossless => {
             encode_phase2_lossless_unchecked(values, Phase1Config::default())
@@ -161,6 +180,7 @@ pub fn decode(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     match header.mode {
         CodecMode::LossyI4 => decode_lossy_i4(payload),
         CodecMode::LosslessF32 => decode_lossless_f32(payload),
+        CodecMode::TurboQuantQ4 => decode_turboquant_q4(payload),
         CodecMode::Phase1Q4 => decode_phase1_q4(payload),
         CodecMode::Phase2Lossless => decode_phase2_lossless(payload),
     }
@@ -275,6 +295,105 @@ pub enum Phase2Strategy {
     ByteRle,
     BytePlaneRle,
     DeltaXorBytePlaneRle,
+    BytePlaneBlocks,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProductionStorage {
+    QatqPhase2,
+    RawF32LePassThrough,
+}
+
+impl ProductionStorage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::QatqPhase2 => "qatq-phase2",
+            Self::RawF32LePassThrough => "raw-f32le-pass-through",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductionChunkMetadata {
+    pub storage: ProductionStorage,
+    pub raw_f32le_len: usize,
+    pub strategy: Option<Phase2Strategy>,
+}
+
+impl ProductionChunkMetadata {
+    pub fn storage_label(&self) -> &'static str {
+        self.storage.as_str()
+    }
+
+    pub fn value_count(&self) -> Result<usize, QatqError> {
+        if self.raw_f32le_len % 4 != 0 {
+            return Err(QatqError::InvalidHeader);
+        }
+        Ok(self.raw_f32le_len / 4)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductionEncodeResult {
+    pub metadata: ProductionChunkMetadata,
+    pub bytes: Vec<u8>,
+}
+
+impl ProductionEncodeResult {
+    pub fn should_compress(&self) -> bool {
+        self.metadata.storage == ProductionStorage::QatqPhase2
+    }
+
+    pub fn should_pass_through(&self) -> bool {
+        self.metadata.storage == ProductionStorage::RawF32LePassThrough
+    }
+
+    pub fn stored_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Phase2EncodeDecision {
+    Compressed {
+        payload: Vec<u8>,
+        strategy: Phase2Strategy,
+        raw_f32le_len: usize,
+    },
+    PassThroughRaw {
+        bytes: Vec<u8>,
+    },
+}
+
+impl Phase2EncodeDecision {
+    pub fn should_compress(&self) -> bool {
+        matches!(self, Self::Compressed { .. })
+    }
+
+    pub fn should_pass_through(&self) -> bool {
+        matches!(self, Self::PassThroughRaw { .. })
+    }
+
+    pub fn strategy(&self) -> Option<Phase2Strategy> {
+        match self {
+            Self::Compressed { strategy, .. } => Some(*strategy),
+            Self::PassThroughRaw { .. } => None,
+        }
+    }
+
+    pub fn stored_bytes(&self) -> &[u8] {
+        match self {
+            Self::Compressed { payload, .. } => payload,
+            Self::PassThroughRaw { bytes } => bytes,
+        }
+    }
+
+    pub fn raw_f32le_len(&self) -> usize {
+        match self {
+            Self::Compressed { raw_f32le_len, .. } => *raw_f32le_len,
+            Self::PassThroughRaw { bytes } => bytes.len(),
+        }
+    }
 }
 
 impl Phase2Strategy {
@@ -285,6 +404,7 @@ impl Phase2Strategy {
             PHASE2_STRATEGY_BYTE_RLE => Ok(Self::ByteRle),
             PHASE2_STRATEGY_BYTE_PLANE_RLE => Ok(Self::BytePlaneRle),
             PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => Ok(Self::DeltaXorBytePlaneRle),
+            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => Ok(Self::BytePlaneBlocks),
             _ => Err(QatqError::InvalidPhase2Body),
         }
     }
@@ -296,6 +416,7 @@ impl Phase2Strategy {
             Self::ByteRle => "byte-rle",
             Self::BytePlaneRle => "byte-plane-rle",
             Self::DeltaXorBytePlaneRle => "delta-xor-byte-plane-rle",
+            Self::BytePlaneBlocks => "byte-plane-blocks",
         }
     }
 }
@@ -311,6 +432,82 @@ impl Default for Phase1Config {
             seed: DEFAULT_PHASE1_SEED,
         }
     }
+}
+
+pub fn encode_turboquant_q4(values: &[f32]) -> Vec<u8> {
+    encode_turboquant_q4_with_config(values, Phase1Config::default())
+}
+
+pub fn encode_turboquant_q4_with_config(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    try_encode_turboquant_q4_with_config(values, config)
+        .expect("value count exceeds single-payload bound; use chunked APIs")
+}
+
+pub fn try_encode_turboquant_q4_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Result<Vec<u8>, QatqError> {
+    validate_single_payload_value_count(values.len())?;
+    Ok(encode_turboquant_q4_unchecked(values, config))
+}
+
+fn encode_turboquant_q4_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    let parts = build_turboquant_parts(values, config);
+    let checksum = checksum_f32_bits(values);
+    let quantized_len = parts.coord_count.div_ceil(2);
+    let qjl_len = parts.qjl_projection_count.div_ceil(8);
+    let mut out =
+        Vec::with_capacity(HEADER_LEN + TURBOQUANT_METADATA_LEN + quantized_len + qjl_len);
+    write_header(
+        &mut out,
+        CodecMode::TurboQuantQ4,
+        values.len(),
+        parts.scale,
+        checksum,
+    );
+    write_turboquant_metadata_and_payload(&mut out, &parts);
+    out
+}
+
+pub fn decode_turboquant_q4(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
+    let parsed = parse_turboquant_payload(payload)?;
+    let mut values = reconstruct_turboquant_values(&parsed, true);
+    values.truncate(parsed.header.value_count);
+    Ok(values)
+}
+
+pub fn estimate_turboquant_q4_inner_product(
+    payload: &[u8],
+    query: &[f32],
+) -> Result<f32, QatqError> {
+    let parsed = parse_turboquant_payload(payload)?;
+    if query.len() != parsed.header.value_count {
+        return Err(QatqError::LengthMismatch {
+            expected: parsed.header.value_count,
+            actual: query.len(),
+        });
+    }
+    let mse_values = reconstruct_turboquant_values(&parsed, false);
+    let mse_dot = dot_product(query, &mse_values[..query.len()]);
+    if parsed.residual_norm == 0.0 || parsed.qjl_projection_count == 0 {
+        return Ok(mse_dot);
+    }
+
+    let mut padded_query = finite_predictor_values(query);
+    padded_query.resize(parsed.coord_count, 0.0);
+    let mut correction_dot = 0.0_f32;
+    let projected_query = qjl_project_values(&padded_query, parsed.seed);
+    for (projected, sign) in projected_query
+        .iter()
+        .zip(parsed.qjl_signs.iter())
+        .take(parsed.qjl_projection_count)
+    {
+        correction_dot += projected * qjl_sign_value(*sign);
+    }
+    Ok(mse_dot
+        + (SQRT_PI_OVER_TWO / parsed.qjl_projection_count as f32)
+            * parsed.residual_norm
+            * correction_dot)
 }
 
 pub fn encode_phase1_q4(values: &[f32]) -> Vec<u8> {
@@ -399,6 +596,103 @@ pub fn try_encode_phase2_lossless_with_config(
     Ok(encode_phase2_lossless_unchecked(values, config))
 }
 
+pub fn encode_phase2_lossless_decision(values: &[f32]) -> Phase2EncodeDecision {
+    encode_phase2_lossless_decision_with_config(values, Phase1Config::default())
+}
+
+pub fn encode_phase2_lossless_decision_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Phase2EncodeDecision {
+    try_encode_phase2_lossless_decision_with_config(values, config)
+        .expect("value count exceeds single-payload bound; use chunked APIs")
+}
+
+pub fn try_encode_phase2_lossless_decision_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Result<Phase2EncodeDecision, QatqError> {
+    validate_single_payload_value_count(values.len())?;
+    let raw_f32le_len = checked_value_byte_len(values.len())?;
+    let payload = encode_phase2_lossless_unchecked(values, config);
+    let strategy = phase2_lossless_strategy(&payload)?;
+    if strategy == Phase2Strategy::RawBits {
+        Ok(Phase2EncodeDecision::PassThroughRaw {
+            bytes: encode_f32_bits_le(values),
+        })
+    } else {
+        Ok(Phase2EncodeDecision::Compressed {
+            payload,
+            strategy,
+            raw_f32le_len,
+        })
+    }
+}
+
+pub fn try_encode_production_chunk(values: &[f32]) -> Result<ProductionEncodeResult, QatqError> {
+    try_encode_production_chunk_with_config(values, Phase1Config::default())
+}
+
+pub fn try_encode_production_chunk_with_config(
+    values: &[f32],
+    config: Phase1Config,
+) -> Result<ProductionEncodeResult, QatqError> {
+    let decision = try_encode_phase2_lossless_decision_with_config(values, config)?;
+    Ok(production_result_from_decision(decision))
+}
+
+pub fn production_result_from_decision(decision: Phase2EncodeDecision) -> ProductionEncodeResult {
+    match decision {
+        Phase2EncodeDecision::Compressed {
+            payload,
+            strategy,
+            raw_f32le_len,
+        } => ProductionEncodeResult {
+            metadata: ProductionChunkMetadata {
+                storage: ProductionStorage::QatqPhase2,
+                raw_f32le_len,
+                strategy: Some(strategy),
+            },
+            bytes: payload,
+        },
+        Phase2EncodeDecision::PassThroughRaw { bytes } => ProductionEncodeResult {
+            metadata: ProductionChunkMetadata {
+                storage: ProductionStorage::RawF32LePassThrough,
+                raw_f32le_len: bytes.len(),
+                strategy: None,
+            },
+            bytes,
+        },
+    }
+}
+
+pub fn restore_production_chunk(
+    metadata: &ProductionChunkMetadata,
+    bytes: &[u8],
+) -> Result<Vec<f32>, QatqError> {
+    match metadata.storage {
+        ProductionStorage::QatqPhase2 => {
+            let restored = decode_phase2_lossless(bytes)?;
+            let expected_len = metadata.raw_f32le_len;
+            let actual_len = checked_value_byte_len(restored.len())?;
+            if actual_len != expected_len {
+                return Err(QatqError::LengthMismatch {
+                    expected: expected_len,
+                    actual: actual_len,
+                });
+            }
+            if let Some(expected_strategy) = metadata.strategy {
+                let actual_strategy = phase2_lossless_strategy(bytes)?;
+                if actual_strategy != expected_strategy {
+                    return Err(QatqError::InvalidPhase2Body);
+                }
+            }
+            Ok(restored)
+        }
+        ProductionStorage::RawF32LePassThrough => decode_raw_f32le_pass_through(metadata, bytes),
+    }
+}
+
 fn encode_phase2_lossless_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
     encode_phase2_lossless_fast(values, config)
 }
@@ -426,6 +720,8 @@ pub fn try_encode_phase2_lossless_exhaustive_with_config(
 fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Config) -> Vec<u8> {
     let raw_bits = encode_f32_bits_be(values);
     let raw_body_len = PHASE2_PREFIX_LEN + raw_bits.len();
+    let byte_plane_blocks = encode_byte_plane_blocks_bounded(&raw_bits, raw_bits.len());
+    let byte_plane_blocks_body_len = candidate_body_len(byte_plane_blocks.as_ref());
     let byte_rle = encode_byte_runs_bounded(&raw_bits, raw_bits.len());
     let byte_rle_body_len = candidate_body_len(byte_rle.as_ref());
     let byte_plane = encode_byte_plane_runs_bounded(&raw_bits, raw_bits.len());
@@ -441,6 +737,7 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
 
     if byte_plane_body_len <= raw_body_len
         && byte_plane_body_len <= byte_rle_body_len
+        && byte_plane_body_len <= byte_plane_blocks_body_len
         && byte_plane_body_len <= predictor_min_body_len
         && byte_plane_body_len <= delta_xor_byte_plane_body_len
     {
@@ -457,8 +754,25 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
         return out;
     }
 
+    if byte_plane_blocks_body_len <= raw_body_len
+        && byte_plane_blocks_body_len <= byte_rle_body_len
+        && byte_plane_blocks_body_len <= byte_plane_body_len
+        && byte_plane_blocks_body_len <= predictor_min_body_len
+        && byte_plane_blocks_body_len <= delta_xor_byte_plane_body_len
+    {
+        return write_phase2_byte_candidate(
+            values.len(),
+            checksum,
+            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS,
+            byte_plane_blocks
+                .as_ref()
+                .expect("selected byte-plane block candidate"),
+        );
+    }
+
     if delta_xor_byte_plane_body_len <= raw_body_len
         && delta_xor_byte_plane_body_len <= byte_rle_body_len
+        && delta_xor_byte_plane_body_len <= byte_plane_blocks_body_len
         && delta_xor_byte_plane_body_len <= predictor_min_body_len
     {
         let mut out = Vec::with_capacity(HEADER_LEN + delta_xor_byte_plane_body_len);
@@ -479,6 +793,7 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
     }
 
     if byte_rle_body_len <= raw_body_len
+        && byte_rle_body_len <= byte_plane_blocks_body_len
         && byte_rle_body_len <= predictor_min_body_len
         && byte_rle_body_len <= delta_xor_byte_plane_body_len
     {
@@ -508,6 +823,7 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
     let strategy = if raw_body_len <= byte_rle_body_len
         && raw_body_len <= predictor_body_len
         && raw_body_len <= delta_xor_byte_plane_body_len
+        && raw_body_len <= byte_plane_blocks_body_len
     {
         if raw_body_len <= byte_plane_body_len {
             PHASE2_STRATEGY_RAW_BITS
@@ -515,14 +831,20 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
             PHASE2_STRATEGY_BYTE_PLANE_RLE
         }
     } else if byte_rle_body_len <= byte_plane_body_len
+        && byte_rle_body_len <= byte_plane_blocks_body_len
         && byte_rle_body_len <= predictor_body_len
         && byte_rle_body_len <= delta_xor_byte_plane_body_len
     {
         PHASE2_STRATEGY_BYTE_RLE
     } else if byte_plane_body_len <= predictor_body_len
         && byte_plane_body_len <= delta_xor_byte_plane_body_len
+        && byte_plane_body_len <= byte_plane_blocks_body_len
     {
         PHASE2_STRATEGY_BYTE_PLANE_RLE
+    } else if byte_plane_blocks_body_len <= predictor_body_len
+        && byte_plane_blocks_body_len <= delta_xor_byte_plane_body_len
+    {
+        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS
     } else if delta_xor_byte_plane_body_len <= predictor_body_len {
         PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE
     } else {
@@ -532,6 +854,7 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
         PHASE2_STRATEGY_RAW_BITS => raw_body_len,
         PHASE2_STRATEGY_BYTE_RLE => byte_rle_body_len,
         PHASE2_STRATEGY_BYTE_PLANE_RLE => byte_plane_body_len,
+        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => byte_plane_blocks_body_len,
         PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => delta_xor_byte_plane_body_len,
         PHASE2_STRATEGY_PREDICTOR_XOR => predictor_body_len,
         _ => unreachable!("known strategy"),
@@ -557,6 +880,11 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
         PHASE2_STRATEGY_BYTE_PLANE_RLE => {
             out.extend_from_slice(byte_plane.as_ref().expect("selected byte-plane candidate"))
         }
+        PHASE2_STRATEGY_BYTE_PLANE_BLOCKS => out.extend_from_slice(
+            byte_plane_blocks
+                .as_ref()
+                .expect("selected byte-plane block candidate"),
+        ),
         PHASE2_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => out.extend_from_slice(
             delta_xor_byte_plane
                 .as_ref()
@@ -575,13 +903,36 @@ fn encode_phase2_lossless_exhaustive_unchecked(values: &[f32], config: Phase1Con
 }
 
 fn encode_phase2_lossless_fast(values: &[f32], config: Phase1Config) -> Vec<u8> {
+    let raw_bits_len = values.len() * 4;
+    let raw_body_len = PHASE2_PREFIX_LEN + raw_bits_len;
+    if let Some((byte_plane_blocks, checksum)) =
+        encode_two_high_raw_two_low_zero_blocks_bounded(values, raw_bits_len)
+    {
+        return write_phase2_byte_candidate(
+            values.len(),
+            checksum,
+            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS,
+            &byte_plane_blocks,
+        );
+    }
+    let (byte_plane_blocks, checksum) =
+        encode_byte_plane_blocks_from_f32_bounded(values, raw_bits_len);
+    let byte_plane_blocks_body_len = candidate_body_len(byte_plane_blocks.as_ref());
+    if byte_plane_blocks_body_len < raw_body_len {
+        return write_phase2_byte_candidate(
+            values.len(),
+            checksum,
+            PHASE2_STRATEGY_BYTE_PLANE_BLOCKS,
+            byte_plane_blocks
+                .as_ref()
+                .expect("selected byte-plane block candidate"),
+        );
+    }
     let raw_bits = encode_f32_bits_be(values);
-    let raw_body_len = PHASE2_PREFIX_LEN + raw_bits.len();
     let byte_rle = encode_byte_runs_bounded(&raw_bits, raw_bits.len());
     let byte_rle_body_len = candidate_body_len(byte_rle.as_ref());
     let byte_plane = encode_byte_plane_runs_bounded(&raw_bits, raw_bits.len());
     let byte_plane_body_len = candidate_body_len(byte_plane.as_ref());
-    let checksum = checksum_f32_bits(values);
 
     if byte_plane_body_len < raw_body_len && byte_plane_body_len <= byte_rle_body_len {
         return write_phase2_byte_candidate(
@@ -997,6 +1348,9 @@ pub fn decode_phase2_lossless(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     let header = Header::parse_for_mode(payload, CodecMode::Phase2Lossless)?;
     let body = &payload[HEADER_LEN..];
     let strategy = parse_phase2_strategy_body(body)?;
+    if strategy == Phase2Strategy::BytePlaneBlocks {
+        return decode_phase2_byte_plane_blocks_checked(&body[PHASE2_PREFIX_LEN..], &header);
+    }
     let values = match strategy {
         Phase2Strategy::RawBits => decode_phase2_raw_bits(&body[PHASE2_PREFIX_LEN..], &header)?,
         Phase2Strategy::ByteRle => decode_phase2_byte_rle(&body[PHASE2_PREFIX_LEN..], &header)?,
@@ -1006,6 +1360,7 @@ pub fn decode_phase2_lossless(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
         Phase2Strategy::DeltaXorBytePlaneRle => {
             decode_phase2_delta_xor_byte_plane_rle(&body[PHASE2_PREFIX_LEN..], &header)?
         }
+        Phase2Strategy::BytePlaneBlocks => unreachable!("byte-plane blocks returned above"),
         Phase2Strategy::PredictorXor => {
             decode_phase2_predictor_xor(&body[PHASE2_PREFIX_LEN..], &header)?
         }
@@ -1099,18 +1454,8 @@ fn decode_phase2_byte_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, Qatq
 
 fn decode_phase2_byte_plane_rle(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
     let expected_len = checked_value_byte_len(header.value_count)?;
-    let planes = decode_byte_runs(body, expected_len)?;
-    let mut values = Vec::with_capacity(header.value_count);
-    for value_index in 0..header.value_count {
-        let bits = u32::from_be_bytes([
-            planes[value_index],
-            planes[header.value_count + value_index],
-            planes[header.value_count * 2 + value_index],
-            planes[header.value_count * 3 + value_index],
-        ]);
-        values.push(f32::from_bits(bits));
-    }
-    Ok(values)
+    let words = decode_byte_plane_runs_to_words(body, expected_len, header.value_count)?;
+    Ok(words.into_iter().map(f32::from_bits).collect())
 }
 
 fn decode_phase2_delta_xor_byte_plane_rle(
@@ -1118,16 +1463,10 @@ fn decode_phase2_delta_xor_byte_plane_rle(
     header: &Header,
 ) -> Result<Vec<f32>, QatqError> {
     let expected_len = checked_value_byte_len(header.value_count)?;
-    let planes = decode_byte_runs(body, expected_len)?;
+    let deltas = decode_byte_plane_runs_to_words(body, expected_len, header.value_count)?;
     let mut values = Vec::with_capacity(header.value_count);
     let mut previous_bits = 0_u32;
-    for value_index in 0..header.value_count {
-        let delta = u32::from_be_bytes([
-            planes[value_index],
-            planes[header.value_count + value_index],
-            planes[header.value_count * 2 + value_index],
-            planes[header.value_count * 3 + value_index],
-        ]);
+    for (value_index, delta) in deltas.into_iter().enumerate() {
         let bits = if value_index == 0 {
             delta
         } else {
@@ -1137,6 +1476,228 @@ fn decode_phase2_delta_xor_byte_plane_rle(
         previous_bits = bits;
     }
     Ok(values)
+}
+
+fn decode_phase2_byte_plane_blocks_checked(
+    body: &[u8],
+    header: &Header,
+) -> Result<Vec<f32>, QatqError> {
+    let expected_len = checked_value_byte_len(header.value_count)?;
+    let (values, actual) =
+        decode_byte_plane_blocks_to_f32_and_checksum(body, expected_len, header.value_count)?;
+    if actual != header.checksum {
+        return Err(QatqError::ChecksumMismatch {
+            expected: header.checksum,
+            actual,
+        });
+    }
+    Ok(values)
+}
+
+fn decode_byte_plane_runs_to_words(
+    bytes: &[u8],
+    expected_len: usize,
+    value_count: usize,
+) -> Result<Vec<u32>, QatqError> {
+    if expected_len != value_count * 4 {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    let mut words = vec![0_u32; value_count];
+    let mut decoded_len = 0_usize;
+    let mut offset = 0_usize;
+    while decoded_len < expected_len {
+        if offset + 3 > bytes.len() {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        let token = bytes[offset];
+        let len = u16::from_be_bytes(
+            bytes[offset + 1..offset + 3]
+                .try_into()
+                .expect("fixed byte run length"),
+        ) as usize;
+        offset += 3;
+        if len == 0 || decoded_len + len > expected_len {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        match token {
+            XOR_ZERO_RUN => {
+                decoded_len += len;
+            }
+            XOR_RAW_RUN => {
+                if offset + len > bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                for byte in &bytes[offset..offset + len] {
+                    write_plane_word_byte(&mut words, decoded_len, value_count, *byte);
+                    decoded_len += 1;
+                }
+                offset += len;
+            }
+            BYTE_REPEAT_RUN => {
+                if offset >= bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                let value = bytes[offset];
+                offset += 1;
+                for _ in 0..len {
+                    write_plane_word_byte(&mut words, decoded_len, value_count, value);
+                    decoded_len += 1;
+                }
+            }
+            _ => return Err(QatqError::InvalidResidualStream),
+        }
+    }
+    if offset != bytes.len() {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    Ok(words)
+}
+
+#[derive(Clone, Copy)]
+enum BytePlaneBlock {
+    Zero,
+    Repeat(u8),
+    Raw { offset: usize },
+}
+
+fn decode_byte_plane_blocks_to_f32_and_checksum(
+    bytes: &[u8],
+    expected_len: usize,
+    value_count: usize,
+) -> Result<(Vec<f32>, u64), QatqError> {
+    let blocks = parse_byte_plane_blocks(bytes, expected_len, value_count)?;
+    let mut checksum = FNV_OFFSET;
+    match blocks {
+        [BytePlaneBlock::Raw { offset: first }, BytePlaneBlock::Raw { offset: second }, BytePlaneBlock::Zero, BytePlaneBlock::Zero] =>
+        {
+            let first_plane = &bytes[first..first + value_count];
+            let second_plane = &bytes[second..second + value_count];
+            let mut values: Vec<f32> = Vec::with_capacity(value_count);
+            let out = values.as_mut_ptr();
+            let first_ptr = first_plane.as_ptr();
+            let second_ptr = second_plane.as_ptr();
+            for index in 0..value_count {
+                // SAFETY: `first_plane` and `second_plane` are both exactly `value_count`
+                // bytes long, and `index` is bounded by `0..value_count`.
+                let first_byte = unsafe { *first_ptr.add(index) };
+                let second_byte = unsafe { *second_ptr.add(index) };
+                let bits = ((first_byte as u32) << 24) | ((second_byte as u32) << 16);
+                checksum = checksum_two_high_bytes_update(checksum, first_byte, second_byte);
+                // SAFETY: `values` was allocated with capacity `value_count`; each `index`
+                // is written exactly once before `set_len(value_count)` below.
+                unsafe { out.add(index).write(f32::from_bits(bits)) };
+            }
+            // SAFETY: the loop above initialized every element in `0..value_count`.
+            unsafe { values.set_len(value_count) };
+            Ok((values, checksum))
+        }
+        [BytePlaneBlock::Raw { offset: first }, BytePlaneBlock::Raw { offset: second }, BytePlaneBlock::Raw { offset: third }, BytePlaneBlock::Raw { offset: fourth }] =>
+        {
+            let first_plane = &bytes[first..first + value_count];
+            let second_plane = &bytes[second..second + value_count];
+            let third_plane = &bytes[third..third + value_count];
+            let fourth_plane = &bytes[fourth..fourth + value_count];
+            let mut values: Vec<f32> = Vec::with_capacity(value_count);
+            let out = values.as_mut_ptr();
+            let first_ptr = first_plane.as_ptr();
+            let second_ptr = second_plane.as_ptr();
+            let third_ptr = third_plane.as_ptr();
+            let fourth_ptr = fourth_plane.as_ptr();
+            for index in 0..value_count {
+                // SAFETY: all four plane slices are exactly `value_count` bytes long,
+                // and `index` is bounded by `0..value_count`.
+                let first_byte = unsafe { *first_ptr.add(index) };
+                let second_byte = unsafe { *second_ptr.add(index) };
+                let third_byte = unsafe { *third_ptr.add(index) };
+                let fourth_byte = unsafe { *fourth_ptr.add(index) };
+                let bits = u32::from_be_bytes([first_byte, second_byte, third_byte, fourth_byte]);
+                checksum = checksum_four_bytes_update(
+                    checksum,
+                    first_byte,
+                    second_byte,
+                    third_byte,
+                    fourth_byte,
+                );
+                // SAFETY: `values` was allocated with capacity `value_count`; each `index`
+                // is written exactly once before `set_len(value_count)` below.
+                unsafe { out.add(index).write(f32::from_bits(bits)) };
+            }
+            // SAFETY: the loop above initialized every element in `0..value_count`.
+            unsafe { values.set_len(value_count) };
+            Ok((values, checksum))
+        }
+        _ => {
+            let mut values = Vec::with_capacity(value_count);
+            for value_index in 0..value_count {
+                let mut bits = 0_u32;
+                for (plane, block) in blocks.iter().enumerate() {
+                    let byte = match block {
+                        BytePlaneBlock::Zero => 0,
+                        BytePlaneBlock::Repeat(value) => *value,
+                        BytePlaneBlock::Raw { offset } => bytes[*offset + value_index],
+                    };
+                    bits |= (byte as u32) << ((3 - plane) * 8);
+                }
+                checksum = checksum_bits_update(checksum, bits);
+                values.push(f32::from_bits(bits));
+            }
+            Ok((values, checksum))
+        }
+    }
+}
+
+fn parse_byte_plane_blocks(
+    bytes: &[u8],
+    expected_len: usize,
+    value_count: usize,
+) -> Result<[BytePlaneBlock; 4], QatqError> {
+    if expected_len != value_count * 4 {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    let mut offset = 0_usize;
+    let mut blocks = [BytePlaneBlock::Zero; 4];
+    for plane in 0..4 {
+        if offset >= bytes.len() {
+            return Err(QatqError::InvalidResidualStream);
+        }
+        let tag = bytes[offset];
+        offset += 1;
+        match tag {
+            BYTE_PLANE_BLOCK_ZERO => {
+                blocks[plane] = BytePlaneBlock::Zero;
+            }
+            BYTE_PLANE_BLOCK_REPEAT => {
+                if offset >= bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                let value = bytes[offset];
+                offset += 1;
+                blocks[plane] = BytePlaneBlock::Repeat(value);
+            }
+            BYTE_PLANE_BLOCK_RAW => {
+                if offset + value_count > bytes.len() {
+                    return Err(QatqError::InvalidResidualStream);
+                }
+                blocks[plane] = BytePlaneBlock::Raw { offset };
+                offset += value_count;
+            }
+            _ => return Err(QatqError::InvalidResidualStream),
+        }
+    }
+    if offset != bytes.len() {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    Ok(blocks)
+}
+
+fn write_plane_word_byte(words: &mut [u32], plane_index: usize, value_count: usize, byte: u8) {
+    if byte == 0 {
+        return;
+    }
+    let plane = plane_index / value_count;
+    let value_index = plane_index % value_count;
+    let shift = (3 - plane) * 8;
+    words[value_index] |= (byte as u32) << shift;
 }
 
 fn candidate_body_len(candidate: Option<&Vec<u8>>) -> usize {
@@ -1190,6 +1751,73 @@ struct PhaseParts {
     residual_signs: Vec<bool>,
 }
 
+struct TurboQuantParts {
+    seed: u64,
+    scale: f32,
+    residual_norm: f32,
+    coord_count: usize,
+    qjl_projection_count: usize,
+    quantized: Vec<u8>,
+    qjl_signs: Vec<bool>,
+}
+
+struct ParsedTurboQuant {
+    header: Header,
+    seed: u64,
+    residual_norm: f32,
+    coord_count: usize,
+    qjl_projection_count: usize,
+    quantized: Vec<u8>,
+    qjl_signs: Vec<bool>,
+}
+
+fn build_turboquant_parts(values: &[f32], config: Phase1Config) -> TurboQuantParts {
+    let coord_count = turboquant_coordinate_count(values.len());
+    let mut padded = finite_predictor_values(values);
+    padded.resize(coord_count, 0.0);
+    let rotated = random_hadamard_rotate(&padded, config.seed, RotationDirection::Forward);
+    let scale = compute_i4_scale(&rotated);
+    let quantized = rotated
+        .iter()
+        .map(|value| quantize_i4_nibble(*value, scale))
+        .collect::<Vec<_>>();
+    let reconstructed_rotated = quantized
+        .iter()
+        .map(|index| dequantize_i4_nibble(*index, scale))
+        .collect::<Vec<_>>();
+    let reconstructed = random_hadamard_rotate(
+        &reconstructed_rotated,
+        config.seed,
+        RotationDirection::Inverse,
+    );
+    let residual = padded
+        .iter()
+        .zip(reconstructed.iter())
+        .map(|(before, after)| before - after)
+        .collect::<Vec<_>>();
+    let residual_norm = l2_norm(&residual);
+    let qjl_projection_count = turboquant_qjl_projection_count(coord_count);
+    let qjl_signs = if residual_norm == 0.0 {
+        vec![true; qjl_projection_count]
+    } else {
+        qjl_project_values(&residual, config.seed)
+            .into_iter()
+            .take(qjl_projection_count)
+            .map(|projected| projected >= 0.0)
+            .collect()
+    };
+
+    TurboQuantParts {
+        seed: config.seed,
+        scale,
+        residual_norm,
+        coord_count,
+        qjl_projection_count,
+        quantized,
+        qjl_signs,
+    }
+}
+
 fn build_phase1_parts(values: &[f32], config: Phase1Config) -> PhaseParts {
     let predictor_values = finite_predictor_values(values);
     let rotated = rotate_values(&predictor_values, config.seed, RotationDirection::Forward);
@@ -1240,6 +1868,36 @@ fn encode_f32_bits_be(values: &[f32]) -> Vec<u8> {
         out.extend_from_slice(&value.to_bits().to_be_bytes());
     }
     out
+}
+
+fn encode_f32_bits_le(values: &[f32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(values.len() * 4);
+    for value in values {
+        out.extend_from_slice(&value.to_bits().to_le_bytes());
+    }
+    out
+}
+
+fn decode_raw_f32le_pass_through(
+    metadata: &ProductionChunkMetadata,
+    bytes: &[u8],
+) -> Result<Vec<f32>, QatqError> {
+    if bytes.len() != metadata.raw_f32le_len {
+        return Err(QatqError::LengthMismatch {
+            expected: metadata.raw_f32le_len,
+            actual: bytes.len(),
+        });
+    }
+    if bytes.len() % 4 != 0 {
+        return Err(QatqError::InvalidHeader);
+    }
+    let mut values = Vec::with_capacity(bytes.len() / 4);
+    for chunk in bytes.chunks_exact(4) {
+        values.push(f32::from_bits(u32::from_le_bytes(
+            chunk.try_into().expect("chunk size checked"),
+        )));
+    }
+    Ok(values)
 }
 
 #[cfg(test)]
@@ -1328,6 +1986,141 @@ fn encode_byte_plane_runs_bounded(bytes: &[u8], max_encoded_len: usize) -> Optio
         }
     }
     Some(out)
+}
+
+fn encode_byte_plane_blocks_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<u8>> {
+    debug_assert_eq!(bytes.len() % 4, 0);
+    let value_count = bytes.len() / 4;
+    let mut out = Vec::with_capacity(bytes.len().min(max_encoded_len));
+    for plane in 0..4 {
+        let first = if value_count == 0 { 0 } else { bytes[plane] };
+        let mut all_same = true;
+        for value_index in 1..value_count {
+            if bytes[value_index * 4 + plane] != first {
+                all_same = false;
+                break;
+            }
+        }
+        if all_same {
+            if first == 0 {
+                out.push(BYTE_PLANE_BLOCK_ZERO);
+            } else {
+                out.push(BYTE_PLANE_BLOCK_REPEAT);
+                out.push(first);
+            }
+        } else {
+            out.push(BYTE_PLANE_BLOCK_RAW);
+            for value_index in 0..value_count {
+                out.push(bytes[value_index * 4 + plane]);
+            }
+        }
+        if out.len() > max_encoded_len {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+fn encode_two_high_raw_two_low_zero_blocks_bounded(
+    values: &[f32],
+    max_encoded_len: usize,
+) -> Option<(Vec<u8>, u64)> {
+    let value_count = values.len();
+    let encoded_len = value_count.checked_mul(2)?.checked_add(4)?;
+    if value_count < 2 || encoded_len > max_encoded_len {
+        return None;
+    }
+
+    let second_plane_tag = value_count + 1;
+    let second_plane_start = second_plane_tag + 1;
+    let low_zero_start = second_plane_start + value_count;
+    let mut out = vec![0_u8; encoded_len];
+    out[0] = BYTE_PLANE_BLOCK_RAW;
+    out[second_plane_tag] = BYTE_PLANE_BLOCK_RAW;
+    out[low_zero_start] = BYTE_PLANE_BLOCK_ZERO;
+    out[low_zero_start + 1] = BYTE_PLANE_BLOCK_ZERO;
+
+    let mut checksum = FNV_OFFSET;
+    let mut first_high = [0_u8; 2];
+    let mut high_same = [true; 2];
+    for (value_index, value) in values.iter().enumerate() {
+        let bytes = value.to_bits().to_be_bytes();
+        if bytes[2] != 0 || bytes[3] != 0 {
+            return None;
+        }
+        checksum = checksum_two_high_bytes_update(checksum, bytes[0], bytes[1]);
+        if value_index == 0 {
+            first_high = [bytes[0], bytes[1]];
+        } else {
+            high_same[0] &= bytes[0] == first_high[0];
+            high_same[1] &= bytes[1] == first_high[1];
+        }
+        out[1 + value_index] = bytes[0];
+        out[second_plane_start + value_index] = bytes[1];
+    }
+
+    if high_same[0] || high_same[1] {
+        return None;
+    }
+    Some((out, checksum))
+}
+
+fn encode_byte_plane_blocks_from_f32_bounded(
+    values: &[f32],
+    max_encoded_len: usize,
+) -> (Option<Vec<u8>>, u64) {
+    let value_count = values.len();
+    let mut checksum = FNV_OFFSET;
+    let mut first = [0_u8; 4];
+    let mut raw_planes: [Option<Vec<u8>>; 4] = std::array::from_fn(|_| None);
+
+    for (value_index, value) in values.iter().enumerate() {
+        let bytes = value.to_bits().to_be_bytes();
+        checksum = checksum_four_bytes_update(checksum, bytes[0], bytes[1], bytes[2], bytes[3]);
+        if value_index == 0 {
+            first = bytes;
+            continue;
+        }
+
+        for plane in 0..4 {
+            if let Some(raw) = raw_planes[plane].as_mut() {
+                raw.push(bytes[plane]);
+            } else if bytes[plane] != first[plane] {
+                let mut raw = Vec::with_capacity(value_count);
+                raw.resize(value_index, first[plane]);
+                raw.push(bytes[plane]);
+                raw_planes[plane] = Some(raw);
+            }
+        }
+    }
+
+    let encoded_len = raw_planes
+        .iter()
+        .enumerate()
+        .map(|(plane, raw)| match raw {
+            Some(raw) => 1 + raw.len(),
+            None if first[plane] == 0 => 1,
+            None => 2,
+        })
+        .sum::<usize>();
+    if encoded_len > max_encoded_len {
+        return (None, checksum);
+    }
+
+    let mut out = Vec::with_capacity(encoded_len);
+    for plane in 0..4 {
+        if let Some(raw) = &raw_planes[plane] {
+            debug_assert_eq!(raw.len(), value_count);
+            out.push(BYTE_PLANE_BLOCK_RAW);
+            out.extend_from_slice(raw);
+        } else if first[plane] == 0 {
+            out.push(BYTE_PLANE_BLOCK_ZERO);
+        } else {
+            out.push(BYTE_PLANE_BLOCK_REPEAT);
+            out.push(first[plane]);
+        }
+    }
+    (Some(out), checksum)
 }
 
 fn encode_delta_xor_byte_plane_runs_bounded(
@@ -1483,49 +2276,6 @@ fn encode_byte_runs_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<
     Some(out)
 }
 
-fn decode_byte_runs(bytes: &[u8], expected_len: usize) -> Result<Vec<u8>, QatqError> {
-    let mut out = Vec::with_capacity(expected_len);
-    let mut offset = 0;
-    while out.len() < expected_len {
-        if offset + 3 > bytes.len() {
-            return Err(QatqError::InvalidResidualStream);
-        }
-        let token = bytes[offset];
-        let len = u16::from_be_bytes(
-            bytes[offset + 1..offset + 3]
-                .try_into()
-                .expect("fixed byte run length"),
-        ) as usize;
-        offset += 3;
-        if len == 0 || out.len() + len > expected_len {
-            return Err(QatqError::InvalidResidualStream);
-        }
-        match token {
-            XOR_ZERO_RUN => out.resize(out.len() + len, 0),
-            XOR_RAW_RUN => {
-                if offset + len > bytes.len() {
-                    return Err(QatqError::InvalidResidualStream);
-                }
-                out.extend_from_slice(&bytes[offset..offset + len]);
-                offset += len;
-            }
-            BYTE_REPEAT_RUN => {
-                if offset >= bytes.len() {
-                    return Err(QatqError::InvalidResidualStream);
-                }
-                let value = bytes[offset];
-                offset += 1;
-                out.resize(out.len() + len, value);
-            }
-            _ => return Err(QatqError::InvalidResidualStream),
-        }
-    }
-    if offset != bytes.len() {
-        return Err(QatqError::InvalidResidualStream);
-    }
-    Ok(out)
-}
-
 fn decode_byte_runs_to_f32(
     bytes: &[u8],
     expected_len: usize,
@@ -1617,6 +2367,15 @@ fn write_phase_metadata_and_payload(out: &mut Vec<u8>, magic: &[u8; 4], parts: &
     pack_residual_signs(&parts.residual_signs, out);
 }
 
+fn write_turboquant_metadata_and_payload(out: &mut Vec<u8>, parts: &TurboQuantParts) {
+    out.extend_from_slice(TURBOQUANT_BODY_MAGIC);
+    out.extend_from_slice(&parts.seed.to_be_bytes());
+    out.extend_from_slice(&parts.residual_norm.to_bits().to_be_bytes());
+    out.extend_from_slice(&[0, 0, 0, 0]);
+    pack_i4_nibbles(&parts.quantized, out);
+    pack_residual_signs(&parts.qjl_signs, out);
+}
+
 fn write_phase2_prefix(out: &mut Vec<u8>, strategy: u8) {
     out.extend_from_slice(PHASE2_BODY_MAGIC);
     out.push(strategy);
@@ -1667,6 +2426,83 @@ fn read_phase_parts(
         quantized,
         residual_signs,
     })
+}
+
+fn parse_turboquant_payload(payload: &[u8]) -> Result<ParsedTurboQuant, QatqError> {
+    let header = Header::parse_for_mode(payload, CodecMode::TurboQuantQ4)?;
+    let coord_count = checked_turboquant_coordinate_count(header.value_count)?;
+    let quantized_len = coord_count.div_ceil(2);
+    let qjl_projection_count = turboquant_qjl_projection_count(coord_count);
+    let qjl_len = qjl_projection_count.div_ceil(8);
+    let expected_payload_len = TURBOQUANT_METADATA_LEN + quantized_len + qjl_len;
+    let body = &payload[HEADER_LEN..];
+    if body.len() != expected_payload_len {
+        return Err(QatqError::LengthMismatch {
+            expected: expected_payload_len,
+            actual: body.len(),
+        });
+    }
+    if &body[0..4] != TURBOQUANT_BODY_MAGIC {
+        return Err(QatqError::InvalidTurboQuantBody);
+    }
+    let seed = u64::from_be_bytes(body[4..12].try_into().expect("fixed turboquant seed"));
+    let residual_norm_bits = u32::from_be_bytes(
+        body[12..16]
+            .try_into()
+            .expect("fixed turboquant residual norm"),
+    );
+    let residual_norm = f32::from_bits(residual_norm_bits);
+    if !residual_norm.is_finite() || residual_norm < 0.0 {
+        return Err(QatqError::InvalidResidualScale(residual_norm_bits));
+    }
+    if body[16..20] != [0, 0, 0, 0] {
+        return Err(QatqError::InvalidTurboQuantBody);
+    }
+    let quantized_offset = TURBOQUANT_METADATA_LEN;
+    let qjl_offset = quantized_offset + quantized_len;
+    Ok(ParsedTurboQuant {
+        header,
+        seed,
+        residual_norm,
+        coord_count,
+        qjl_projection_count,
+        quantized: unpack_i4_nibbles(&body[quantized_offset..qjl_offset], coord_count),
+        qjl_signs: unpack_residual_signs(&body[qjl_offset..], qjl_projection_count),
+    })
+}
+
+fn reconstruct_turboquant_values(parsed: &ParsedTurboQuant, include_qjl: bool) -> Vec<f32> {
+    let mut rotated = Vec::with_capacity(parsed.coord_count);
+    for index in &parsed.quantized {
+        rotated.push(dequantize_i4_nibble(*index, parsed.header.scale));
+    }
+    let mut values = random_hadamard_rotate(&rotated, parsed.seed, RotationDirection::Inverse);
+    if include_qjl && parsed.residual_norm > 0.0 && parsed.coord_count > 0 {
+        add_qjl_correction(
+            &mut values,
+            parsed.seed,
+            parsed.residual_norm,
+            &parsed.qjl_signs,
+        );
+    }
+    values
+}
+
+fn add_qjl_correction(values: &mut [f32], seed: u64, residual_norm: f32, qjl_signs: &[bool]) {
+    let dimension = values.len();
+    let projection_count = qjl_signs.len();
+    if dimension == 0 || projection_count == 0 {
+        return;
+    }
+    let scale = (SQRT_PI_OVER_TWO / projection_count as f32) * residual_norm;
+    let mut correction = vec![0.0_f32; dimension];
+    for (index, sign) in qjl_signs.iter().enumerate() {
+        correction[index] = qjl_sign_value(*sign);
+    }
+    let correction = qjl_unproject_values(&correction, seed);
+    for (value, correction) in values.iter_mut().zip(correction.iter()) {
+        *value += scale * correction;
+    }
 }
 
 fn reconstruct_phase1_values(value_count: usize, parts: &PhaseParts) -> Vec<f32> {
@@ -1820,6 +2656,27 @@ fn checked_phase1_coordinate_count(value_count: usize) -> Result<usize, QatqErro
         .ok_or(QatqError::ValueCountTooLarge(value_count))
 }
 
+fn turboquant_coordinate_count(value_count: usize) -> usize {
+    if value_count <= 1 {
+        value_count
+    } else {
+        value_count.next_power_of_two()
+    }
+}
+
+fn checked_turboquant_coordinate_count(value_count: usize) -> Result<usize, QatqError> {
+    if value_count <= 1 {
+        return Ok(value_count);
+    }
+    value_count
+        .checked_next_power_of_two()
+        .ok_or(QatqError::ValueCountTooLarge(value_count))
+}
+
+fn turboquant_qjl_projection_count(coord_count: usize) -> usize {
+    coord_count.min(TURBOQUANT_QJL_MAX_PROJECTIONS)
+}
+
 fn checked_value_byte_len(value_count: usize) -> Result<usize, QatqError> {
     value_count
         .checked_mul(4)
@@ -1895,6 +2752,96 @@ fn rotate_values(values: &[f32], seed: u64, direction: RotationDirection) -> Vec
     rotated
 }
 
+fn random_hadamard_rotate(values: &[f32], seed: u64, direction: RotationDirection) -> Vec<f32> {
+    if values.is_empty() {
+        return Vec::new();
+    }
+    debug_assert!(values.len().is_power_of_two());
+    let mut out = values.to_vec();
+    match direction {
+        RotationDirection::Forward => {
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0001);
+            walsh_hadamard_transform(&mut out);
+            normalize_hadamard(&mut out);
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0002);
+        }
+        RotationDirection::Inverse => {
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0002);
+            walsh_hadamard_transform(&mut out);
+            normalize_hadamard(&mut out);
+            apply_rademacher_signs(&mut out, seed, 0x5451_4657_445f_0001);
+        }
+    }
+    out
+}
+
+fn apply_rademacher_signs(values: &mut [f32], seed: u64, stream: u64) {
+    for (index, value) in values.iter_mut().enumerate() {
+        let mixed = splitmix64(seed ^ stream ^ (index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+        if mixed & 1 == 1 {
+            *value = -*value;
+        }
+    }
+}
+
+fn walsh_hadamard_transform(values: &mut [f32]) {
+    let mut width = 1;
+    while width < values.len() {
+        let step = width * 2;
+        for start in (0..values.len()).step_by(step) {
+            for offset in 0..width {
+                let left = values[start + offset];
+                let right = values[start + offset + width];
+                values[start + offset] = left + right;
+                values[start + offset + width] = left - right;
+            }
+        }
+        width = step;
+    }
+}
+
+fn normalize_hadamard(values: &mut [f32]) {
+    let scale = (values.len() as f32).sqrt().recip();
+    for value in values {
+        *value *= scale;
+    }
+}
+
+fn l2_norm(values: &[f32]) -> f32 {
+    values.iter().map(|value| value * value).sum::<f32>().sqrt()
+}
+
+fn dot_product(left: &[f32], right: &[f32]) -> f32 {
+    left.iter()
+        .zip(right.iter())
+        .map(|(left, right)| left * right)
+        .sum()
+}
+
+fn qjl_sign_value(value: bool) -> f32 {
+    if value {
+        1.0
+    } else {
+        -1.0
+    }
+}
+
+fn qjl_project_values(values: &[f32], seed: u64) -> Vec<f32> {
+    random_hadamard_rotate(
+        values,
+        seed ^ TURBOQUANT_QJL_SEED_XOR,
+        RotationDirection::Forward,
+    )
+}
+
+fn qjl_unproject_values(values: &[f32], seed: u64) -> Vec<f32> {
+    random_hadamard_rotate(
+        values,
+        seed ^ TURBOQUANT_QJL_SEED_XOR,
+        RotationDirection::Inverse,
+    )
+}
+
 fn deterministic_unit_quaternion(seed: u64, lane: u64) -> Quaternion {
     let mut state = seed ^ lane.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ 0xa076_1d64_78bd_642f;
     let mut components = [0.0_f32; 4];
@@ -1967,14 +2914,36 @@ fn write_container_header(out: &mut Vec<u8>, total_values: usize, chunk_count: u
 }
 
 fn checksum_f32_bits(values: &[f32]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    let mut hash = FNV_OFFSET;
     for value in values {
-        for byte in value.to_bits().to_be_bytes() {
-            hash ^= byte as u64;
-            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
+        hash = checksum_bits_update(hash, value.to_bits());
     }
     hash
+}
+
+fn checksum_bits_update(hash: u64, bits: u32) -> u64 {
+    let bytes = bits.to_be_bytes();
+    checksum_four_bytes_update(hash, bytes[0], bytes[1], bytes[2], bytes[3])
+}
+
+fn checksum_four_bytes_update(mut hash: u64, first: u8, second: u8, third: u8, fourth: u8) -> u64 {
+    hash ^= first as u64;
+    hash = hash.wrapping_mul(FNV_PRIME);
+    hash ^= second as u64;
+    hash = hash.wrapping_mul(FNV_PRIME);
+    hash ^= third as u64;
+    hash = hash.wrapping_mul(FNV_PRIME);
+    hash ^= fourth as u64;
+    hash = hash.wrapping_mul(FNV_PRIME);
+    hash
+}
+
+fn checksum_two_high_bytes_update(mut hash: u64, first: u8, second: u8) -> u64 {
+    hash ^= first as u64;
+    hash = hash.wrapping_mul(FNV_PRIME);
+    hash ^= second as u64;
+    hash = hash.wrapping_mul(FNV_PRIME);
+    hash.wrapping_mul(FNV_PRIME_SQUARED)
 }
 
 #[derive(Debug)]
@@ -2179,6 +3148,90 @@ mod tests {
     }
 
     #[test]
+    fn turboquant_q4_roundtrip_preserves_shape_and_compresses() {
+        let values: Vec<f32> = (0..1025)
+            .map(|index| {
+                let x = index as f32;
+                (x * 0.03125).sin() * 2.5 + (x * 0.0078125).cos() * 0.75
+            })
+            .collect();
+
+        let encoded = encode_turboquant_q4(&values);
+        let decoded = decode_turboquant_q4(&encoded).unwrap();
+
+        assert_eq!(decoded.len(), values.len());
+        assert!(encoded.len() < values.len() * 4);
+        assert!(compression_ratio(encoded.len(), values.len()) < 0.7);
+        let max_abs = max_abs_error(&values, &decoded);
+        assert!(max_abs < 2.5, "max_abs={max_abs}");
+        assert!(decoded.iter().all(|value| value.is_finite()));
+    }
+
+    #[test]
+    fn turboquant_q4_seed_is_deterministic_and_changes_payload() {
+        let values: Vec<f32> = (0..128)
+            .map(|index| ((index as f32) * 0.21).sin())
+            .collect();
+        let first = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 7 });
+        let second = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 7 });
+        let third = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 8 });
+
+        assert_eq!(first, second);
+        assert_ne!(first, third);
+        assert_eq!(
+            decode_turboquant_q4(&first).unwrap().len(),
+            decode_turboquant_q4(&third).unwrap().len()
+        );
+    }
+
+    #[test]
+    fn turboquant_q4_inner_product_estimator_matches_corrected_decode_dot() {
+        let values: Vec<f32> = (0..64)
+            .map(|index| {
+                let x = index as f32;
+                (x * 0.17).sin() + (x * 0.03125).cos() * 0.5
+            })
+            .collect();
+        let query: Vec<f32> = (0..64)
+            .map(|index| {
+                let x = index as f32;
+                (x * 0.11).cos() - (x * 0.07).sin() * 0.25
+            })
+            .collect();
+
+        let encoded = encode_turboquant_q4_with_config(&values, Phase1Config { seed: 42 });
+        let decoded = decode_turboquant_q4(&encoded).unwrap();
+        let estimated = estimate_turboquant_q4_inner_product(&encoded, &query).unwrap();
+        let decoded_dot = dot_product(&query, &decoded);
+
+        assert!((estimated - decoded_dot).abs() < 1.0e-3);
+    }
+
+    #[test]
+    fn turboquant_q4_inner_product_rejects_query_length_mismatch() {
+        let encoded = encode_turboquant_q4(&[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(
+            estimate_turboquant_q4_inner_product(&encoded, &[1.0, 2.0]),
+            Err(QatqError::LengthMismatch {
+                expected: 4,
+                actual: 2
+            })
+        );
+    }
+
+    #[test]
+    fn turboquant_q4_rejects_invalid_residual_norm() {
+        let mut encoded = encode_turboquant_q4(&[1.0, 2.0, 3.0, 4.0]);
+        let offset = HEADER_LEN + 12;
+        encoded[offset..offset + 4].copy_from_slice(&f32::NAN.to_bits().to_be_bytes());
+
+        assert_eq!(
+            decode_turboquant_q4(&encoded),
+            Err(QatqError::InvalidResidualScale(f32::NAN.to_bits()))
+        );
+    }
+
+    #[test]
     fn phase1_q4_seed_is_deterministic_and_changes_payload() {
         let values: Vec<f32> = (0..128)
             .map(|index| ((index as f32) * 0.21).sin())
@@ -2370,6 +3423,7 @@ mod tests {
         let modes = [
             CodecMode::LossyI4,
             CodecMode::LosslessF32,
+            CodecMode::TurboQuantQ4,
             CodecMode::Phase1Q4,
             CodecMode::Phase2Lossless,
         ];
@@ -2420,7 +3474,7 @@ mod tests {
     fn phase2_lossless_detects_payload_corruption() {
         let values = vec![0.0_f32; 128];
         let mut encoded = encode_phase2_lossless(&values);
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_RLE);
+        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
         let last = encoded.last_mut().unwrap();
         *last ^= 0x01;
 
@@ -2432,19 +3486,123 @@ mod tests {
 
     #[test]
     fn phase2_lossless_uses_raw_bits_when_predictor_residual_is_larger() {
-        let values = [1.0_f32, 2.0, 3.0, 4.0];
+        let values = [
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1122_3344),
+            f32::from_bits(0x5566_7788),
+            f32::from_bits(0x99aa_bbcc),
+        ];
         let encoded = encode_phase2_lossless(&values);
 
         assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_RAW_BITS);
-        assert_eq!(decode_phase2_lossless(&encoded).unwrap(), values);
+        assert_eq!(
+            f32_bits(&decode_phase2_lossless(&encoded).unwrap()),
+            f32_bits(&values)
+        );
     }
 
     #[test]
-    fn phase2_lossless_uses_byte_plane_rle_when_raw_bytes_are_repetitive() {
+    fn phase2_decision_passes_through_raw_bits_as_f32le() {
+        let values = [
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1122_3344),
+            f32::from_bits(0x5566_7788),
+            f32::from_bits(0x99aa_bbcc),
+        ];
+        let decision =
+            try_encode_phase2_lossless_decision_with_config(&values, Phase1Config::default())
+                .unwrap();
+
+        let expected = encode_f32_bits_le(&values);
+        assert!(decision.should_pass_through());
+        assert!(!decision.should_compress());
+        assert_eq!(decision.strategy(), None);
+        assert_eq!(decision.raw_f32le_len(), expected.len());
+        assert_eq!(decision.stored_bytes(), expected.as_slice());
+    }
+
+    #[test]
+    fn phase2_decision_compresses_non_raw_strategy() {
+        let values = vec![0.0_f32; 128];
+        let decision = encode_phase2_lossless_decision(&values);
+
+        match decision {
+            Phase2EncodeDecision::Compressed {
+                payload,
+                strategy,
+                raw_f32le_len,
+            } => {
+                assert_eq!(strategy, Phase2Strategy::BytePlaneBlocks);
+                assert_eq!(raw_f32le_len, values.len() * 4);
+                assert!(payload.len() < raw_f32le_len);
+                assert_eq!(
+                    f32_bits(&decode_phase2_lossless(&payload).unwrap()),
+                    f32_bits(&values)
+                );
+            }
+            Phase2EncodeDecision::PassThroughRaw { .. } => {
+                panic!("compressible values should return a compressed decision")
+            }
+        }
+    }
+
+    #[test]
+    fn production_chunk_roundtrip_restores_compressed_payload() {
+        let values = vec![0.0_f32; 128];
+        let encoded = try_encode_production_chunk(&values).unwrap();
+
+        assert!(encoded.should_compress());
+        assert_eq!(encoded.metadata.storage_label(), "qatq-phase2");
+        assert_eq!(encoded.metadata.raw_f32le_len, values.len() * 4);
+        assert_eq!(
+            encoded.metadata.strategy,
+            Some(Phase2Strategy::BytePlaneBlocks)
+        );
+
+        let restored = restore_production_chunk(&encoded.metadata, encoded.stored_bytes()).unwrap();
+        assert_eq!(f32_bits(&restored), f32_bits(&values));
+    }
+
+    #[test]
+    fn production_chunk_roundtrip_restores_pass_through_payload() {
+        let values = [
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1122_3344),
+            f32::from_bits(0x5566_7788),
+            f32::from_bits(0x99aa_bbcc),
+        ];
+        let encoded = try_encode_production_chunk(&values).unwrap();
+
+        assert!(encoded.should_pass_through());
+        assert_eq!(encoded.metadata.storage_label(), "raw-f32le-pass-through");
+        assert_eq!(encoded.metadata.raw_f32le_len, values.len() * 4);
+        assert_eq!(encoded.metadata.strategy, None);
+
+        let restored = restore_production_chunk(&encoded.metadata, encoded.stored_bytes()).unwrap();
+        assert_eq!(f32_bits(&restored), f32_bits(&values));
+    }
+
+    #[test]
+    fn production_chunk_rejects_mismatched_metadata() {
+        let values = vec![0.0_f32; 128];
+        let mut encoded = try_encode_production_chunk(&values).unwrap();
+        encoded.metadata.raw_f32le_len += 4;
+
+        assert_eq!(
+            restore_production_chunk(&encoded.metadata, encoded.stored_bytes()),
+            Err(QatqError::LengthMismatch {
+                expected: values.len() * 4 + 4,
+                actual: values.len() * 4
+            })
+        );
+    }
+
+    #[test]
+    fn phase2_lossless_uses_byte_plane_blocks_when_raw_planes_are_repetitive() {
         let values = vec![0.0_f32; 128];
         let encoded = encode_phase2_lossless(&values);
 
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_RLE);
+        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
         assert!(encoded.len() < encode_lossless_f32(&values).len());
         assert_eq!(decode_phase2_lossless(&encoded).unwrap(), values);
     }
@@ -2478,7 +3636,7 @@ mod tests {
 
         assert_eq!(
             phase2_lossless_strategy(&encoded),
-            Ok(Phase2Strategy::BytePlaneRle)
+            Ok(Phase2Strategy::BytePlaneBlocks)
         );
         assert_eq!(
             phase2_lossless_strategy(&encode_lossless_f32(&values)),
@@ -2506,7 +3664,7 @@ mod tests {
         let values = vec![1.0_f32; 128];
         let encoded = encode_phase2_lossless(&values);
 
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_RLE);
+        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
         assert!(encoded.len() < encode_lossless_f32(&values).len());
         assert_eq!(decode_phase2_lossless(&encoded).unwrap(), values);
     }
@@ -2534,10 +3692,10 @@ mod tests {
     }
 
     #[test]
-    fn phase2_lossless_rejects_truncated_byte_repeat_run() {
+    fn phase2_lossless_rejects_truncated_byte_plane_block() {
         let values = vec![1.0_f32; 128];
         let mut encoded = encode_phase2_lossless(&values);
-        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_RLE);
+        assert_eq!(encoded[HEADER_LEN + 4], PHASE2_STRATEGY_BYTE_PLANE_BLOCKS);
         encoded.pop();
 
         assert_eq!(
@@ -2818,6 +3976,96 @@ mod tests {
         let raw = encode_f32_bits_be(&values);
 
         assert_eq!(encode_byte_plane_runs_bounded(&raw, 3), None);
+    }
+
+    #[test]
+    fn direct_byte_plane_run_decoder_preserves_f32_bits() {
+        let values = [
+            0.0_f32,
+            -0.0,
+            1.0,
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1111_1111),
+            f32::from_bits(0x7fc0_1234),
+        ];
+        let raw = encode_f32_bits_be(&values);
+        let encoded = encode_byte_plane_runs_bounded(&raw, usize::MAX).unwrap();
+        let decoded_words =
+            decode_byte_plane_runs_to_words(&encoded, raw.len(), values.len()).unwrap();
+
+        assert_eq!(decoded_words, f32_bits(&values));
+    }
+
+    #[test]
+    fn direct_byte_plane_blocks_preserve_f32_bits() {
+        let values = [
+            0.0_f32,
+            -0.0,
+            1.0,
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1111_1111),
+            f32::from_bits(0x7fc0_1234),
+        ];
+        let raw = encode_f32_bits_be(&values);
+        let encoded = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (decoded, checksum) =
+            decode_byte_plane_blocks_to_f32_and_checksum(&encoded, raw.len(), values.len())
+                .unwrap();
+
+        assert_eq!(f32_bits(&decoded), f32_bits(&values));
+        assert_eq!(checksum, checksum_f32_bits(&values));
+    }
+
+    #[test]
+    fn direct_f32_byte_plane_blocks_matches_materialized_encoder() {
+        let values = [
+            0.0_f32,
+            -0.0,
+            1.0,
+            f32::from_bits(0x0102_0304),
+            f32::from_bits(0x1111_1111),
+            f32::from_bits(0x7fc0_1234),
+        ];
+        let raw = encode_f32_bits_be(&values);
+        let materialized = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (direct, checksum) = encode_byte_plane_blocks_from_f32_bounded(&values, usize::MAX);
+
+        assert_eq!(direct.as_deref(), Some(materialized.as_slice()));
+        assert_eq!(checksum, checksum_f32_bits(&values));
+    }
+
+    #[test]
+    fn direct_f32_byte_plane_blocks_preserves_phi_like_planes() {
+        let values: Vec<f32> = (0..512)
+            .map(|index| f32::from_bits(((index as u32) << 16) | 0x3f00_0000))
+            .collect();
+        let raw = encode_f32_bits_be(&values);
+        let materialized = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (direct, checksum) = encode_byte_plane_blocks_from_f32_bounded(&values, usize::MAX);
+        let encoded = direct.expect("direct byte-plane-block candidate");
+        let (decoded, decoded_checksum) =
+            decode_byte_plane_blocks_to_f32_and_checksum(&encoded, raw.len(), values.len())
+                .unwrap();
+
+        assert_eq!(encoded, materialized);
+        assert_eq!(checksum, checksum_f32_bits(&values));
+        assert_eq!(decoded_checksum, checksum);
+        assert_eq!(f32_bits(&decoded), f32_bits(&values));
+    }
+
+    #[test]
+    fn specialized_two_high_raw_two_low_zero_encoder_matches_general_blocks() {
+        let values: Vec<f32> = (0..512)
+            .map(|index| f32::from_bits(((index as u32) << 24) | (((511 - index) as u32) << 16)))
+            .collect();
+        let raw = encode_f32_bits_be(&values);
+        let materialized = encode_byte_plane_blocks_bounded(&raw, usize::MAX).unwrap();
+        let (specialized, checksum) =
+            encode_two_high_raw_two_low_zero_blocks_bounded(&values, usize::MAX)
+                .expect("specialized byte-plane-block candidate");
+
+        assert_eq!(specialized, materialized);
+        assert_eq!(checksum, checksum_f32_bits(&values));
     }
 
     #[test]

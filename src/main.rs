@@ -7,7 +7,7 @@ use std::{
 use qatq::{
     decode, decode_phase2_lossless, for_each_phase2_lossless_container_payload, parse_mode,
     try_encode, try_encode_phase1_q4_with_config, try_encode_phase2_lossless_with_config,
-    CodecMode, Phase1Config, MAX_VALUES_PER_PAYLOAD,
+    try_encode_turboquant_q4_with_config, CodecMode, Phase1Config, MAX_VALUES_PER_PAYLOAD,
 };
 
 const QATC_MAGIC: &[u8; 4] = b"QATC";
@@ -54,8 +54,14 @@ fn encode_command(args: &[String]) -> Result<(), String> {
             print_usage();
             return Err("optional encode configuration must be --seed <u64>".to_string());
         }
-        if mode != CodecMode::Phase1Q4 && mode != CodecMode::Phase2Lossless {
-            return Err("--seed is only supported with phase1-q4 and phase2-lossless".to_string());
+        if mode != CodecMode::TurboQuantQ4
+            && mode != CodecMode::Phase1Q4
+            && mode != CodecMode::Phase2Lossless
+        {
+            return Err(
+                "--seed is only supported with turboquant-q4, phase1-q4, and phase2-lossless"
+                    .to_string(),
+            );
         }
         (Some(parse_seed(&args[3])?), &args[4], &args[5])
     } else {
@@ -65,6 +71,10 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     let payload = match (mode, seed) {
         (CodecMode::Phase1Q4, Some(seed)) => {
             try_encode_phase1_q4_with_config(&values, Phase1Config { seed })
+                .map_err(|error| error.to_string())?
+        }
+        (CodecMode::TurboQuantQ4, Some(seed)) => {
+            try_encode_turboquant_q4_with_config(&values, Phase1Config { seed })
                 .map_err(|error| error.to_string())?
         }
         (CodecMode::Phase2Lossless, Some(seed)) => {
@@ -150,12 +160,161 @@ fn decode_container_to_f32le(payload: &[u8], output_path: impl AsRef<Path>) -> R
 fn fixture_command(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("add") => fixture_add_command(&args[1..]),
+        Some("generate") => fixture_generate_command(&args[1..]),
         Some("verify") => fixture_verify_command(&args[1..]),
         _ => {
             print_usage();
-            Err("usage: qatq fixture <add|verify> ...".to_string())
+            Err("usage: qatq fixture <add|generate|verify> ...".to_string())
         }
     }
+}
+
+fn fixture_generate_command(args: &[String]) -> Result<(), String> {
+    let mut manifest = None;
+    let mut dir = None;
+    let mut index = 0;
+    while index < args.len() {
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("{} requires a value", args[index]))?;
+        match args[index].as_str() {
+            "--manifest" => manifest = Some(PathBuf::from(value)),
+            "--dir" => dir = Some(PathBuf::from(value)),
+            other => return Err(format!("unknown fixture generate option {other}")),
+        }
+        index += 2;
+    }
+
+    let manifest = manifest.ok_or_else(|| "--manifest is required".to_string())?;
+    let dir = dir.ok_or_else(|| "--dir is required".to_string())?;
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create {}: {error}", dir.display()))?;
+    if let Some(parent) = manifest
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+
+    let fixtures = generated_fixture_specs();
+    let mut manifest_text = String::new();
+    manifest_text.push_str("# QATQ generated public fixture manifest\n");
+    manifest_text.push_str("# Regenerate with: cargo run --bin qatq -- fixture generate --manifest fixtures/public.manifest --dir fixtures/generated\n");
+    for fixture in fixtures {
+        let path = dir.join(format!("{}.f32le", fixture.name));
+        write_f32le_atomic(&path, &fixture.values)?;
+        let manifest_path = manifest_relative_path(&manifest, &path);
+        manifest_text.push_str(&render_fixture_manifest_block(FixtureManifestEntry {
+            group: "qatq-public",
+            name: fixture.name,
+            path: &manifest_path,
+            shape: Some(fixture.shape),
+            notes: Some(fixture.notes),
+            value_count: fixture.values.len(),
+        }));
+    }
+    write_bytes_atomic(&manifest, manifest_text.as_bytes())
+}
+
+struct GeneratedFixture {
+    name: &'static str,
+    shape: &'static str,
+    notes: &'static str,
+    values: Vec<f32>,
+}
+
+fn generated_fixture_specs() -> Vec<GeneratedFixture> {
+    vec![
+        GeneratedFixture {
+            name: "bf16-kv-ramp-64x8x16",
+            shape: "[tokens=64, heads=8, dim=16]",
+            notes: "generated public bfloat16-like KV ramp; low f32 mantissa bytes zeroed",
+            values: generated_bf16_like_values(64 * 8 * 16, 0x5141_5451),
+        },
+        GeneratedFixture {
+            name: "bf16-kv-wave-128x8x16",
+            shape: "[tokens=128, heads=8, dim=16]",
+            notes: "generated public bfloat16-like KV wave; compression-positive phase2 fixture",
+            values: generated_bf16_wave_values(128 * 8 * 16),
+        },
+        GeneratedFixture {
+            name: "f32-noisy-pass-through-64x12x16",
+            shape: "[tokens=64, heads=12, dim=16]",
+            notes: "generated public float32 noisy fixture; expected no-compress pass-through candidate",
+            values: generated_noisy_f32_values(64 * 12 * 16, 0x9e37_79b9),
+        },
+        GeneratedFixture {
+            name: "stress-signed-zero-nan-inf",
+            shape: "[values=4096]",
+            notes: "generated public exactness stress fixture with signed zero, infinities, and NaN payload bits",
+            values: generated_special_f32_values(4096),
+        },
+    ]
+}
+
+fn generated_bf16_like_values(count: usize, mut state: u32) -> Vec<f32> {
+    (0..count)
+        .map(|index| {
+            state = lcg_next(state);
+            let base = ((state >> 16) as f32 / u16::MAX as f32) * 2.0 - 1.0;
+            let trend = ((index % 257) as f32 - 128.0) / 512.0;
+            quantize_to_bf16_like(base * 0.75 + trend)
+        })
+        .collect()
+}
+
+fn generated_bf16_wave_values(count: usize) -> Vec<f32> {
+    (0..count)
+        .map(|index| {
+            let x = index as f32;
+            quantize_to_bf16_like((x / 37.0).sin() * 0.5 + (x / 211.0).cos() * 0.125)
+        })
+        .collect()
+}
+
+fn generated_noisy_f32_values(count: usize, mut state: u32) -> Vec<f32> {
+    (0..count)
+        .map(|index| {
+            state = lcg_next(state ^ index as u32);
+            let mantissa = state & 0x007f_ffff;
+            let exponent = 124 + (state % 6);
+            let sign = (state >> 31) << 31;
+            f32::from_bits(sign | (exponent << 23) | mantissa)
+        })
+        .collect()
+}
+
+fn generated_special_f32_values(count: usize) -> Vec<f32> {
+    const SPECIALS: [u32; 8] = [
+        0x0000_0000,
+        0x8000_0000,
+        0x7f80_0000,
+        0xff80_0000,
+        0x7fc0_0001,
+        0x7fa1_2345,
+        0x3f80_0000,
+        0xbf80_0000,
+    ];
+    (0..count)
+        .map(|index| f32::from_bits(SPECIALS[index % SPECIALS.len()] ^ ((index as u32) & 0xff)))
+        .collect()
+}
+
+fn quantize_to_bf16_like(value: f32) -> f32 {
+    f32::from_bits(value.to_bits() & 0xffff_0000)
+}
+
+fn lcg_next(state: u32) -> u32 {
+    state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223)
+}
+
+fn manifest_relative_path(manifest: &Path, path: &Path) -> PathBuf {
+    manifest
+        .parent()
+        .and_then(|parent| path.strip_prefix(parent).ok())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| path.to_path_buf())
 }
 
 fn fixture_add_command(args: &[String]) -> Result<(), String> {
@@ -792,7 +951,7 @@ fn parse_seed(value: &str) -> Result<u64, String> {
 fn print_usage() {
     eprintln!("usage:");
     eprintln!(
-        "  qatq encode --mode <lossy-i4|lossless-f32|phase1-q4|phase2-lossless> [--seed <u64>] <input.f32le> <output.qatq>"
+        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|phase2-lossless> [--seed <u64>] <input.f32le> <output.qatq>"
     );
     eprintln!(
         "  qatq encode-chunked --max-values-per-chunk <usize> [--seed <u64>] <input.f32le> <output.qatc>"
