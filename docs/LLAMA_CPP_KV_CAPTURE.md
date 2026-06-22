@@ -57,6 +57,32 @@ capture. That API is useful for whole-session state persistence, but the binary
 state blob is not the per-layer typed tensor fixture needed for QATQ compression
 evidence.
 
+QATQ owns the first exporter hook as
+[`adapters/llama-cpp/qatq-kv-export-7992aa7c8.patch`](../adapters/llama-cpp/qatq-kv-export-7992aa7c8.patch).
+It targets llama.cpp commit `7992aa7c8`, the commit reported by local
+`llama-cli` build `8640`. This patch adds a public
+`llama_qatq_export_kv_cache(ctx, dir, seq_id)` hook that writes active raw KV
+tensors as `.f16le`, `.bf16le`, or `.f32le` files. The hook still needs to be
+called from the selected llama.cpp prompt runner at the capture point; QATQ
+keeps that as adapter code rather than baking llama.cpp internals into the
+codec.
+
+The QATQ-side benchmark for exported tensors is:
+
+```sh
+cargo build --release --bin qatq-kv-bench
+target/release/qatq-kv-bench --dir captures/llama-kv --iters 5 \
+  --output docs/LLAMA_CPP_KV_COMPRESSION_REPORT.md
+```
+
+For a combined runtime prompt and exported-KV report:
+
+```sh
+python3 scripts/llama_cpp_runtime_kv.py \
+  --llama-cli /path/to/patched/llama-cli \
+  --kv-dir captures/llama-kv
+```
+
 ## Evidence To Add
 
 Once a patched llama.cpp exporter is available, add a runtime evidence bundle:
