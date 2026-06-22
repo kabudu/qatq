@@ -174,20 +174,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t archives < <(jq -r '.upload_files[] | select(endswith(".zip") and contains("apple-darwin"))' dist-manifest.json)
-          if [[ "${#archives[@]}" -eq 0 ]]; then
+          archives_file="$(mktemp)"
+          jq -r '.upload_files[] | select(endswith(".zip") and contains("apple-darwin"))' dist-manifest.json > "$archives_file"
+          if [[ ! -s "$archives_file" ]]; then
             echo "No macOS zip archives found in dist manifest" >&2
             exit 1
           fi
 
-          for archive in "${archives[@]}"; do
+          while IFS= read -r archive; do
             echo "Submitting $archive for Apple notarization"
             xcrun notarytool submit "$archive" \
               --apple-id "$APPLE_ID" \
               --password "$APPLE_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
               --wait
-          done
+          done < "$archives_file"
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
