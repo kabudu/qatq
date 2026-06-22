@@ -44,12 +44,12 @@ The following claims are supported by the current QATQ repository evidence:
 
 The following claims are not yet supported and should not appear as conclusions:
 
-- QATQ is universally superior to all TurboQuant variants.
+- A universal superiority claim over all TurboQuant variants.
 - QATQ improves model quality or perplexity for lossy inference workloads.
 - QATQ's public retrieval proxy or local model-output score task is a substitute
   for language-model perplexity or direct live KV-cache evaluation.
 - QATQ beats hardware FP8 or production runtime-specific codecs.
-- The current `QATC` container is a random-access or streaming service format.
+- A claim that the current `QATC` container is a runtime paging/service format.
 
 ## Current Result Summary
 

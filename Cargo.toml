@@ -41,6 +41,7 @@ include = [
     "docs/RUNTIME_*.md",
     "docs/LLAMA_CPP_*.md",
     "docs/RELEASE_CHECKLIST.md",
+    "docs/WHITEPAPER.md",
     "fixtures/public.manifest",
     "fixtures/generated/**",
 ]

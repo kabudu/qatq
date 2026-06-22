@@ -1,6 +1,6 @@
 # API and CLI Freeze
 
-The QATQ v0.1.0 source-release API and CLI surface is accepted as frozen.
+The QATQ v0.1.0 API and CLI surface is accepted as frozen.
 Do not rename the surfaces below before crates.io publication without opening a
 new freeze record and documenting the compatibility impact.
 
@@ -47,7 +47,7 @@ Accepted on 2026-06-22:
 - stable functions intended for external users are documented in `README.md` or
   companion docs;
 - docs state `qatq-exact` and `QATC` as the default exact product surface;
-- `cargo package --allow-dirty` succeeds from the source release candidate;
+- `cargo package --allow-dirty` succeeds from the release branch;
 - coverage and supply-chain checks are wired into CI;
 - `docs/PRODUCTION_READINESS.md` is updated with current evidence and open
   blockers.

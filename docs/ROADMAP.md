@@ -105,7 +105,7 @@ not just access to exported tensors.
 - [x] Record one scoped external Rust live-migration proof where standalone QATQ
       preserved exact continuation behavior and beat raw, zstd, and lz4
       transfer-size baselines.
-- [x] Freeze source-release API/CLI names before crates.io publish.
+- [x] Freeze v0.1.0 API/CLI names before crates.io publish.
 - [x] Add coverage and supply-chain checks.
 - [x] Wire GitHub Releases with cargo-dist binary archives, installers, and
       checksums.
