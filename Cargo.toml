@@ -2,7 +2,7 @@
 name = "qatq"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.96"
 description = "Exact tensor-aware compression for exported LLM KV caches and tensor migration"
 license = "Apache-2.0"
 repository = "https://github.com/kabudu/qatq"
