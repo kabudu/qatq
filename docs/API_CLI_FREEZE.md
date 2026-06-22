@@ -3,9 +3,6 @@
 QATQ is still a source release candidate. Do not publish to crates.io until this
 surface is intentionally accepted as stable.
 
-PermeantOS should run the AWS live-migration integration described in
-`docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md` before this freeze is accepted.
-
 ## Stable Product Surface For v0.1.0
 
 | surface | status | notes |
@@ -43,7 +40,7 @@ PermeantOS should run the AWS live-migration integration described in
 
 Before crates.io publishing:
 
-- PermeantOS AWS live-migration feedback has either been incorporated or
+- external runtime integration feedback has either been incorporated or
   explicitly deferred;
 - no CLI command or mode renames without a changelog entry;
 - all stable functions intended for external users have rustdoc examples or are

@@ -60,8 +60,6 @@ The current source-release API/CLI freeze record is in
 [`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md). Production-readiness status
 and remaining gates are tracked in
 [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
-PermeantOS live-migration integration instructions are in
-[`docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md`](docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md).
 
 ## Attribution
 
