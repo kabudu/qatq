@@ -16,6 +16,8 @@ Current source files:
 - Public task-quality experiments: `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`
 - Public production KV gate: `docs/PUBLIC_BENCHMARK_GATE.md`
 - Public competitive compression gate: `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`
+- Runtime model-output task experiment:
+  `docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md`
 - Optional external validation: independently supplied runtime fixture
   manifests and result summaries
 
@@ -34,6 +36,9 @@ The following claims are supported by the current QATQ repository evidence:
 - QATQ Phase 2 preserves deterministic top-1 retrieval decisions on the public
   task-quality experiment because it reconstructs the finite fixture records
   exactly.
+- QATQ Phase 2 preserves a local Ollama model-output relevance-score task:
+  `phi4-mini:latest` generated score tensors are ingested as runtime fixtures,
+  reconstructed bit-for-bit, and keep raw top-1 task decisions unchanged.
 - `turboquant-q4` and `phase1-q4` now have deterministic codec-level
   inner-product preservation probes over the generated public corpus.
 
@@ -41,7 +46,8 @@ The following claims are not yet supported and should not appear as conclusions:
 
 - QATQ is universally superior to all TurboQuant variants.
 - QATQ improves model quality or perplexity for lossy inference workloads.
-- QATQ's public retrieval proxy is a substitute for real model/task evaluation.
+- QATQ's public retrieval proxy or local model-output score task is a substitute
+  for language-model perplexity or direct live KV-cache evaluation.
 - QATQ beats hardware FP8 or production runtime-specific codecs.
 - The current `QATC` container is a random-access or streaming service format.
 
@@ -102,6 +108,7 @@ tables for the refreshed paper:
 - TurboQuant QJL versus quaternion-overlay inner-product proxy error;
 - Phase 2 exact retrieval-task agreement, with lossy comparators clearly
   separated;
+- local Ollama model-output score-task agreement;
 - optional external runtime evidence for compressed and pass-through paths.
 
 Keep the full 50-row benchmark table in the companion white-paper or appendix

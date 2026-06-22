@@ -65,6 +65,7 @@ Optional external runtime validation:
 cargo run --bin qatq -- fixture verify \
   --manifest fixtures/runtime.manifest \
   --output docs/RUNTIME_FIXTURE_AUDIT.md
+python3 scripts/ollama_task_quality.py --model phi4-mini:latest
 ```
 
 Do not tag a public release if:

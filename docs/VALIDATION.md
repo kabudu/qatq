@@ -35,6 +35,7 @@ cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest 
 cargo run --release --bin qatq-bench -- --phase2-only --no-synthetic --manifest fixtures/public.manifest --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md --gate-require-external --gate-policy competitive-compression
 cargo test --test kv_stress -- --ignored --nocapture
 cargo test --release --test kv_stress -- --ignored --nocapture
+python3 scripts/ollama_task_quality.py --model phi4-mini:latest
 cargo fmt --check
 cargo check --manifest-path fuzz/Cargo.toml
 cargo package --allow-dirty
@@ -72,6 +73,12 @@ Results:
 - deterministic KV stress matrix in release mode: passed across the same 4,096
   cases with aggregate ratio `0.1441`, encode throughput `62.09 ns/value`, and
   decode throughput `7.25 ns/value`.
+- local Ollama model-output task harness: passed with `phi4-mini:latest`.
+  Ollama embedding endpoints were unavailable for this installed model, so the
+  harness used deterministic text generation to produce a 12-query by
+  24-document relevance-score tensor, ingested it as a runtime fixture, encoded
+  and decoded it through Phase 2, preserved exact f32 bits, compressed the
+  tensor to ratio `0.1476`, and preserved raw top-1 score decisions `12/12`.
 - `cargo fmt --check`: passed.
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
 - `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
@@ -141,6 +148,9 @@ Coverage added:
 - ignored deterministic KV stress matrix covering thousands of generated
   bfloat16-like, low-rank, sparse, repeated-token, raw-noise,
   non-finite/signed-zero, delta-bit, and quaternion-chain-friendly KV cases;
+- local Ollama model-output task harness that captures generated relevance
+  score tensors, validates fixture ingestion, encodes/decodes through QATQ, and
+  verifies task-decision preservation;
 - chunked Phase 2 exact encode/decode round trip across partial chunk
   boundaries;
 - chunked Phase 2 empty-input handling and invalid chunk-size rejection;
@@ -246,13 +256,14 @@ Coverage added:
 
 Known validation limits:
 
-- Benchmarks include deterministic public tensors, not live runtime KV-cache
-  captures.
+- Benchmarks include deterministic public tensors and a local Ollama
+  model-output task tensor, not direct live runtime KV-cache captures.
 - The FP8 comparison is a local finite-value software E4M3 baseline, not a
   hardware/runtime FP8 path.
 - Phase 1 quality metrics are codec reconstruction metrics only. Phase 2 exact
-  metrics prove bit-identical f32 reconstruction locally, and the public
-  retrieval proxy verifies top-1 task parity on generated fixtures, but these do
-  not yet measure model perplexity, agent migration fidelity, latency inside
-  external runtimes, residual entropy on real KV tensors, or real downstream
-  task success.
+  metrics prove bit-identical f32 reconstruction locally, the public retrieval
+  proxy verifies top-1 task parity on generated fixtures, and the Ollama harness
+  verifies a local model-output task tensor. These do not yet measure language
+  model perplexity, agent migration fidelity, latency inside external runtimes,
+  residual entropy on live KV tensors, or direct KV-cache extraction from a
+  runtime.

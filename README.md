@@ -366,3 +366,12 @@ evidence can be kept outside this repository as optional validation provenance.
 New runtime integrations should follow
 [docs/RUNTIME_ADAPTERS.md](docs/RUNTIME_ADAPTERS.md) and provide ordinary
 fixture manifests rather than runtime-specific project coupling.
+
+Run the local Ollama model-output task harness when Ollama is available. This
+captures model-produced task tensors under ignored `captures/`, ingests them
+through the fixture manifest path, QATQ-encodes and decodes them, and writes
+[`docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md`](docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md):
+
+```sh
+python3 scripts/ollama_task_quality.py --model phi4-mini:latest
+```

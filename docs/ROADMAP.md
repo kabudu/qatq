@@ -72,6 +72,10 @@ release hygiene, and comparative paper baselines are finished.
 - [x] Add CI and fuzzing scaffold.
 - [x] Add scheduled longer fuzzing for decoder and Phase 2 round-trip targets.
 - [x] Add a public end-to-end retrieval task-quality experiment.
+- [x] Add a local Ollama model-output task harness for runtime fixture
+      ingestion and task-decision preservation.
+- [ ] Add direct live KV-cache extraction from at least one runtime that exposes
+      internal transformer KV tensors.
 - [ ] Add coverage and supply-chain checks.
 - [ ] Publish to crates.io when the API is stable.
 - [ ] Cut GitHub Releases with binaries once the CLI is useful standalone.

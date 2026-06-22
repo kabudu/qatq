@@ -25,6 +25,8 @@ comparative baselines remain open.
 - Comparative baselines: `docs/PUBLIC_COMPARATIVE_BASELINES.md`.
 - Quality-proxy experiments: `docs/PUBLIC_QUALITY_EXPERIMENTS.md`.
 - Task-quality experiments: `docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md`.
+- Runtime model-output task experiment:
+  `docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md`.
 - Optional external validation: independently supplied runtime fixture
   manifests and result summaries.
 
@@ -90,6 +92,13 @@ Phase 2 exact transport is expected to preserve those decisions; lossy
 `turboquant-q4` and `phase1-q4` rows are comparator context only. These reports
 still do not establish model-quality or perplexity superiority.
 
+`docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md` adds a local Ollama model-output
+task: `phi4-mini:latest` generates a 12-query by 24-document relevance-score
+tensor, QATQ ingests it as a runtime fixture, and Phase 2 exact transport
+preserves the generated tensor bits and all raw top-1 retrieval decisions. This
+is real model-output task evidence, but it is not direct live KV-cache
+extraction or a language-model perplexity benchmark.
+
 ## Gate Policy
 
 The gate policy is now split:
@@ -122,8 +131,8 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
 ## Remaining Work Before A Public Claim
 
 - Compare against runtime-native quantization baselines.
-- Add real model/task quality experiments before making quality claims against
-  Google's TurboQuant paper.
+- Add language-model perplexity and direct live KV-cache extraction experiments
+  before making quality claims against Google's TurboQuant paper.
 - Add model-quality evaluation for lossy Phase 1 if that path remains in the
   paper narrative.
 - Expand fuzzing duration in CI and add coverage/supply-chain checks.
