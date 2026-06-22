@@ -3,6 +3,9 @@
 QATQ is still a source release candidate. Do not publish to crates.io until this
 surface is intentionally accepted as stable.
 
+PermeantOS should run the AWS live-migration integration described in
+`docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md` before this freeze is accepted.
+
 ## Stable Product Surface For v0.1.0
 
 | surface | status | notes |
@@ -31,8 +34,8 @@ surface is intentionally accepted as stable.
 - The product name remains QATQ because the exact codec includes reversible
   quaternion-chain candidates and keeps quaternion-backed compression in the
   strategy search.
-- Public docs should say `QATQ exact`, `QATC`, and `qatq-exact`, not
-  `phase2-lossless`.
+- Public docs should say `QATQ exact`, `QATC`, and `qatq-exact`, and avoid
+  former internal implementation names.
 - Lower-level code may retain implementation-specific internal names only when
   they are private and not part of the API/CLI contract.
 
@@ -40,6 +43,8 @@ surface is intentionally accepted as stable.
 
 Before crates.io publishing:
 
+- PermeantOS AWS live-migration feedback has either been incorporated or
+  explicitly deferred;
 - no CLI command or mode renames without a changelog entry;
 - all stable functions intended for external users have rustdoc examples or are
   documented in `README.md`;

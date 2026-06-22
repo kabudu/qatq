@@ -48,8 +48,9 @@ They are exact by construction and use a fast strategy policy:
 the encoder selects the smallest bit-identical QATQ exact candidate, including a
 reversible quaternion-chain residual path when it beats simpler byte-plane
 transforms. Phase 1 is still lossy and experimental; it is useful as an
-internal predictor and comparator, but lossless QATQ claims apply only to Phase
-2. The exhaustive encoder remains available for research comparisons.
+internal predictor and comparator, but lossless QATQ claims apply only to QATQ
+exact and QATC. The exhaustive encoder remains available for research
+comparisons.
 The generated public fixtures are the default reproducible evidence set. Larger
 or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` tensor values each; larger tensors
@@ -59,6 +60,8 @@ The current source-release API/CLI freeze record is in
 [`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md). Production-readiness status
 and remaining gates are tracked in
 [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
+PermeantOS live-migration integration instructions are in
+[`docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md`](docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md).
 
 ## Attribution
 

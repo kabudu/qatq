@@ -13,6 +13,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | Deterministic KV stress | ready for RC | ignored stress test plus scheduled workflow. |
 | Direct llama.cpp KV ingestion | proven | `docs/LLAMA_CPP_KV_COMPRESSION_REPORT.md`. |
 | Broad llama.cpp KV matrix | reproducible | `scripts/llama_cpp_kv_matrix.py`; report generated when local models are present. |
+| PermeantOS AWS migration path | specified | `docs/PERMEANTOS_AWS_MIGRATION_INTEGRATION.md`. |
 | API/CLI naming | frozen for RC | `docs/API_CLI_FREEZE.md`. |
 
 ## Remaining Production Gates
@@ -20,6 +21,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | gate | required before production-complete |
 | --- | --- |
 | Runtime breadth | Run and publish the llama.cpp KV matrix across at least two model families, three prompt classes, f16/bf16/f32, short and longer prompt contexts, and multiple packed chunk sizes. |
+| PermeantOS integration | Run at least one real AWS live migration with QATQ exact artifacts, source/target checksum validation, rollback behavior, and task-decision preservation. |
 | Adapter maintenance | Keep the llama.cpp patch version-pinned and refresh it whenever the target llama.cpp commit changes. |
 | Fuzzing | Keep scheduled fuzzing green and review crashes before releases. |
 | Security review | Re-run malicious/corrupt QATC tests and fuzz targets before tagging. |

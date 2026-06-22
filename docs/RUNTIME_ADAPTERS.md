@@ -21,7 +21,7 @@ let values = qatq::restore_production_chunk(&metadata, bytes)?;
 
 Supported storage labels:
 
-- `qatq-qatq_exact`: `bytes` is a QATQ exact payload.
+- `qatq-exact`: `bytes` is a QATQ exact payload.
 - `raw-f32le-pass-through`: `bytes` is raw little-endian f32.
 
 Adapters must preserve:
