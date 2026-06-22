@@ -9,11 +9,10 @@ fuzz_target!(|data: &[u8]| {
             chunk.try_into().expect("chunk size checked"),
         )));
     }
-    if let Ok(encoded) = qatq::try_encode_phase2_lossless_with_config(
-        &values,
-        qatq::Phase1Config::default(),
-    ) {
-        if let Ok(decoded) = qatq::decode_phase2_lossless(&encoded) {
+    if let Ok(encoded) =
+        qatq::try_encode_qatq_exact_with_config(&values, qatq::Phase1Config::default())
+    {
+        if let Ok(decoded) = qatq::decode_qatq_exact(&encoded) {
             assert_eq!(f32_bits(&decoded), f32_bits(&values));
         }
     }

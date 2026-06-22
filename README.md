@@ -55,6 +55,11 @@ or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` tensor values each; larger tensors
 should use the QATQ exact `QATC` chunk container.
 
+The current source-release API/CLI freeze record is in
+[`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md). Production-readiness status
+and remaining gates are tracked in
+[`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
+
 ## Attribution
 
 QATQ is an independent project. TurboQuant should be credited to the Google

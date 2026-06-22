@@ -53,6 +53,7 @@ cargo run --release --bin qatq-bench -- \
   --gate-require-external \
   --gate-policy competitive-compression
 cargo test --test kv_stress -- --ignored --nocapture
+python3 scripts/llama_cpp_kv_matrix.py --max-cases 2
 ```
 
 After regenerating benchmark outputs, review
@@ -73,6 +74,8 @@ Do not tag a public release if:
 - generated public fixtures cannot be regenerated and verified;
 - `cargo test` fails;
 - the deterministic KV stress matrix fails;
+- the llama.cpp KV smoke matrix cannot run in an environment with patched
+  llama.cpp and local GGUF models;
 - the public production gate fails;
 - the public competitive compression gate fails;
 - docs claim external runtime data is required for QATQ to operate;

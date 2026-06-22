@@ -30,10 +30,16 @@ QATQ carries the exporter hook as a source patch in this directory:
 - `qatq-kv-export-7992aa7c8.patch`
 
 It targets llama.cpp commit `7992aa7c8`, the commit reported by the local
-Homebrew `llama-cli` build `8640`. Apply it to a llama.cpp source checkout, add
-one call to `llama_qatq_export_kv_cache(ctx, export_dir, 0)` at the capture
-point in the prompt runner you are using, and then run `qatq-kv-bench` over the
-export directory.
+Homebrew `llama-cli` build `8640`. Apply it to a llama.cpp source checkout and
+build the patched `llama-simple` runner. The patch adds:
+
+- `llama_qatq_export_kv_cache(ctx, export_dir, seq_id)`;
+- `llama-simple --qatq-kv-export-dir <dir>`;
+- `llama-simple --cache-type-k <f16|bf16|f32>`;
+- `llama-simple --cache-type-v <f16|bf16|f32>`.
+
+Then run `qatq-kv-bench` or `scripts/llama_cpp_kv_matrix.py` over the export
+directory.
 
 The patch is deliberately a runtime adapter hook, not part of QATQ's codec
 core. If upstream llama.cpp internals move, refresh the patch here and keep the

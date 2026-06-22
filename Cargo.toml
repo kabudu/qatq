@@ -23,6 +23,8 @@ include = [
     "docs/ARCHITECTURE.md",
     "docs/CREDITS.md",
     "docs/FIXTURES.md",
+    "docs/API_CLI_FREEZE.md",
+    "docs/PRODUCTION_READINESS.md",
     "docs/PUBLIC_*.md",
     "docs/PUBLIC_COMPARATIVE_*.md",
     "docs/PAPER_REFRESH_NOTES.md",

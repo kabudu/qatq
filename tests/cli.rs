@@ -574,6 +574,85 @@ fn cli_qatc_checksum_mismatch_does_not_overwrite_existing_output() {
 }
 
 #[test]
+fn cli_qatc_rejects_huge_chunk_count_without_overwriting_output() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-hostile-qatchunks-{}", std::process::id());
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"QATC");
+    payload.push(2);
+    payload.push(4);
+    payload.extend_from_slice(&[0, 0]);
+    payload.extend_from_slice(&1_u64.to_be_bytes());
+    payload.extend_from_slice(&u32::MAX.to_be_bytes());
+    payload.extend_from_slice(&[0; 4]);
+    payload.extend_from_slice(&0_u64.to_be_bytes());
+    fs::write(&encoded, payload).expect("write hostile container");
+
+    let sentinel = b"keep-existing-output";
+    fs::write(&decoded, sentinel).expect("write sentinel output");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(!decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes, sentinel);
+
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_qatc_rejects_huge_chunk_len_without_overwriting_output() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-hostile-qatclen-{}", std::process::id());
+    let encoded = dir.join(format!("{stem}.qatc"));
+    let decoded = dir.join(format!("{stem}.decoded.f32le"));
+
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"QATC");
+    payload.push(2);
+    payload.push(4);
+    payload.extend_from_slice(&[0, 0]);
+    payload.extend_from_slice(&1_u64.to_be_bytes());
+    payload.extend_from_slice(&1_u32.to_be_bytes());
+    payload.extend_from_slice(&[0; 4]);
+    payload.extend_from_slice(&0_u64.to_be_bytes());
+    payload.extend_from_slice(&u32::MAX.to_be_bytes());
+    fs::write(&encoded, payload).expect("write hostile container");
+
+    let sentinel = b"keep-existing-output";
+    fs::write(&decoded, sentinel).expect("write sentinel output");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run decode");
+    assert!(!decode_status.success());
+
+    let decoded_bytes = fs::read(&decoded).expect("read decoded");
+    assert_eq!(decoded_bytes, sentinel);
+
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
 fn cli_fixture_add_validates_and_appends_manifest_entry() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-cli-fixture-{}", std::process::id());

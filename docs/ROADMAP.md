@@ -74,8 +74,11 @@ release hygiene, and comparative paper baselines are finished.
 - [x] Add a public end-to-end retrieval task-quality experiment.
 - [x] Add a local Ollama model-output task harness for runtime fixture
       ingestion and task-decision preservation.
-- [ ] Add direct live KV-cache extraction from at least one runtime that exposes
+- [x] Add direct live KV-cache extraction from at least one runtime that exposes
       internal transformer KV tensors.
+- [x] Add an owned, version-pinned llama.cpp adapter patch and direct KV matrix
+      runner.
+- [x] Freeze source-release API/CLI names before crates.io publish.
 - [ ] Add coverage and supply-chain checks.
 - [ ] Publish to crates.io when the API is stable.
 - [ ] Cut GitHub Releases with binaries once the CLI is useful standalone.

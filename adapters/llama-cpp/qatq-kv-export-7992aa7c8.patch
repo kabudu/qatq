@@ -1,26 +1,47 @@
 diff --git a/examples/simple/simple.cpp b/examples/simple/simple.cpp
-index 9f0a25d71..07567446c 100644
+index 9f0a25d71..3232a3960 100644
 --- a/examples/simple/simple.cpp
 +++ b/examples/simple/simple.cpp
-@@ -7,7 +7,7 @@
+@@ -7,10 +7,26 @@
  
  static void print_usage(int, char ** argv) {
      printf("\nexample usage:\n");
 -    printf("\n    %s -m model.gguf [-n n_predict] [-ngl n_gpu_layers] [prompt]\n", argv[0]);
-+    printf("\n    %s -m model.gguf [-n n_predict] [-ngl n_gpu_layers] [--qatq-kv-export-dir dir] [prompt]\n", argv[0]);
++    printf("\n    %s -m model.gguf [-n n_predict] [-ngl n_gpu_layers] [--cache-type-k f16|bf16|f32] [--cache-type-v f16|bf16|f32] [--qatq-kv-export-dir dir] [prompt]\n", argv[0]);
      printf("\n");
  }
  
-@@ -22,6 +22,8 @@ int main(int argc, char ** argv) {
++static bool parse_qatq_cache_type(const char * value, ggml_type * out) {
++    if (strcmp(value, "f16") == 0) {
++        *out = GGML_TYPE_F16;
++        return true;
++    }
++    if (strcmp(value, "bf16") == 0) {
++        *out = GGML_TYPE_BF16;
++        return true;
++    }
++    if (strcmp(value, "f32") == 0) {
++        *out = GGML_TYPE_F32;
++        return true;
++    }
++    return false;
++}
++
+ int main(int argc, char ** argv) {
+     std::setlocale(LC_NUMERIC, "C");
+ 
+@@ -22,6 +38,10 @@ int main(int argc, char ** argv) {
      int ngl = 99;
      // number of tokens to predict
      int n_predict = 32;
 +    // directory for raw active KV tensor export after prompt prefill
 +    std::string qatq_kv_export_dir;
++    ggml_type cache_type_k = GGML_TYPE_F16;
++    ggml_type cache_type_v = GGML_TYPE_F16;
  
      // parse command line arguments
  
-@@ -59,6 +61,13 @@ int main(int argc, char ** argv) {
+@@ -59,6 +79,27 @@ int main(int argc, char ** argv) {
                      print_usage(argc, argv);
                      return 1;
                  }
@@ -31,10 +52,33 @@ index 9f0a25d71..07567446c 100644
 +                    print_usage(argc, argv);
 +                    return 1;
 +                }
++            } else if (strcmp(argv[i], "--cache-type-k") == 0) {
++                if (i + 1 < argc && parse_qatq_cache_type(argv[i + 1], &cache_type_k)) {
++                    ++i;
++                } else {
++                    print_usage(argc, argv);
++                    return 1;
++                }
++            } else if (strcmp(argv[i], "--cache-type-v") == 0) {
++                if (i + 1 < argc && parse_qatq_cache_type(argv[i + 1], &cache_type_v)) {
++                    ++i;
++                } else {
++                    print_usage(argc, argv);
++                    return 1;
++                }
              } else {
                  // prompt starts here
                  break;
-@@ -177,6 +186,15 @@ int main(int argc, char ** argv) {
+@@ -113,6 +154,8 @@ int main(int argc, char ** argv) {
+     ctx_params.n_ctx = n_prompt + n_predict - 1;
+     // n_batch is the maximum number of tokens that can be processed in a single call to llama_decode
+     ctx_params.n_batch = n_prompt;
++    ctx_params.type_k = cache_type_k;
++    ctx_params.type_v = cache_type_v;
+     // enable performance counters
+     ctx_params.no_perf = false;
+ 
+@@ -177,6 +220,15 @@ int main(int argc, char ** argv) {
  
          n_pos += batch.n_tokens;
  
