@@ -6,11 +6,11 @@ QATQ is release-candidate grade, not yet declared production-complete.
 
 | area | status | evidence |
 | --- | --- | --- |
-| Exact codec | ready for RC | `cargo test`, public fixtures, exact checksum verification. |
-| Native typed tensors | ready for RC | f32/f16/bf16 encode/decode and QATC tests. |
-| QATC container | hardened for RC | decode limits, checksum validation, hostile count/length CLI tests. |
-| Public compression gates | ready for RC | `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`. |
-| Deterministic KV stress | ready for RC | ignored stress test plus scheduled workflow. |
+| Exact codec | ready for v0.1.0 | `cargo test`, public fixtures, exact checksum verification. |
+| Native typed tensors | ready for v0.1.0 | f32/f16/bf16 encode/decode and QATC tests. |
+| QATC container | hardened for v0.1.0 | decode limits, checksum validation, hostile count/length CLI tests. |
+| Public compression gates | ready for v0.1.0 | `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`. |
+| Deterministic KV stress | ready for v0.1.0 | ignored stress test plus scheduled workflow. |
 | Direct llama.cpp KV ingestion | proven | `docs/LLAMA_CPP_KV_COMPRESSION_REPORT.md`. |
 | Broad llama.cpp KV matrix | reproducible | `scripts/llama_cpp_kv_matrix.py`; report generated when local models are present. |
 | External live migration | proven for one scoped run | `docs/EXTERNAL_RUNTIME_EVIDENCE.md`. |

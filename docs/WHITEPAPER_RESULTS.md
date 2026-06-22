@@ -8,8 +8,8 @@ appendix material rather than a project dependency.
 
 QATQ is not complete as a final public product. The exact QATQ exact codec,
 production decision API, public fixtures, CI, fuzz scaffold, and release
-checklist now exist, but random-access/streaming container work and broader
-comparative baselines remain open.
+checklist now exist, but runtime service container work and broader comparative
+baselines remain open.
 
 ## Experimental Setup
 
@@ -124,7 +124,7 @@ production-callable storage decision path that compresses every generated
 public fixture below the best zstd/lz4 raw-f32 baseline for the same row, while
 retaining raw f32 pass-through for future compression-negative tensors.
 
-This is enough to justify a standalone open-source QATQ release candidate and a
+This is enough to justify a standalone open-source QATQ v0.1.0 release and a
 refreshed paper section around reproducible exact transport results. It is not
 enough to declare QATQ superior to all standard TurboQuant deployments.
 
@@ -137,5 +137,5 @@ enough to declare QATQ superior to all standard TurboQuant deployments.
   paper narrative.
 - Keep scheduled fuzzing, coverage, and supply-chain checks green before
   release tags.
-- Define a random-access or streaming container/service format if runtime
-  paging is required.
+- Define a runtime service container format if adapters need partial decode or
+  long-lived paging semantics.

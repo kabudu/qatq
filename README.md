@@ -1,5 +1,15 @@
 <p align="center">
-  <img src="assets/qatqLogoFinal.png" alt="QATQ logo" width="520">
+  <img src="assets/qatqLogoFinal.png" alt="QATQ logo" width="260">
+</p>
+
+<p align="center">
+  <a href="https://github.com/kabudu/qatq/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kabudu/qatq/ci.yml?branch=master&label=ci&style=flat-square"></a>
+  <a href="https://github.com/kabudu/qatq/actions/workflows/coverage-supply-chain.yml"><img alt="Coverage and supply-chain" src="https://img.shields.io/github/actions/workflow/status/kabudu/qatq/coverage-supply-chain.yml?branch=master&label=coverage%20%2F%20supply-chain&style=flat-square"></a>
+  <a href="https://github.com/kabudu/qatq/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/kabudu/qatq/release.yml?branch=master&label=release&style=flat-square"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
+  <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
+  <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
+  <img alt="Crate version 0.1.0" src="https://img.shields.io/badge/crate-0.1.0-2a4e66?style=flat-square">
 </p>
 
 # QATQ
@@ -20,6 +30,10 @@ The initial release target is exact storage and transfer compression for
 exported KV/tensor bytes. Live GPU VRAM reduction is a separate experimental
 roadmap goal that would require runtime KV paging/offload integration and
 latency proof before it becomes a product claim.
+
+<p align="center">
+  <img src="assets/qatq-architecture.svg" alt="QATQ architecture diagram showing exported tensors flowing through exact strategy search, QATC transport, and bit-identical restore">
+</p>
 
 ## Status
 
@@ -67,12 +81,14 @@ or private runtime captures can be added as optional external manifests. Current
 single payloads are bounded to `67,108,864` tensor values each; larger tensors
 should use the QATQ exact `QATC` chunk container.
 
-The current source-release API/CLI freeze record is in
+The current v0.1.0 API/CLI freeze record is in
 [`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md). Production-readiness status
 and remaining gates are tracked in
 [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
 Runtime-agnostic external integration evidence is summarized in
 [`docs/EXTERNAL_RUNTIME_EVIDENCE.md`](docs/EXTERNAL_RUNTIME_EVIDENCE.md).
+The technical whitepaper is available at
+[`docs/WHITEPAPER.md`](docs/WHITEPAPER.md).
 Release packaging and publication are documented in
 [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md): GitHub Release
 binaries are built by cargo-dist from annotated tags, while crates.io

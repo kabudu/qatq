@@ -1,5 +1,7 @@
 # Architecture
 
+![QATQ architecture diagram](../assets/qatq-architecture.svg)
+
 QATQ is split into three layers:
 
 1. **Codec core**: pure Rust encode/decode primitives with deterministic payload

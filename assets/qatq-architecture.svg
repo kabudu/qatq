@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">QATQ architecture diagram</title>
+  <desc id="desc">Exported LLM KV and tensor bytes flow through typed ingestion, exact strategy search, QATC chunking, transport, checksum verification, and bit-identical tensor restore.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06090c"/>
+      <stop offset="0.44" stop-color="#10212d"/>
+      <stop offset="1" stop-color="#061016"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#547182"/>
+      <stop offset="1" stop-color="#2a4e66"/>
+    </linearGradient>
+    <linearGradient id="copper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d79b68"/>
+      <stop offset="1" stop-color="#9b6238"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d3d8d9"/>
+      <stop offset="1" stop-color="#8a8f90"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b2b8b9"/>
+      <stop offset="0.55" stop-color="#c78a55"/>
+      <stop offset="1" stop-color="#547182"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.78 0 0 0 0 0.54 0 0 0 0 0.33 0 0 0 .58 0" result="warm"/>
+      <feMerge>
+        <feMergeNode in="warm"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c78a55"/>
+    </marker>
+    <style>
+      .label { font-family: Arial, Helvetica, sans-serif; fill: #e6ecec; }
+      .muted { fill: #aab4b5; }
+      .tiny { font-size: 18px; }
+      .small { font-size: 22px; }
+      .medium { font-size: 28px; font-weight: 700; }
+      .title { font-size: 42px; font-weight: 800; letter-spacing: 0; }
+      .panel { fill: rgba(8, 17, 23, 0.86); stroke: #355870; stroke-width: 2; }
+      .chip { fill: rgba(84, 113, 130, 0.28); stroke: rgba(178, 184, 185, 0.35); stroke-width: 1.5; }
+      .wire { fill: none; stroke: url(#flow); stroke-width: 5; stroke-linecap: round; marker-end: url(#arrow); }
+      .thinWire { fill: none; stroke: #547182; stroke-width: 2.5; stroke-linecap: round; opacity: .7; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <path d="M0 560 C175 500 242 632 410 560 C595 480 700 626 880 532 C1018 460 1104 490 1200 432 L1200 675 L0 675 Z" fill="#0b1821" opacity=".74"/>
+  <g opacity=".28">
+    <path d="M100 130 H1080" class="thinWire"/>
+    <path d="M100 545 H1080" class="thinWire"/>
+    <path d="M180 70 V602" class="thinWire"/>
+    <path d="M600 70 V602" class="thinWire"/>
+    <path d="M1020 70 V602" class="thinWire"/>
+  </g>
+
+  <text x="60" y="72" class="label title">QATQ Exact Tensor Transport</text>
+  <text x="62" y="108" class="label small muted">Exact exported-tensor compression with quaternion-backed strategy search.</text>
+  <text x="62" y="136" class="label tiny muted">Typed ingest, byte-plane entropy coding, QATC chunking, and checksum-verified restore.</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="56" y="164" width="214" height="276" rx="18" class="panel"/>
+    <text x="82" y="210" class="label medium">Runtime State</text>
+    <text x="82" y="242" class="label tiny muted">exported KV / tensor bytes</text>
+    <g transform="translate(82 274)">
+      <rect width="142" height="34" rx="17" class="chip"/>
+      <text x="22" y="24" class="label tiny">f32</text>
+      <rect y="48" width="142" height="34" rx="17" class="chip"/>
+      <text x="22" y="72" class="label tiny">f16</text>
+      <rect y="96" width="142" height="34" rx="17" class="chip"/>
+      <text x="22" y="120" class="label tiny">bf16</text>
+    </g>
+    <g transform="translate(196 280)">
+      <rect x="0" y="0" width="16" height="134" rx="8" fill="#b2b8b9" opacity=".72"/>
+      <rect x="25" y="30" width="16" height="104" rx="8" fill="#547182"/>
+      <rect x="50" y="66" width="16" height="68" rx="8" fill="#c78a55"/>
+    </g>
+  </g>
+
+  <path d="M272 302 C320 302 326 302 365 302" class="wire"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="366" y="144" width="468" height="334" rx="22" class="panel"/>
+    <text x="396" y="192" class="label medium">QATQ Encoder</text>
+    <text x="396" y="224" class="label tiny muted">selects the smallest bit-identical candidate</text>
+
+    <g transform="translate(402 258)">
+      <rect x="0" y="0" width="176" height="84" rx="18" fill="url(#steel)" stroke="#7c98a5" stroke-width="1.5"/>
+      <text x="22" y="34" class="label small">Typed Ingest</text>
+      <text x="22" y="62" class="label tiny muted">native bytes stay native</text>
+    </g>
+
+    <g transform="translate(624 236)" filter="url(#glow)">
+      <circle cx="74" cy="74" r="64" fill="none" stroke="url(#copper)" stroke-width="7"/>
+      <circle cx="74" cy="74" r="22" fill="#0b1821" stroke="#b2b8b9" stroke-width="3"/>
+      <circle cx="74" cy="10" r="10" fill="#c78a55"/>
+      <circle cx="138" cy="74" r="10" fill="#b2b8b9"/>
+      <circle cx="74" cy="138" r="10" fill="#547182"/>
+      <circle cx="10" cy="74" r="10" fill="#c78a55"/>
+      <path d="M31 31 L117 117 M117 31 L31 117" stroke="#b2b8b9" stroke-width="3" opacity=".7"/>
+    </g>
+
+    <g transform="translate(402 372)">
+      <rect width="176" height="58" rx="16" class="chip"/>
+      <text x="22" y="36" class="label tiny">Byte-plane zstd/RLE</text>
+    </g>
+    <g transform="translate(618 392)">
+      <rect width="190" height="58" rx="16" class="chip"/>
+      <text x="22" y="36" class="label tiny">Raw pass-through guard</text>
+    </g>
+    <text x="612" y="220" class="label small">Quaternion chain</text>
+  </g>
+
+  <path d="M834 302 C878 302 892 302 930 302" class="wire"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="930" y="162" width="214" height="278" rx="18" class="panel"/>
+    <text x="960" y="210" class="label medium">QATC v2</text>
+    <text x="960" y="242" class="label tiny muted">sequential chunk container</text>
+    <g transform="translate(960 276)">
+      <rect width="154" height="38" rx="10" fill="#162f40" stroke="#547182" stroke-width="1.5"/>
+      <rect y="48" width="154" height="38" rx="10" fill="#1b3443" stroke="#547182" stroke-width="1.5"/>
+      <rect y="96" width="154" height="38" rx="10" fill="#213a45" stroke="#547182" stroke-width="1.5"/>
+      <text x="18" y="25" class="label tiny">chunk 0</text>
+      <text x="18" y="73" class="label tiny">chunk 1</text>
+      <text x="18" y="121" class="label tiny">chunk n</text>
+    </g>
+    <path d="M1090 290 l24 24 l-24 24 l-24 -24 z" fill="url(#copper)" opacity=".95"/>
+    <text x="968" y="424" class="label tiny muted">aggregate checksum</text>
+  </g>
+
+  <path d="M1038 441 C1038 510 850 538 704 538 C492 538 316 512 168 474" class="wire"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="380" y="510" width="438" height="96" rx="20" fill="rgba(9, 20, 27, .92)" stroke="#c78a55" stroke-width="2"/>
+    <text x="414" y="550" class="label medium">Decode + Verify</text>
+    <text x="414" y="580" class="label tiny muted">checksums, limits, exact bit restoration</text>
+    <g transform="translate(702 538)">
+      <path d="M0 22 l18 18 l44 -52" fill="none" stroke="#c78a55" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <g transform="translate(72 520)">
+    <rect width="232" height="86" rx="18" fill="rgba(6, 14, 19, .82)" stroke="#547182" stroke-width="2"/>
+    <text x="26" y="38" class="label small">Bit-identical tensors</text>
+    <text x="26" y="66" class="label tiny muted">same bytes back out</text>
+  </g>
+
+  <g opacity=".95">
+    <text x="60" y="628" class="label tiny muted">Primary claim: exact storage and transfer compression for exported tensors.</text>
+    <text x="60" y="654" class="label tiny muted">Live VRAM reduction remains an experimental runtime-adapter goal.</text>
+  </g>
+</svg>

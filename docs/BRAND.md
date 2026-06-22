@@ -8,9 +8,11 @@ The recommended logo direction is a technical mark, not a mascot:
 - dark neutral background with teal and amber accents.
 
 The primary logo is `assets/qatqLogoFinal.png`. It should be used for the
-README, release notes, social cards, and project profiles. The older
-`assets/qatq-logo.svg` remains a simple fallback mark for contexts that require
-an SVG.
+README, release notes, social cards, and project profiles.
+
+The architecture diagram is `assets/qatq-architecture.svg`. It uses the same
+blue-steel, silver, and amber/copper palette as the final logo and should be
+used when explaining the exact tensor transport flow.
 
 Recommended GitHub/social description:
 
