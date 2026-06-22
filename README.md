@@ -65,6 +65,8 @@ The current source-release API/CLI freeze record is in
 [`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md). Production-readiness status
 and remaining gates are tracked in
 [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
+Runtime-agnostic external integration evidence is summarized in
+[`docs/EXTERNAL_RUNTIME_EVIDENCE.md`](docs/EXTERNAL_RUNTIME_EVIDENCE.md).
 
 ## Attribution
 
@@ -410,6 +412,13 @@ evidence can be kept outside this repository as optional validation provenance.
 New runtime integrations should follow
 [docs/RUNTIME_ADAPTERS.md](docs/RUNTIME_ADAPTERS.md) and provide ordinary
 fixture manifests rather than runtime-specific project coupling.
+
+The strongest current external evidence is a 2026-06-22 Rust live-migration run
+that built standalone `qatq v0.1.0` from this repository on the target host,
+preserved exact continuation behavior through 128 tokens, and transferred
+14,004,990 QATQ bytes for the same streamed block artifacts that measured
+50,331,648 raw bytes, 20,405,381 zstd bytes, and 28,739,217 lz4 bytes. See
+[`docs/EXTERNAL_RUNTIME_EVIDENCE.md`](docs/EXTERNAL_RUNTIME_EVIDENCE.md).
 
 Run the local Ollama model-output task harness when Ollama is available. This
 captures model-produced task tensors under ignored `captures/`, ingests them

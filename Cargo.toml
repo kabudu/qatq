@@ -24,6 +24,7 @@ include = [
     "docs/CREDITS.md",
     "docs/FIXTURES.md",
     "docs/API_CLI_FREEZE.md",
+    "docs/EXTERNAL_RUNTIME_EVIDENCE.md",
     "docs/PRODUCTION_READINESS.md",
     "docs/PUBLIC_*.md",
     "docs/PUBLIC_COMPARATIVE_*.md",

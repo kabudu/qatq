@@ -102,6 +102,9 @@ not just access to exported tensors.
       internal transformer KV tensors.
 - [x] Add an owned, version-pinned llama.cpp adapter patch and direct KV matrix
       runner.
+- [x] Record one scoped external Rust live-migration proof where standalone QATQ
+      preserved exact continuation behavior and beat raw, zstd, and lz4
+      transfer-size baselines.
 - [x] Freeze source-release API/CLI names before crates.io publish.
 - [ ] Add coverage and supply-chain checks.
 - [ ] Publish to crates.io when the API is stable.
