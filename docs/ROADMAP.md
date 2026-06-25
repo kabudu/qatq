@@ -317,9 +317,10 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       burn-in failures. q2 with 64-token pages passed focused Qwen2.5 3B but
       failed the full-family repeat, and 128-token pages with q4 also failed
       the corrected full-family p05/p50 rerun. The current checked-in
-      candidate is 256-token pages with q4 after a focused Qwen2.5 3B pass,
-      but it still must pass the same full-family burn-in gates without
-      relaxing memory or throughput limits.
+      candidate is 256-token pages with q4. It passed the same full-family
+      burn-in gates at
+      `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`
+      without relaxing memory or throughput limits.
 - [x] Add a steady-state RSS tail-growth gate to the accepted no-trace policy
       soak. The server probe can now enforce `--max-rss-tail-growth-kib`
       over a configurable `--rss-tail-window`, and

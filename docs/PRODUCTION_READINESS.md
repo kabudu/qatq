@@ -108,9 +108,16 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > `/private/tmp/qatq-live-vram-server-qwen3-p256-q4-focused-p05-20260626`,
 > which passed with p05/p50 throughput ratios `1.595x`/`1.075x`, backend K/V
 > `288->280 MiB`, projected device memory `2423->2415 MiB`, and zero RSS tail
-> gate growth. The checked-in configs now carry that candidate. Full-family
-> accepted-policy repeatability is still open until the family burn-in passes.
-> Overnight burn-in and direct peak-VRAM hardware-counter proof remain open.
+> gate growth. The checked-in configs now carry that candidate. The full-family
+> burn-in at
+> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`
+> passed 2/2 repeats, twelve real server cases total, with empty comparison and
+> aggregate gate failures. Backend K/V and projected-device jitter ratios were
+> `1.0` for every native and QATQ case. Qwen2.5 3B QATQ/native p05/p50
+> throughput ratios were `0.996x`/`0.982x` in repeat one and
+> `0.980x`/`0.981x` in repeat two, while backend K/V stayed `288->280 MiB`.
+> This re-closes bounded accepted-policy repeatability. Overnight burn-in and
+> direct peak-VRAM hardware-counter proof remain open.
 
 ## Implemented Evidence
 

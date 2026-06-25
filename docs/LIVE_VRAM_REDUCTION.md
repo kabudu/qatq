@@ -736,9 +736,14 @@ pages with q4:
 passed with p05/p50/p95 throughput ratios 1.595x/1.075x/0.980x, p95
 iteration/follow-up ratios 0.773x/0.628x, backend K/V 288->280 MiB, projected
 device memory 2423->2415 MiB, and zero RSS tail gate growth. The checked-in
-family configs now carry that candidate, but it is not production-accepted
-until the full-family burn-in passes. The superseded p128/q4 full-family rerun
-at
+family configs now carry that candidate. The full-family two-repeat burn-in at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`
+then passed 2/2 repeats, 12 real server cases total, with empty comparison and
+aggregate gate failures. Backend K/V and projected-device jitter ratios were
+1.0 for every native and QATQ case. Qwen2.5 3B QATQ/native p05/p50 throughput
+ratios were 0.996x/0.982x in repeat one and 0.980x/0.981x in repeat two, with
+backend K/V 288->280 MiB and projected device memory 2423->2415 MiB. The
+superseded p128/q4 full-family rerun at
 `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p128q4-p05-tailgate-20260626`
 failed because Qwen2.5 3B missed p05/p50 at 0.832x/0.775x.
 The same accepted soak now also runs with a steady-state RSS tail-growth gate:
@@ -3113,10 +3118,12 @@ conditions: Qwen2.5 3B q8 missed the p50 throughput gate and Phi native failed
 the steady RSS tail gate. Follow-up Qwen2.5 3B probes showed that 64-token q2
 could pass in isolation but failed the full-family repeat, while 128-token q4
 also failed the corrected full-family p05/p50 run. The checked-in family config
-now uses 256-token pages with q4 for Qwen2.5 3B after a focused pass at
-`/private/tmp/qatq-live-vram-server-qwen3-p256-q4-focused-p05-20260626`, but
-the accepted-policy repeatability gap remains open until that candidate
-survives the full-family burn-in.
+now uses 256-token pages with q4 for Qwen2.5 3B. The full-family burn-in at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`
+passed two repeats across Qwen2.5 1.5B, Qwen2.5 3B, and Phi 3.5 mini with
+empty comparison and aggregate gate failures. This re-closes the bounded
+accepted-policy repeatability gap, but it does not close overnight burn-in,
+direct peak-VRAM hardware counters, or non-llama.cpp runtime coverage.
 
 The compact backend-op route keeps hot pages in a compact persistent GPU pool
 and leaves cold/offloaded pages CPU-backed. When an attention window mixes
