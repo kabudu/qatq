@@ -315,11 +315,11 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       peak-VRAM proof.
 - [ ] Restore full-family accepted-policy repeatability after the slower-host
       burn-in failures. q2 with 64-token pages passed focused Qwen2.5 3B but
-      failed the full-family repeat, and the current best focused candidate,
-      128-token pages with q4, also failed the first full-family rerun on
-      Qwen2.5 3B p95 throughput plus Phi QATQ RSS tail growth. The next fix
-      must target server scheduling/tail memory behaviour and pass the same
-      full-family burn-in gates without relaxing memory or throughput limits.
+      failed the full-family repeat, and 128-token pages with q4 also failed
+      the corrected full-family p05/p50 rerun. The current checked-in
+      candidate is 256-token pages with q4 after a focused Qwen2.5 3B pass,
+      but it still must pass the same full-family burn-in gates without
+      relaxing memory or throughput limits.
 - [x] Add a steady-state RSS tail-growth gate to the accepted no-trace policy
       soak. The server probe can now enforce `--max-rss-tail-growth-kib`
       over a configurable `--rss-tail-window`, and

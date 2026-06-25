@@ -729,16 +729,18 @@ isolation at `/private/tmp/qatq-live-vram-server-qwen3-q2-policy-soak-20260625`
 but failed the full-family q2 burn-in at
 `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-q2-taildelta-security-gated-20260625`
 on the second repeat with Qwen2.5 3B p50/p95 throughput ratios 0.630x/0.678x.
-The strongest focused candidate is now 128-token pages with q4:
-`/private/tmp/qatq-live-vram-server-qwen3-p128-q4-focused-20260625` passed with
-p50/p95 throughput ratios 0.878x/0.988x, p95 iteration/follow-up ratios
-1.039x/1.100x, backend K/V 288->280 MiB, projected device memory
-2423->2415 MiB, and RSS tail delta -80 KiB. The checked-in family configs now
-carry that candidate, but it is not production-accepted: the full-family
-p128/q4 burn-in at
-`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p128q4-taildelta-security-gated-20260625`
-failed on the first repeat because Qwen2.5 3B still missed p95 at 0.798x and
-Phi QATQ exceeded the steady RSS tail gate at 114,560 KiB versus 8,192 KiB.
+128-token pages with q4 passed in isolation but failed the corrected
+full-family p05/p50 rerun. The strongest focused candidate is now 256-token
+pages with q4:
+`/private/tmp/qatq-live-vram-server-qwen3-p256-q4-focused-p05-20260626`, which
+passed with p05/p50/p95 throughput ratios 1.595x/1.075x/0.980x, p95
+iteration/follow-up ratios 0.773x/0.628x, backend K/V 288->280 MiB, projected
+device memory 2423->2415 MiB, and zero RSS tail gate growth. The checked-in
+family configs now carry that candidate, but it is not production-accepted
+until the full-family burn-in passes. The superseded p128/q4 full-family rerun
+at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p128q4-p05-tailgate-20260626`
+failed because Qwen2.5 3B missed p05/p50 at 0.832x/0.775x.
 The same accepted soak now also runs with a steady-state RSS tail-growth gate:
 `adapters/llama-cpp/live-vram-server-family-policy-soak-notrace.local.example.json`
 sets `max_rss_tail_growth_kib: 8192` over the last four measured iterations.
@@ -3110,11 +3112,11 @@ The first three-repeat full-family attempt then failed closed under slower host
 conditions: Qwen2.5 3B q8 missed the p50 throughput gate and Phi native failed
 the steady RSS tail gate. Follow-up Qwen2.5 3B probes showed that 64-token q2
 could pass in isolation but failed the full-family repeat, while 128-token q4
-is the current strongest focused candidate. The checked-in family config now
-uses 128-token pages with q4 for Qwen2.5 3B, but the first full-family rerun
-of that policy still failed on Qwen2.5 3B p95 throughput and Phi QATQ RSS tail
-growth. The accepted-policy repeatability gap is therefore open again until a
-server-scheduling or Phi tail-memory fix survives the full-family burn-in.
+also failed the corrected full-family p05/p50 run. The checked-in family config
+now uses 256-token pages with q4 for Qwen2.5 3B after a focused pass at
+`/private/tmp/qatq-live-vram-server-qwen3-p256-q4-focused-p05-20260626`, but
+the accepted-policy repeatability gap remains open until that candidate
+survives the full-family burn-in.
 
 The compact backend-op route keeps hot pages in a compact persistent GPU pool
 and leaves cold/offloaded pages CPU-backed. When an attention window mixes

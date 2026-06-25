@@ -76,7 +76,7 @@
       "comparison_group": "qwen25-3b-family-policy",
       "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
       "model_id": "qwen2.5-3b-qatq-l1-family-policy-notrace",
-      "page_tokens": 128,
+      "page_tokens": 256,
       "max_queued_pages": 4,
       "max_backend_accelerator_self_mib": 2600,
       "max_backend_accelerator_context_mib": 320,

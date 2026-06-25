@@ -2305,7 +2305,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         assert "--disable-qatq-traces" in command
         assert command[command.index("--kv-gpu-layers") + 1] == "1"
     qwen3b_qatq = next(command for command in qatq_commands if "qwen2.5-3b-qatq-l1-family-policy-notrace" in command)
-    assert qwen3b_qatq[qwen3b_qatq.index("--page-tokens") + 1] == "128"
+    assert qwen3b_qatq[qwen3b_qatq.index("--page-tokens") + 1] == "256"
     assert qwen3b_qatq[qwen3b_qatq.index("--max-queued-pages") + 1] == "4"
     phi_qatq = next(command for command in qatq_commands if "phi3.5-mini-qatq-l1-p128-family-policy-notrace" in command)
     assert phi_qatq[phi_qatq.index("--page-tokens") + 1] == "128"
@@ -2381,7 +2381,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         assert "--disable-qatq-traces" in command
         assert command[command.index("--kv-gpu-layers") + 1] == "1"
     qwen3b_qatq = next(command for command in qatq_commands if "qwen2.5-3b-qatq-l1-family-policy-soak-notrace" in command)
-    assert qwen3b_qatq[qwen3b_qatq.index("--page-tokens") + 1] == "128"
+    assert qwen3b_qatq[qwen3b_qatq.index("--page-tokens") + 1] == "256"
     assert qwen3b_qatq[qwen3b_qatq.index("--max-queued-pages") + 1] == "4"
     phi_qatq = next(command for command in qatq_commands if "phi3.5-mini-qatq-l1-p128-family-policy-soak-notrace" in command)
     assert phi_qatq[phi_qatq.index("--page-tokens") + 1] == "128"

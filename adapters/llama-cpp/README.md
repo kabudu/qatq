@@ -1002,15 +1002,16 @@ with 64-token pages fixed p50 but still missed p95, and q2 with 64-token pages
 passed only in isolation. The full-family q2 burn-in at
 `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-q2-taildelta-security-gated-20260625`
 failed on the second repeat with Qwen2.5 3B p50/p95 throughput ratios
-0.630x/0.678x. The strongest focused candidate is now 128-token pages with q4:
-`/private/tmp/qatq-live-vram-server-qwen3-p128-q4-focused-20260625` passed with
-p50/p95 throughput ratios 0.878x/0.988x, backend K/V 288->280 MiB, projected
-device memory 2423->2415 MiB, and RSS tail delta -80 KiB. The checked-in
-family configs carry that candidate, but the first full-family p128/q4 burn-in
-at
-`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p128q4-taildelta-security-gated-20260625`
-still failed: Qwen2.5 3B p95 throughput was 0.798x against the 0.85x gate, and
-Phi QATQ steady RSS tail growth was 114,560 KiB against the 8,192 KiB gate.
+0.630x/0.678x. 128-token pages with q4 then passed in isolation but failed the
+corrected full-family p05/p50 rerun. The strongest focused candidate is now
+256-token pages with q4:
+`/private/tmp/qatq-live-vram-server-qwen3-p256-q4-focused-p05-20260626`, which
+passed with p05/p50/p95 throughput ratios 1.595x/1.075x/0.980x, p95
+iteration/follow-up ratios 0.773x/0.628x, backend K/V 288->280 MiB, projected
+device memory 2423->2415 MiB, and zero RSS tail gate growth. The checked-in
+family configs carry that candidate. The superseded p128/q4 rerun at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p128q4-p05-tailgate-20260626`
+still failed because Qwen2.5 3B missed p05/p50 at 0.832x/0.775x.
 
 The current accepted soak also fails closed unless QATQ reduces backend K/V
 memory versus native (`max_backend_accelerator_context_ratio: 0.99`) and does

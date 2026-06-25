@@ -102,15 +102,14 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > Focused queue-depth probes found q4 with 64-token pages still missed p95,
 > while q2 with 64-token pages passed in isolation. The full-family q2 burn-in
 > then failed on the second repeat with Qwen2.5 3B p50/p95 throughput ratios
-> `0.630x`/`0.678x`. A 128-token q4 candidate passed the focused Qwen2.5 3B
-> gate at
-> `/private/tmp/qatq-live-vram-server-qwen3-p128-q4-focused-20260625` with
-> p50/p95 throughput ratios `0.878x`/`0.988x`, backend K/V `288->280 MiB`, and
-> projected device memory `2423->2415 MiB`. The checked-in configs now carry
-> that strongest focused candidate, but the first full-family p128/q4 burn-in
-> failed on Qwen2.5 3B p95 throughput (`0.798x`) and Phi QATQ RSS tail growth
-> (`114,560 KiB > 8,192 KiB`). Full-family accepted-policy repeatability is
-> still open.
+> `0.630x`/`0.678x`. A 128-token q4 candidate passed in isolation but failed
+> the corrected full-family p05/p50 rerun at `0.832x`/`0.775x`. The current
+> strongest focused candidate is 256-token q4 at
+> `/private/tmp/qatq-live-vram-server-qwen3-p256-q4-focused-p05-20260626`,
+> which passed with p05/p50 throughput ratios `1.595x`/`1.075x`, backend K/V
+> `288->280 MiB`, projected device memory `2423->2415 MiB`, and zero RSS tail
+> gate growth. The checked-in configs now carry that candidate. Full-family
+> accepted-policy repeatability is still open until the family burn-in passes.
 > Overnight burn-in and direct peak-VRAM hardware-counter proof remain open.
 
 ## Implemented Evidence
