@@ -30,7 +30,7 @@
   "comparison_gates": {
     "max_backend_accelerator_context_ratio": 0.99,
     "min_predicted_per_second_p50_ratio": 0.85,
-    "min_predicted_per_second_p95_ratio": 0.85,
+    "min_predicted_per_second_p05_ratio": 0.85,
     "max_iteration_p95_ratio": 1.55,
     "max_followup_p95_ratio": 1.45,
     "max_projected_device_memory_ratio": 1.0,

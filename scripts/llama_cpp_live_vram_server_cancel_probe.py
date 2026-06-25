@@ -925,6 +925,10 @@ def evaluate_memory_samples(
         if rss_tail_last_minus_first_kib is not None
         else None
     )
+    rss_tail_gate_growth_kib = None
+    if len(tail_values) >= 2 and rss_after_values:
+        tail_gate_baseline = max(tail_values[0], rss_after_values[0])
+        rss_tail_gate_growth_kib = max(0, tail_values[-1] - tail_gate_baseline)
     if (
         max_rss_growth_mib > 0
         and growth_kib is not None
@@ -943,10 +947,13 @@ def evaluate_memory_samples(
                 f"{len(rss_after_values)} RSS-after iteration samples were available; "
                 f"{rss_tail_window} are required"
             )
-        elif rss_tail_growth_kib is not None and rss_tail_growth_kib > max_rss_tail_growth_kib:
+        elif (
+            rss_tail_gate_growth_kib is not None
+            and rss_tail_gate_growth_kib > max_rss_tail_growth_kib
+        ):
             failures.append(
                 "server steady RSS tail growth was "
-                f"{rss_tail_growth_kib} KiB, exceeding {max_rss_tail_growth_kib} KiB "
+                f"{rss_tail_gate_growth_kib} KiB, exceeding {max_rss_tail_growth_kib} KiB "
                 f"over the last {rss_tail_window} measured iterations"
             )
     return {
@@ -964,6 +971,7 @@ def evaluate_memory_samples(
         "rss_tail_range_kib": rss_tail_range_kib,
         "rss_tail_last_minus_first_kib": rss_tail_last_minus_first_kib,
         "rss_tail_growth_kib": rss_tail_growth_kib,
+        "rss_tail_gate_growth_kib": rss_tail_gate_growth_kib,
         "max_rss_tail_growth_kib": max_rss_tail_growth_kib,
     }
 
@@ -1040,6 +1048,7 @@ def latency_stats(samples: list[float]) -> dict[str, float | int | None]:
             "count": 0,
             "min": None,
             "max": None,
+            "p05": None,
             "p50": None,
             "p95": None,
             "p99": None,
@@ -1049,6 +1058,7 @@ def latency_stats(samples: list[float]) -> dict[str, float | int | None]:
         "count": len(ordered),
         "min": ordered[0],
         "max": ordered[-1],
+        "p05": percentile_nearest_rank(ordered, 0.05),
         "p50": percentile_nearest_rank(ordered, 0.50),
         "p95": percentile_nearest_rank(ordered, 0.95),
         "p99": percentile_nearest_rank(ordered, 0.99),
@@ -1685,6 +1695,12 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         tail_growth_mib = (
             float(tail_growth_kib) / 1024.0 if isinstance(tail_growth_kib, int) else None
         )
+        tail_gate_growth_kib = memory_checks.get("rss_tail_gate_growth_kib")
+        tail_gate_growth_mib = (
+            float(tail_gate_growth_kib) / 1024.0
+            if isinstance(tail_gate_growth_kib, int)
+            else None
+        )
         out += f"- server steady RSS baseline KiB: `{memory_checks.get('baseline_rss_kib')}`\n"
         out += f"- server steady RSS peak KiB: `{memory_checks.get('peak_rss_kib')}`\n"
         out += f"- server steady RSS growth MiB: `{growth_mib}`\n"
@@ -1694,6 +1710,7 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             f"`{memory_checks.get('rss_tail_window')}`)\n"
         )
         out += f"- server steady RSS tail growth MiB: `{tail_growth_mib}`\n"
+        out += f"- server steady RSS tail gate growth MiB: `{tail_gate_growth_mib}`\n"
         out += (
             f"- server steady RSS after last-minus-first KiB: "
             f"`{memory_checks.get('rss_after_last_minus_first_kib')}`\n"

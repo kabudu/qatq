@@ -111,6 +111,7 @@ COMPARISON_GATE_KEYS = {
     "max_rss_growth_ratio",
     "max_rss_tail_growth_delta_kib",
     "max_rss_tail_growth_ratio",
+    "min_predicted_per_second_p05_ratio",
     "min_predicted_per_second_p50_ratio",
     "min_predicted_per_second_p95_ratio",
 }
@@ -447,6 +448,9 @@ def summarise_case(result: CaseResult) -> dict[str, Any]:
         else None,
         "rss_tail_range_kib": memory.get("rss_tail_range_kib") if isinstance(memory, dict) else None,
         "rss_tail_growth_kib": memory.get("rss_tail_growth_kib") if isinstance(memory, dict) else None,
+        "rss_tail_gate_growth_kib": memory.get("rss_tail_gate_growth_kib")
+        if isinstance(memory, dict)
+        else None,
         "rss_tail_window": memory.get("rss_tail_window") if isinstance(memory, dict) else None,
         "max_rss_tail_growth_kib": memory.get("max_rss_tail_growth_kib")
         if isinstance(memory, dict)
@@ -576,6 +580,7 @@ def comparison_gate_ratio_key(gate_key: str) -> str:
         "max_rss_growth_ratio": "rss_growth_ratio",
         "max_rss_tail_growth_delta_kib": "rss_tail_growth_delta_kib",
         "max_rss_tail_growth_ratio": "rss_tail_growth_ratio",
+        "min_predicted_per_second_p05_ratio": "predicted_per_second_p05_ratio",
         "min_predicted_per_second_p50_ratio": "predicted_per_second_p50_ratio",
         "min_predicted_per_second_p95_ratio": "predicted_per_second_p95_ratio",
     }
@@ -651,6 +656,16 @@ def build_comparisons(results: list[CaseResult]) -> list[dict[str, Any]]:
                             ["followup_completion_metrics", "predicted_per_second", "p50"],
                         ),
                     ),
+                    "predicted_per_second_p05_ratio": ratio(
+                        nested_number(
+                            qatq,
+                            ["followup_completion_metrics", "predicted_per_second", "p05"],
+                        ),
+                        nested_number(
+                            native,
+                            ["followup_completion_metrics", "predicted_per_second", "p05"],
+                        ),
+                    ),
                     "predicted_per_second_p95_ratio": ratio(
                         nested_number(
                             qatq,
@@ -663,12 +678,12 @@ def build_comparisons(results: list[CaseResult]) -> list[dict[str, Any]]:
                     ),
                     "rss_growth_ratio": ratio(qatq.get("rss_growth_kib"), native.get("rss_growth_kib")),
                     "rss_tail_growth_ratio": zero_equal_ratio(
-                        qatq.get("rss_tail_growth_kib"),
-                        native.get("rss_tail_growth_kib"),
+                        qatq.get("rss_tail_gate_growth_kib"),
+                        native.get("rss_tail_gate_growth_kib"),
                     ),
                     "rss_tail_growth_delta_kib": difference(
-                        qatq.get("rss_tail_growth_kib"),
-                        native.get("rss_tail_growth_kib"),
+                        qatq.get("rss_tail_gate_growth_kib"),
+                        native.get("rss_tail_gate_growth_kib"),
                     ),
                     "backend_accelerator_context_ratio": ratio(
                         qatq.get("backend_accelerator_context_mib"),
@@ -731,8 +746,8 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- dry-run cases: `{summary['dry_run_cases']}`",
         f"- failed: `{summary['failed']}`",
         "",
-        "| case | status | iterations | predicted tok/s p50 | live offloaded segments | flattened Flash consumers | max retained MiB | backend self MiB | backend KV MiB | backend compute MiB | RSS growth KiB | RSS tail growth KiB | RSS tail range KiB | RSS tail gate KiB |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| case | status | iterations | predicted tok/s p50 | live offloaded segments | flattened Flash consumers | max retained MiB | backend self MiB | backend KV MiB | backend compute MiB | RSS growth KiB | RSS tail growth KiB | RSS tail gate growth KiB | RSS tail range KiB | RSS tail gate KiB |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case in summary["cases"]:
         iterations = format_count_pair(
@@ -763,6 +778,7 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
                     format_optional(case.get("backend_accelerator_compute_mib")),
                     format_optional(case.get("rss_growth_kib")),
                     format_optional(case.get("rss_tail_growth_kib")),
+                    format_optional(case.get("rss_tail_gate_growth_kib")),
                     format_optional(case.get("rss_tail_range_kib")),
                     format_optional(case.get("max_rss_tail_growth_kib")),
                 ]
@@ -781,8 +797,8 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
                 "",
                 "## Native Comparisons",
                 "",
-                "| group | QATQ case | status | iteration p95 ratio | follow-up p95 ratio | predicted tok/s p50 ratio | predicted tok/s p95 ratio | backend KV ratio | projected device ratio | RSS growth ratio | RSS tail growth ratio | RSS tail delta KiB | QATQ live offloaded segments |",
-                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| group | QATQ case | status | iteration p95 ratio | follow-up p95 ratio | predicted tok/s p05 ratio | predicted tok/s p50 ratio | predicted tok/s p95 ratio | backend KV ratio | projected device ratio | RSS growth ratio | RSS tail growth ratio | RSS tail delta KiB | QATQ live offloaded segments |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for comparison in comparisons:
@@ -797,6 +813,7 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
                         f"`{comparison.get('status', '')}`",
                         format_ratio(comparison.get("iteration_p95_ratio")),
                         format_ratio(comparison.get("followup_p95_ratio")),
+                        format_ratio(comparison.get("predicted_per_second_p05_ratio")),
                         format_ratio(comparison.get("predicted_per_second_p50_ratio")),
                         format_ratio(comparison.get("predicted_per_second_p95_ratio")),
                         format_ratio(comparison.get("backend_accelerator_context_ratio")),

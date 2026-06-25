@@ -1253,6 +1253,7 @@ summary = module.aggregate_followup_completion_metrics([
     {"followup_metrics": {"ignored": "not numeric"}},
 ])
 assert summary["predicted_per_second"]["count"] == 2
+assert summary["predicted_per_second"]["p05"] == 80.0
 assert summary["predicted_per_second"]["p50"] == 80.0
 assert summary["predicted_per_second"]["p95"] == 100.0
 assert summary["predicted_tokens"]["count"] == 2
@@ -1759,9 +1760,10 @@ native = module.CaseResult(
         "memory_checks": {
             "growth_kib": 100,
             "rss_tail_growth_kib": 25,
+            "rss_tail_gate_growth_kib": 25,
         },
         "followup_completion_metrics": {
-            "predicted_per_second": {"p50": 80.0, "p95": 90.0},
+            "predicted_per_second": {"p05": 70.0, "p50": 80.0, "p95": 90.0},
         },
         "checks": {"page_segment_counts": {}},
         "backend_memory": {
@@ -1802,10 +1804,11 @@ qatq = module.CaseResult(
         "memory_checks": {
             "growth_kib": 250,
             "rss_tail_growth_kib": 32,
+            "rss_tail_gate_growth_kib": 32,
             "rss_tail_range_kib": 512,
         },
         "followup_completion_metrics": {
-            "predicted_per_second": {"p50": 60.0, "p95": 72.0},
+            "predicted_per_second": {"p05": 63.0, "p50": 60.0, "p95": 72.0},
         },
         "checks": {
             "page_segment_counts": {
@@ -1848,12 +1851,14 @@ assert case_summary["backend_accelerator_context_mib"] == 256
 assert case_summary["backend_accelerator_compute_mib"] == 56
 assert case_summary["projected_device_memory_mib"] == 512
 assert case_summary["rss_tail_growth_kib"] == 32
+assert case_summary["rss_tail_gate_growth_kib"] == 32
 assert case_summary["rss_tail_range_kib"] == 512
 comparisons = module.build_comparisons([native, qatq])
 assert comparisons[0]["comparison_group"] == "qwen"
 assert comparisons[0]["status"] == "pass"
 assert abs(comparisons[0]["iteration_p95_ratio"] - 1.3) < 1e-9
 assert abs(comparisons[0]["followup_p95_ratio"] - 1.5) < 1e-9
+assert comparisons[0]["predicted_per_second_p05_ratio"] == 0.9
 assert comparisons[0]["predicted_per_second_p50_ratio"] == 0.75
 assert comparisons[0]["predicted_per_second_p95_ratio"] == 0.8
 assert comparisons[0]["rss_growth_ratio"] == 2.5
@@ -1866,7 +1871,7 @@ passing_gates = module.evaluate_comparison_gates(
     comparisons,
     {
         "min_predicted_per_second_p50_ratio": 0.70,
-        "min_predicted_per_second_p95_ratio": 0.75,
+        "min_predicted_per_second_p05_ratio": 0.85,
         "max_iteration_p95_ratio": 1.50,
         "max_followup_p95_ratio": 1.60,
         "max_rss_growth_ratio": 3.0,
@@ -1882,7 +1887,7 @@ failing_gates = "\n".join(
         comparisons,
         {
             "min_predicted_per_second_p50_ratio": 0.80,
-            "min_predicted_per_second_p95_ratio": 0.85,
+            "min_predicted_per_second_p05_ratio": 0.95,
             "max_iteration_p95_ratio": 1.20,
             "max_followup_p95_ratio": 1.40,
             "max_rss_growth_ratio": 2.0,
@@ -1894,7 +1899,7 @@ failing_gates = "\n".join(
     )
 )
 assert "min_predicted_per_second_p50_ratio violated: 0.75 < 0.8" in failing_gates
-assert "min_predicted_per_second_p95_ratio violated: 0.8 < 0.85" in failing_gates
+assert "min_predicted_per_second_p05_ratio violated: 0.9 < 0.95" in failing_gates
 assert "max_iteration_p95_ratio violated: 1.3 > 1.2" in failing_gates
 assert "max_followup_p95_ratio violated: 1.5 > 1.4" in failing_gates
 assert "max_rss_growth_ratio violated: 2.5 > 2.0" in failing_gates
@@ -2239,7 +2244,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "max_projected_device_memory_ratio": 1.0,
         "max_rss_tail_growth_delta_kib": 2048,
         "min_predicted_per_second_p50_ratio": 0.9,
-        "min_predicted_per_second_p95_ratio": 0.9,
+        "min_predicted_per_second_p05_ratio": 0.9,
     }
     assert summary["comparison_gate_failures"] == []
 "#,
@@ -2314,7 +2319,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "max_projected_device_memory_ratio": 1.0,
         "max_rss_tail_growth_delta_kib": 2048,
         "min_predicted_per_second_p50_ratio": 0.85,
-        "min_predicted_per_second_p95_ratio": 0.85,
+        "min_predicted_per_second_p05_ratio": 0.85,
     }
     assert summary["comparison_gate_failures"] == []
 "#,
@@ -2390,7 +2395,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "max_projected_device_memory_ratio": 1.0,
         "max_rss_tail_growth_delta_kib": 2048,
         "min_predicted_per_second_p50_ratio": 0.85,
-        "min_predicted_per_second_p95_ratio": 0.85,
+        "min_predicted_per_second_p05_ratio": 0.85,
     }
     assert summary["comparison_gate_failures"] == []
 "#,
@@ -2460,7 +2465,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "max_projected_device_memory_ratio": 1.0,
         "max_rss_tail_growth_delta_kib": 2048,
         "min_predicted_per_second_p50_ratio": 0.85,
-        "min_predicted_per_second_p95_ratio": 0.85,
+        "min_predicted_per_second_p05_ratio": 0.85,
     }
     assert summary["comparison_gate_failures"] == []
 "#,
@@ -2790,6 +2795,7 @@ assert passing["rss_after_last_minus_first_kib"] == 80
 assert passing["rss_tail_range_kib"] == 30
 assert passing["rss_tail_last_minus_first_kib"] == 30
 assert passing["rss_tail_growth_kib"] == 30
+assert passing["rss_tail_gate_growth_kib"] == 30
 assert passing["rss_tail_window_used"] == 4
 assert passing["failures"] == [], passing
 
@@ -2809,6 +2815,7 @@ failing = module.evaluate_memory_samples(
 assert failing["rss_tail_range_kib"] == 950
 assert failing["rss_tail_last_minus_first_kib"] == 950
 assert failing["rss_tail_growth_kib"] == 950
+assert failing["rss_tail_gate_growth_kib"] == 950
 assert any("server steady RSS tail growth was 950 KiB" in failure for failure in failing["failures"]), failing
 
 releasing = module.evaluate_memory_samples(
@@ -2827,7 +2834,27 @@ releasing = module.evaluate_memory_samples(
 assert releasing["rss_tail_range_kib"] == 1100
 assert releasing["rss_tail_last_minus_first_kib"] == -1100
 assert releasing["rss_tail_growth_kib"] == 0
+assert releasing["rss_tail_gate_growth_kib"] == 0
 assert releasing["failures"] == [], releasing
+
+recovering_below_baseline = module.evaluate_memory_samples(
+    [{"label": "post-warmup", "rss_kib": 1000}, {"label": "post-iterations", "rss_kib": 1100}],
+    2,
+    iterations=[
+        {"rss_before_kib": 1000, "rss_after_kib": 3000},
+        {"rss_before_kib": 3000, "rss_after_kib": 2400},
+        {"rss_before_kib": 2400, "rss_after_kib": 1800},
+        {"rss_before_kib": 1800, "rss_after_kib": 2200},
+        {"rss_before_kib": 2200, "rss_after_kib": 2500},
+    ],
+    max_rss_tail_growth_kib=128,
+    rss_tail_window=4,
+)
+assert recovering_below_baseline["rss_tail_range_kib"] == 700
+assert recovering_below_baseline["rss_tail_last_minus_first_kib"] == 100
+assert recovering_below_baseline["rss_tail_growth_kib"] == 100
+assert recovering_below_baseline["rss_tail_gate_growth_kib"] == 0
+assert recovering_below_baseline["failures"] == [], recovering_below_baseline
 
 too_short = module.evaluate_memory_samples(
     [{"label": "post-warmup", "rss_kib": 1000}, {"label": "post-iterations", "rss_kib": 1010}],
