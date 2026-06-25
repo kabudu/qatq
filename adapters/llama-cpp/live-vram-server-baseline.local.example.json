@@ -1,0 +1,82 @@
+{
+  "defaults": {
+    "ctx_size": 8192,
+    "parallel_slots": 2,
+    "gpu_layers": 99,
+    "kv_gpu_layers": 4,
+    "page_tokens": 64,
+    "current_token": 4096,
+    "hot_window_tokens": 32,
+    "prefetch_window_tokens": 32,
+    "max_queued_pages": 32,
+    "cache_type_k": "f16",
+    "cache_type_v": "f16",
+    "n_predict": 512,
+    "cancel_after_bytes": 256,
+    "prompt_repeat": 80,
+    "host_memory_pressure_mib": 1024,
+    "concurrent_followup_during_cancel": true,
+    "iterations": 5,
+    "max_iteration_seconds": 20,
+    "max_followup_seconds": 10,
+    "max_server_rss_growth_mib": 1536,
+    "prompt": "You are validating a live LLM runtime migration engine. Explain cancellation safety, shared-server reuse, exact KV restore requirements, page residency, and latency-risk controls in detail. "
+  },
+  "cases": [
+    {
+      "id": "qwen25-15b-native-server-baseline",
+      "comparison_group": "qwen25-15b",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-1.5b-native-server-baseline",
+      "native_baseline": true
+    },
+    {
+      "id": "qwen25-15b-qatq-server-comparison",
+      "comparison_group": "qwen25-15b",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-1.5b-qatq-server-comparison",
+      "require_flattened_flash_consumer": true,
+      "require_live_offloaded_stream_count": 2
+    },
+    {
+      "id": "qwen25-3b-native-server-baseline",
+      "comparison_group": "qwen25-3b",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-3b-native-server-baseline",
+      "native_baseline": true,
+      "max_iteration_seconds": 30,
+      "max_followup_seconds": 15
+    },
+    {
+      "id": "qwen25-3b-qatq-server-comparison",
+      "comparison_group": "qwen25-3b",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-3b-qatq-server-comparison",
+      "require_flattened_flash_consumer": true,
+      "require_live_offloaded_stream_count": 2,
+      "max_iteration_seconds": 30,
+      "max_followup_seconds": 15
+    },
+    {
+      "id": "phi35-mini-native-server-baseline",
+      "comparison_group": "phi35-mini",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+      "model_id": "phi3.5-mini-native-server-baseline",
+      "native_baseline": true,
+      "max_iteration_seconds": 35,
+      "max_followup_seconds": 15
+    },
+    {
+      "id": "phi35-mini-qatq-server-comparison",
+      "comparison_group": "phi35-mini",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+      "model_id": "phi3.5-mini-qatq-server-comparison",
+      "kv_gpu_layers": 1,
+      "page_tokens": 128,
+      "require_flattened_flash_consumer": true,
+      "require_live_offloaded_stream_count": 2,
+      "max_iteration_seconds": 35,
+      "max_followup_seconds": 15
+    }
+  ]
+}

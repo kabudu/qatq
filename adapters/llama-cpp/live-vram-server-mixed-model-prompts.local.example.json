@@ -1,0 +1,69 @@
+{
+  "defaults": {
+    "ctx_size": 8192,
+    "parallel_slots": 2,
+    "gpu_layers": 99,
+    "kv_gpu_layers": 4,
+    "page_tokens": 64,
+    "current_token": 4096,
+    "hot_window_tokens": 32,
+    "prefetch_window_tokens": 32,
+    "max_queued_pages": 32,
+    "cache_type_k": "f16",
+    "cache_type_v": "f16",
+    "n_predict": 512,
+    "cancel_after_bytes": 256,
+    "prompt_repeat": 72,
+    "host_memory_pressure_mib": 1024,
+    "concurrent_followup_during_cancel": true,
+    "require_flattened_flash_consumer": true,
+    "require_live_offloaded_stream_count": 2,
+    "require_backend_memory_diagnostics": true
+  },
+  "cases": [
+    {
+      "id": "qwen25-15b-daily-driver-mixed-model",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-1.5b-daily-driver-mixed-model",
+      "iterations": 3,
+      "max_iteration_seconds": 15,
+      "max_followup_seconds": 10,
+      "max_server_rss_growth_mib": 1024,
+      "max_backend_accelerator_self_mib": 1600,
+      "max_backend_accelerator_context_mib": 256,
+      "max_backend_accelerator_compute_mib": 360,
+      "max_projected_device_memory_mib": 1600,
+      "prompt": "Daily-driver assistant memory: summarise open tasks, user preferences, recent tool outputs, unresolved risks, exact KV restore requirements, and the next safe action. "
+    },
+    {
+      "id": "qwen25-3b-code-review-mixed-model",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-3b-code-review-mixed-model",
+      "iterations": 3,
+      "max_iteration_seconds": 20,
+      "max_followup_seconds": 12,
+      "max_server_rss_growth_mib": 1024,
+      "max_backend_accelerator_self_mib": 2600,
+      "max_backend_accelerator_context_mib": 320,
+      "max_backend_accelerator_compute_mib": 360,
+      "max_projected_device_memory_mib": 2600,
+      "prompt": "Software engineering review memory: inspect a Rust GPU KV-cache live-paging adapter, identify correctness hazards, resource-limit failures, performance gates, and exact validation commands. "
+    },
+    {
+      "id": "phi35-mini-ops-incident-mixed-model",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+      "model_id": "phi3.5-mini-ops-incident-mixed-model",
+      "kv_gpu_layers": 1,
+      "page_tokens": 128,
+      "iterations": 3,
+      "max_iteration_seconds": 25,
+      "max_followup_seconds": 12,
+      "max_server_rss_growth_mib": 1536,
+      "max_backend_accelerator_self_mib": 5600,
+      "max_backend_accelerator_context_mib": 3200,
+      "max_backend_accelerator_compute_mib": 180,
+      "max_projected_device_memory_mib": 5600,
+      "prompt": "Operations incident memory: preserve security timeline, recovery steps, audit evidence, migration manifest state, restore-before-attention ordering, and GPU memory pressure notes. "
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if, clippy::too_many_arguments)]
+
 use std::{
     env, fs,
     hint::black_box,
@@ -2050,7 +2052,7 @@ fn encode_raw_f32le(values: &[f32]) -> Vec<u8> {
 }
 
 fn decode_raw_f32le(bytes: &[u8]) -> Result<Vec<f32>, String> {
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return Err("raw f32le byte length is not divisible by 4".to_string());
     }
     Ok(bytes

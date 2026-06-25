@@ -22,12 +22,10 @@ through QATQ.
 ## Commands
 
 ```sh
-git clone https://github.com/ggml-org/llama.cpp.git /tmp/qatq-llama.cpp
-cd /tmp/qatq-llama.cpp
-git checkout 7992aa7c8
-git apply "$QATQ_REPO/adapters/llama-cpp/qatq-kv-export-7992aa7c8.patch"
-cmake -B build-qatq -S . -DCMAKE_BUILD_TYPE=Release
-cmake --build build-qatq --target llama-simple -j 6
+python3 scripts/llama_cpp_adapter_bootstrap.py \
+  --work-dir /tmp/qatq-llama.cpp \
+  --target llama-simple \
+  --output /tmp/qatq-llama.cpp/bootstrap-report.json
 ```
 
 ```sh

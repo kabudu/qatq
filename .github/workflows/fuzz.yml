@@ -15,6 +15,10 @@ jobs:
         target:
           - decode_payload
           - qatq_exact_roundtrip
+          - live_vram_page
+          - live_vram_manifest
+          - live_vram_lifecycle
+          - live_vram_attention
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly

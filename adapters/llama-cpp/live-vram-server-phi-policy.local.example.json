@@ -1,0 +1,52 @@
+{
+  "defaults": {
+    "ctx_size": 8192,
+    "parallel_slots": 2,
+    "gpu_layers": 99,
+    "current_token": 4096,
+    "hot_window_tokens": 32,
+    "prefetch_window_tokens": 32,
+    "max_queued_pages": 32,
+    "cache_type_k": "f16",
+    "cache_type_v": "f16",
+    "n_predict": 512,
+    "cancel_after_bytes": 256,
+    "prompt_repeat": 80,
+    "host_memory_pressure_mib": 1024,
+    "concurrent_followup_during_cancel": true,
+    "iterations": 5,
+    "max_iteration_seconds": 35,
+    "max_followup_seconds": 15,
+    "max_server_rss_growth_mib": 1536,
+    "prompt": "You are validating Phi live VRAM routing policy for a shared LLM server. Explain cancellation safety, restore latency, page residency, retained staging memory, and exact KV page invariants in detail. "
+  },
+  "cases": [
+    {
+      "id": "phi35-mini-native-policy-baseline",
+      "comparison_group": "phi35-mini-policy",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+      "model_id": "phi3.5-mini-native-policy-baseline",
+      "native_baseline": true
+    },
+    {
+      "id": "phi35-mini-qatq-l1-p128-strict",
+      "comparison_group": "phi35-mini-policy",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+      "model_id": "phi3.5-mini-qatq-l1-p128-strict",
+      "kv_gpu_layers": 1,
+      "page_tokens": 128,
+      "require_flattened_flash_consumer": true,
+      "require_live_offloaded_stream_count": 2
+    },
+    {
+      "id": "phi35-mini-qatq-l2-p128-strict",
+      "comparison_group": "phi35-mini-policy",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+      "model_id": "phi3.5-mini-qatq-l2-p128-strict",
+      "kv_gpu_layers": 2,
+      "page_tokens": 128,
+      "require_flattened_flash_consumer": true,
+      "require_live_offloaded_stream_count": 2
+    }
+  ]
+}

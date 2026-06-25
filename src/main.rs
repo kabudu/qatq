@@ -870,13 +870,13 @@ fn required_manifest_value(value: Option<String>, name: &str) -> Result<String, 
 fn read_f32le(path: impl AsRef<Path>, max_values: Option<usize>) -> Result<Vec<f32>, String> {
     let path = path.as_ref();
     let (byte_len, value_count) = validate_f32le_file_metadata(path)?;
-    if let Some(max_values) = max_values {
-        if value_count > max_values {
-            return Err(format!(
-                "{} contains {value_count} f32 values, exceeding the single-payload limit of {max_values}; use encode-chunked for large tensors",
-                path.display()
-            ));
-        }
+    if let Some(max_values) = max_values
+        && value_count > max_values
+    {
+        return Err(format!(
+            "{} contains {value_count} f32 values, exceeding the single-payload limit of {max_values}; use encode-chunked for large tensors",
+            path.display()
+        ));
     }
 
     let file = fs::File::open(path)
@@ -934,14 +934,14 @@ fn read_typed_tensor_bytes(
 ) -> Result<Vec<u8>, String> {
     let path = path.as_ref();
     let (byte_len, value_count) = validate_typed_tensor_file_metadata(path, dtype)?;
-    if let Some(max_values) = max_values {
-        if value_count > max_values {
-            return Err(format!(
-                "{} contains {value_count} {} values, exceeding the single-payload limit of {max_values}; use encode-chunked for large tensors",
-                path.display(),
-                dtype.as_str()
-            ));
-        }
+    if let Some(max_values) = max_values
+        && value_count > max_values
+    {
+        return Err(format!(
+            "{} contains {value_count} {} values, exceeding the single-payload limit of {max_values}; use encode-chunked for large tensors",
+            path.display(),
+            dtype.as_str()
+        ));
     }
     fs::read(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))

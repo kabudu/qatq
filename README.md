@@ -212,7 +212,10 @@ cargo run -- decode output.qatc restored.f32le
 For runtime KV-cache capture work, the preferred route is a llama.cpp adapter
 that exports internal K/V cache tensors as raw `.f16le`, `.bf16le`, or `.f32le`
 files and then compresses them with QATQ exact. See
-[`docs/LLAMA_CPP_KV_CAPTURE.md`](docs/LLAMA_CPP_KV_CAPTURE.md).
+[`docs/LLAMA_CPP_KV_CAPTURE.md`](docs/LLAMA_CPP_KV_CAPTURE.md). The current
+Metal-backed exported-KV evidence across Qwen2.5, Qwen2.5 Coder, and Phi local
+GGUF models is summarised in
+[`docs/LLAMA_CPP_LIVE_VRAM_GPU_EVIDENCE.md`](docs/LLAMA_CPP_LIVE_VRAM_GPU_EVIDENCE.md).
 
 Use exact f32 envelope transport as a control baseline:
 

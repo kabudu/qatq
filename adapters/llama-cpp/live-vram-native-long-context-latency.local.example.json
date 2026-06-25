@@ -1,0 +1,53 @@
+{
+  "matrix_gates": {
+    "require_stable_reclaim": true,
+    "require_stable_qc_bytes": true,
+    "deep_latency_baseline": true,
+    "min_token_latency_samples": 128,
+    "max_mixed_token_p95_regression_ratio": 0.15,
+    "max_mixed_token_p99_regression_ratio": 0.20,
+    "min_deep_token_latency_samples": 128,
+    "max_deep_mixed_token_p95_regression_ratio": 0.15,
+    "max_deep_mixed_token_p99_regression_ratio": 0.20,
+    "host_memory_pressure_mib": 1024
+  },
+  "cases": [
+    {
+      "id": "qwen25-coder-3b-long-context-1024p-flattened-retained-l4-q32-coldreuse-prefetch-latency",
+      "model": "/Users/kabudu/projex/deliberium-group/deliberium/models/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+      "model_id": "qwen2.5-coder-3b-long-context-1024p-flattened-retained-l4-q32-coldreuse-prefetch-latency",
+      "sweep_kv_gpu_layers": [4],
+      "page_tokens": 1024,
+      "n_kv_pad_tokens": 256,
+      "current_token": 6823,
+      "hot_window_tokens": 2048,
+      "prefetch_window_tokens": 32,
+      "next_required": "cold-after-hot",
+      "max_queued_pages": 32,
+      "gpu_page_staging": true,
+      "native_page_streaming_attention_backend_op": true,
+      "native_page_streaming_flatten_flash": true,
+      "attention_page_segments_live_offloaded_only": true,
+      "native_page_streaming_transient_pool_max_bytes": 268435456,
+      "aggregate_codec_gate": true,
+      "skip_cpu_kv_baseline": true,
+      "skip_attention_page_tensor_self_test": true,
+      "live_restore_slot_pressure_self_test_tokens": 512,
+      "live_restore_slot_pressure_max_bytes": 1,
+      "attention_fixture_max_layers": 36,
+      "mlx_streaming_attention_gate": true,
+      "mlx_python": "/Users/kabudu/projex/permeant-os/.venv-mlx/bin/python",
+      "mlx_qatq_bin": "target/release/qatq",
+      "mlx_min_layers_checked": 1,
+      "mlx_min_heads_checked": 1,
+      "mlx_max_streaming_slowdown": 5.0,
+      "short_predict": 129,
+      "deep_predict": 129,
+      "deep_repeat": 128,
+      "deep_prompt_suffix": "\n\nContinue the review as a numbered production risk register. Include exactly the next thirty-three concise items, each with a severity, a mitigation, and a validation command. Begin with item 1:",
+      "max_mixed_decode_regression": 2.0,
+      "short_prompt": "Review a production GPU KV-cache live-paging adapter and identify the highest-risk correctness and latency issues.",
+      "deep_prompt_seed": "Long-context coding agent memory: preserve source-code reasoning, tool outputs, migration manifests, restore-before-attention ordering, QATQ page compression telemetry, GPU residency budgets, latency accounting, cancellation behaviour, malicious metadata handling, rollback evidence, and release-readiness notes. "
+    }
+  ]
+}

@@ -32,6 +32,7 @@ include = [
     "docs/API_CLI_FREEZE.md",
     "docs/BRAND.md",
     "docs/EXTERNAL_RUNTIME_EVIDENCE.md",
+    "docs/LIVE_VRAM_REDUCTION.md",
     "docs/PRODUCTION_READINESS.md",
     "docs/PUBLIC_*.md",
     "docs/PUBLIC_COMPARATIVE_*.md",
@@ -55,6 +56,7 @@ name = "qatq"
 path = "src/main.rs"
 
 [dependencies]
+blake3 = "1.8.5"
 lz4_flex = "0.13.1"
 zstd = "0.13.3"
 
