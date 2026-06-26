@@ -472,7 +472,14 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       hardware. A local production-shaped preflight at
       `/private/tmp/qatq-live-vram-server-family-policy-preflight-20260626`
       passed all checks for the six accepted family soak cases, proving the
-      runner-input gate before the still-open sustained runtime soak.
+      runner-input gate before the still-open sustained runtime soak. A later
+      local one-hour attempt at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-absolute-20260626`
+      produced five passing mixed-model repeats before the configured external
+      model root was removed; the burn-in wrapper now re-checks runtime inputs
+      before each repeat and fails closed with an explicit
+      `runtime input changed before run N` reason when required model files or
+      binaries disappear mid-soak.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

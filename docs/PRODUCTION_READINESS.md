@@ -237,6 +237,13 @@ before long runs, including patched-runtime checks, model-root-resolved config
 artifacts, selected-model presence, and required sustained-soak gates. The local
 preflight at `/private/tmp/qatq-live-vram-server-family-policy-preflight-20260626`
 passed all checks for the six accepted family soak cases, but that is still
-runner-input evidence rather than a one-hour or overnight stability claim. The
+runner-input evidence rather than a one-hour or overnight stability claim. A
+later local one-hour attempt at
+`/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-absolute-20260626`
+produced five passing mixed-model repeats with backend and soak memory metrics,
+then failed on repeat six after the external model root was removed. The
+burn-in wrapper now re-checks runtime inputs before each repeat and fails with a
+direct `runtime input changed before run N` reason when required binaries or
+model files disappear mid-soak. The
 implementation and validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).

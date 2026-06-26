@@ -2899,6 +2899,16 @@ Exit criteria:
       bootstrapped patched `llama-server`, `--model-root`, the one-hour elapsed
       gate, backend-memory diagnostics, and soak-memory metrics. This proves the
       runner-input gate, not the sustained runtime soak.
+- [x] Repeat-boundary runtime input guard. The burn-in wrapper re-checks the
+      matrix runner, probe runner, patched `llama-server`, and every selected
+      model file before each repeated matrix run. This closes the failure mode
+      seen in the local one-hour attempt at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-absolute-20260626`:
+      five mixed-model repeats passed with backend and soak metrics, then repeat
+      six failed because the external model root had been removed before the Phi
+      case launched. The new guard fails with an explicit
+      `runtime input changed before run N` artefact before launching another
+      probe, rather than cascading through a missing probe summary.
 - [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 

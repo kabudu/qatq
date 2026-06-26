@@ -1457,6 +1457,122 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_burnin_fails_closed_when_runtime_inputs_change_between_runs() {
+    let output = run_python_snippet(
+        r###"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    model_root = tmp / "models"
+    model_root.mkdir()
+    model = model_root / "model-a.gguf"
+    model.write_bytes(b"fake model")
+    config = tmp / "config.json"
+    config.write_text(json.dumps({
+        "defaults": {},
+        "cases": [
+            {
+                "id": "portable-model",
+                "model": "/runner-specific/path/model-a.gguf",
+            }
+        ]
+    }), encoding="utf-8")
+
+    llama_server = tmp / "llama-server"
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
+    probe_runner = tmp / "probe.py"
+    probe_runner.write_text("pass\n", encoding="utf-8")
+
+    matrix_runner = tmp / "matrix.py"
+    matrix_runner.write_text(
+        """
+import argparse, json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', required=True)
+parser.add_argument('--probe-runner')
+parser.add_argument('--llama-server')
+parser.add_argument('--work-dir', required=True)
+parser.add_argument('--timeout')
+parser.add_argument('--keep-work-dir', action='store_true')
+args, _ = parser.parse_known_args()
+work = Path(args.work_dir)
+work.mkdir(parents=True, exist_ok=True)
+config = json.loads(Path(args.config).read_text())
+model = Path(config['cases'][0]['model'])
+model.unlink()
+(work / 'summary.json').write_text(json.dumps({
+    'format': 'qatq-live-vram-server-cancel-matrix-summary-v1',
+    'status': 'pass',
+    'dry_run': False,
+    'work_dir': str(work),
+    'total_cases': 0,
+    'passed': 0,
+    'dry_run_cases': 0,
+    'failed': 0,
+    'cases': [],
+    'comparisons': {},
+    'comparison_gates': {},
+    'comparison_gate_failures': [],
+    'boundary': 'fake matrix'
+}), encoding='utf-8')
+""",
+        encoding="utf-8",
+    )
+
+    work_dir = tmp / "burnin"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--matrix-runner",
+            str(matrix_runner),
+            "--probe-runner",
+            str(probe_runner),
+            "--llama-server",
+            str(llama_server),
+            "--model-root",
+            str(model_root),
+            "--work-dir",
+            str(work_dir),
+            "--runs",
+            "2",
+            "--timeout",
+            "30",
+            "--run-timeout",
+            "120",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1, result.stdout
+    summary = json.loads((work_dir / "summary.json").read_text())
+    assert summary["status"] == "fail"
+    assert summary["runs_completed"] == 2
+    assert summary["passed"] == 1
+    assert summary["failed"] == 1
+    assert "runtime input changed before run 2" in summary["runs"][1]["failure"]
+    assert "model missing before run: portable-model=" in summary["runs"][1]["failure"]
+    assert not (work_dir / "run-002" / "summary.json").exists()
+    assert "runtime input changed before run 2" in (work_dir / "run-002" / "matrix-stderr.log").read_text()
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_times_out_hung_matrix_process_group() {
     let output = run_python_snippet(
         r#"

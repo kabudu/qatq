@@ -176,6 +176,17 @@ def main() -> int:
                 )
             )
             break
+        input_failures = runtime_input_failures(args, prepared_config)
+        if input_failures:
+            runs.append(
+                build_runtime_input_failure_run(
+                    args,
+                    index,
+                    work_dir / f"run-{index:03d}",
+                    input_failures,
+                )
+            )
+            break
         run_timeout = run_timeout_for_remaining_total(args, started)
         run = run_matrix(args, index, work_dir / f"run-{index:03d}", run_timeout=run_timeout)
         runs.append(run)
@@ -436,6 +447,56 @@ def build_preflight_only_summary(
         "config": str(prepared_config.effective_path),
         "original_config": str(prepared_config.original_path),
     }
+
+
+def runtime_input_failures(args: argparse.Namespace, prepared_config: BurnInPreparedConfig) -> list[str]:
+    if args.dry_run:
+        return []
+    failures: list[str] = []
+    if not Path(args.matrix_runner).is_file():
+        failures.append(f"matrix runner missing before run: {args.matrix_runner}")
+    if not Path(args.probe_runner).is_file():
+        failures.append(f"probe runner missing before run: {args.probe_runner}")
+    if not os.access(args.llama_server, os.X_OK):
+        failures.append(f"llama-server is not executable before run: {args.llama_server}")
+    cases = prepared_config.config.get("cases", [])
+    if isinstance(cases, list):
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            model = str(case.get("model", ""))
+            if not Path(model).is_file():
+                failures.append(f"model missing before run: {case.get('id', '<unknown>')}={model}")
+    return failures
+
+
+def build_runtime_input_failure_run(
+    args: argparse.Namespace,
+    index: int,
+    work_dir: Path,
+    failures: list[str],
+) -> BurnInRun:
+    work_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = work_dir / "matrix-stdout.log"
+    stderr_path = work_dir / "matrix-stderr.log"
+    summary_path = work_dir / "summary.json"
+    failure = "; ".join(failures)
+    stdout_path.write_text("", encoding="utf-8")
+    stderr_path.write_text(f"runtime input changed before run {index}: {failure}\n", encoding="utf-8")
+    return BurnInRun(
+        index=index,
+        status="fail",
+        returncode=1,
+        elapsed_seconds=0.0,
+        work_dir=work_dir,
+        summary_path=summary_path,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+        failure=f"runtime input changed before run {index}: {failure}",
+        summary={},
+        timed_out=False,
+        timeout_seconds=args.run_timeout or derived_run_timeout(args),
+    )
 
 
 def run_timeout_for_remaining_total(args: argparse.Namespace, started: float) -> float:
