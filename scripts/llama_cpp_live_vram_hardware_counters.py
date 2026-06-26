@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -140,18 +142,20 @@ def inspect_nvidia_smi(
     if not path:
         return info
 
-    help_result = subprocess.run(
+    help_result = run_probe_command(
         [path, "--help-query-compute-apps"],
-        check=False,
-        text=True,
-        capture_output=True,
         timeout=5.0,
     )
     help_text = help_result.stdout + help_result.stderr
+    info["help_returncode"] = help_result.returncode
+    if help_result.returncode == 124:
+        info["direct_peak_vram_counter"]["reason"] = (
+            help_text.strip() or "nvidia-smi capability probe timed out"
+        )
+        return info
     info["supports_process_gpu_memory"] = (
         "used_memory" in help_text and "pid" in help_text
     )
-    info["help_returncode"] = help_result.returncode
     if not info["supports_process_gpu_memory"]:
         info["direct_peak_vram_counter"]["reason"] = (
             "nvidia-smi is present but does not advertise pid,used_memory "
@@ -209,15 +213,12 @@ def sample_nvidia_smi_process_memory(
     errors: list[str] = []
 
     while True:
-        result = subprocess.run(
+        result = run_probe_command(
             [
                 path,
                 "--query-compute-apps=pid,used_memory",
                 "--format=csv,noheader,nounits",
             ],
-            check=False,
-            text=True,
-            capture_output=True,
             timeout=5.0,
         )
         if result.returncode != 0:
@@ -275,6 +276,62 @@ def parse_nvidia_smi_process_memory(output: str, sample_pid: int) -> list[int]:
     return values
 
 
+def run_probe_command(command: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        command,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired as error:
+        cleanup = terminate_process_group(proc)
+        stdout = error.stdout if isinstance(error.stdout, str) else ""
+        stderr = error.stderr if isinstance(error.stderr, str) else ""
+        detail = (
+            f"command timed out after {timeout:g}s; "
+            f"cleanup={cleanup.get('signal', 'unknown')}"
+        )
+        stderr = f"{stderr.rstrip()}\n{detail}".strip()
+        return subprocess.CompletedProcess(command, 124, stdout, stderr)
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": None,
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        cleanup["error"] = str(error)
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            pass
+        except PermissionError as error:
+            cleanup["error"] = str(error)
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["error"] = "process group did not exit after SIGKILL"
+        return cleanup
+
+
 def inspect_powermetrics() -> dict[str, Any]:
     path = shutil.which("powermetrics")
     info: dict[str, Any] = {
@@ -291,21 +348,15 @@ def inspect_powermetrics() -> dict[str, Any]:
     }
     if not path:
         return info
-    help_result = subprocess.run(
+    help_result = run_probe_command(
         [path, "--help"],
-        check=False,
-        text=True,
-        capture_output=True,
         timeout=5.0,
     )
     help_text = help_result.stdout + help_result.stderr
     info["supports_process_gpu_time"] = "--show-process-gpu" in help_text
     info["supports_process_gpu_memory"] = "gpu memory" in help_text.lower() or "vram" in help_text.lower()
-    sample_result = subprocess.run(
+    sample_result = run_probe_command(
         [path, "--show-process-gpu", "--samplers", "gpu_power", "-n", "1", "-i", "100", "-f", "plist"],
-        check=False,
-        text=True,
-        capture_output=True,
         timeout=5.0,
     )
     sample_text = sample_result.stdout + sample_result.stderr
