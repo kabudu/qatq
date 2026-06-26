@@ -1307,6 +1307,89 @@ assert "projected_device_memory_mib" not in failures
 }
 
 #[test]
+fn live_vram_server_burnin_backend_memory_diagnostics_gate_fails_closed() {
+    let output = run_python_snippet(
+        r###"
+import importlib.util, sys, tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_burnin", "scripts/llama_cpp_live_vram_server_burnin.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+class Args:
+    dry_run = False
+    runs = 1
+    require_backend_memory_diagnostics = True
+    max_rss_growth_jitter_ratio = 0.0
+    max_backend_kv_jitter_ratio = 0.0
+    max_projected_device_jitter_ratio = 0.0
+    max_direct_peak_vram_jitter_ratio = 0.0
+
+run = module.BurnInRun(
+    index=1,
+    status="pass",
+    returncode=0,
+    elapsed_seconds=1.0,
+    work_dir=Path("/tmp/run1"),
+    summary_path=Path("/tmp/run1/summary.json"),
+    stdout_path=Path("/tmp/run1/stdout"),
+    stderr_path=Path("/tmp/run1/stderr"),
+    failure="",
+    summary={
+        "cases": [
+            {
+                "id": "native",
+                "projected_device_memory_mib": 1458,
+                "backend_memory": {
+                    "memory_breakdown_mib": {
+                        "MTL0 (Apple M4)": {"self": 1458, "context": 224, "compute": 299},
+                        "Host": {"self": 196},
+                    },
+                },
+            },
+            {
+                "id": "qatq-missing",
+                "backend_memory": {
+                    "memory_breakdown_mib": {
+                        "Host": {"self": 192},
+                    },
+                },
+            },
+        ],
+    },
+)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp)
+    summary = module.build_summary(Args(), work_dir, [run])
+    assert summary["status"] == "fail"
+    diagnostics = summary["backend_memory_diagnostics"]
+    assert diagnostics["available"] is False
+    assert diagnostics["total_cases"] == 2
+    assert diagnostics["cases_with_projected_device_memory"] == 1
+    assert diagnostics["cases_with_accelerator_breakdown"] == 1
+    failures = "\n".join(summary["backend_memory_diagnostic_failures"])
+    assert "backend memory diagnostics missing projected_device_memory_mib (1/2)" in failures
+    assert "backend memory diagnostics missing non-host accelerator breakdown (1/2)" in failures
+    markdown = work_dir / "summary.md"
+    module.write_markdown(markdown, summary)
+    text = markdown.read_text()
+    assert "## Backend Memory Diagnostics" in text
+    assert "## Backend Memory Diagnostic Failures" in text
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_hardware_counter_report_separates_backend_diagnostics_from_peak_vram() {
     let output = run_python_snippet(
         r#"
@@ -1836,6 +1919,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "event_trace = Path(arg_value('--qatq-event-trace'))\n"
         "page_segments = Path(arg_value('--qatq-attention-page-segments-trace'))\n"
         "marker = export_dir.parent / 'child-interrupted.txt'\n"
+        "ready = export_dir.parent / 'child-ready.txt'\n"
         "export_dir.mkdir(parents=True, exist_ok=True)\n"
         "(export_dir / 'page.bin').write_bytes(b'qatq')\n"
         "event_trace.write_text('{\"events\": []}\\n')\n"
@@ -1843,12 +1927,19 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "child = subprocess.Popen([\n"
         "    sys.executable,\n"
         "    '-c',\n"
-        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); ready = Path(sys.argv[2]); '\n"
         "    'signal.signal(signal.SIGINT, lambda signum, frame: (marker.write_text(\"sigint\"), sys.exit(0))); '\n"
         "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'ready.write_text(\"ready\"); '\n"
         "    'time.sleep(30)',\n"
         "    str(marker),\n"
+        "    str(ready),\n"
         "])\n"
+        "deadline = time.time() + 3\n"
+        "while not ready.exists() and time.time() < deadline:\n"
+        "    time.sleep(0.01)\n"
+        "if not ready.exists():\n"
+        "    raise RuntimeError('child did not become ready')\n"
         "print('exported QATQ KV tensors', file=sys.stderr, flush=True)\n"
         "try:\n"
         "    time.sleep(30)\n"

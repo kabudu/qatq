@@ -788,7 +788,11 @@ can enforce aggregate jitter ceilings for RSS growth, backend K/V memory, and
 projected device memory across repeated runs. Each repeated matrix run executes
 in its own process group; if a run exceeds `--run-timeout`, the wrapper sends
 SIGTERM/SIGKILL to the full group and records `timed_out`, `cleanup_signal`,
-`cleanup_escalated`, and `timeout_seconds` in `summary.json`. The first
+`cleanup_escalated`, and `timeout_seconds` in `summary.json`.
+`--require-backend-memory-diagnostics` makes the burn-in fail unless every
+completed matrix case has projected device memory and non-host accelerator
+memory breakdown, even if a matrix config forgot to require those diagnostics
+per case. The first
 layer-policy burn-in
 at `/private/tmp/qatq-live-vram-server-layer-policy-burnin2-device-jitter-20260625`
 failed correctly on the existing QATQ/native RSS-growth ratio gate

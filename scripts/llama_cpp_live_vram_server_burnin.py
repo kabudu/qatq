@@ -68,6 +68,14 @@ def main() -> int:
     )
     parser.add_argument("--max-cases", type=int, default=0)
     parser.add_argument("--max-total-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--require-backend-memory-diagnostics",
+        action="store_true",
+        help=(
+            "Fail unless every completed matrix case has projected device "
+            "memory plus non-host accelerator memory breakdown."
+        ),
+    )
     parser.add_argument("--max-rss-growth-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-backend-kv-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
@@ -149,6 +157,7 @@ def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
         "run_timeout_seconds": args.run_timeout,
         "max_cases": args.max_cases,
         "max_total_seconds": args.max_total_seconds,
+        "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
         "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
         "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
@@ -245,8 +254,14 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
     failures = [run for run in runs if run.status not in {"pass", "dry-run"}]
     aggregate = aggregate_case_metrics(runs)
     aggregate_failures = [] if args.dry_run else evaluate_aggregate_gates(args, aggregate)
+    backend_memory_diagnostics = aggregate_backend_memory_diagnostics(runs)
+    backend_memory_failures = (
+        []
+        if args.dry_run or not args.require_backend_memory_diagnostics
+        else evaluate_backend_memory_diagnostics(backend_memory_diagnostics)
+    )
     status = "dry-run" if runs and all(run.status == "dry-run" for run in runs) else "pass"
-    if failures or aggregate_failures or len(runs) != args.runs:
+    if failures or aggregate_failures or backend_memory_failures or len(runs) != args.runs:
         status = "fail"
     return {
         "format": "qatq-live-vram-server-burnin-summary-v1",
@@ -261,7 +276,10 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
         "runs": run_summaries,
         "aggregate_case_metrics": aggregate,
         "aggregate_gate_failures": aggregate_failures,
+        "backend_memory_diagnostics": backend_memory_diagnostics,
+        "backend_memory_diagnostic_failures": backend_memory_failures,
         "gates": {
+            "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
             "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
@@ -329,6 +347,72 @@ def aggregate_case_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
         }
         for case_id, case_values in sorted(values.items())
     }
+
+
+def aggregate_backend_memory_diagnostics(runs: list[BurnInRun]) -> dict[str, Any]:
+    total_cases = 0
+    cases_with_projected = 0
+    cases_with_accelerator_breakdown = 0
+    missing_projected: list[str] = []
+    missing_breakdown: list[str] = []
+    for run in runs:
+        if run.status not in {"pass", "dry-run"}:
+            continue
+        cases = run.summary.get("cases")
+        if not isinstance(cases, list):
+            continue
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            total_cases += 1
+            case_label = f"run-{run.index}:{case.get('id', '<unknown>')}"
+            if isinstance(case.get("projected_device_memory_mib"), (int, float)):
+                cases_with_projected += 1
+            else:
+                missing_projected.append(case_label)
+            backend_memory = case.get("backend_memory")
+            memory_breakdown = (
+                backend_memory.get("memory_breakdown_mib")
+                if isinstance(backend_memory, dict)
+                else None
+            )
+            if isinstance(memory_breakdown, dict) and any(key != "Host" for key in memory_breakdown):
+                cases_with_accelerator_breakdown += 1
+            else:
+                missing_breakdown.append(case_label)
+    return {
+        "available": (
+            total_cases > 0
+            and cases_with_projected == total_cases
+            and cases_with_accelerator_breakdown == total_cases
+        ),
+        "total_cases": total_cases,
+        "cases_with_projected_device_memory": cases_with_projected,
+        "cases_with_accelerator_breakdown": cases_with_accelerator_breakdown,
+        "missing_projected_device_memory": missing_projected[:16],
+        "missing_accelerator_breakdown": missing_breakdown[:16],
+        "missing_lists_truncated": len(missing_projected) > 16 or len(missing_breakdown) > 16,
+    }
+
+
+def evaluate_backend_memory_diagnostics(diagnostics: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    total_cases = diagnostics.get("total_cases")
+    if not isinstance(total_cases, int) or total_cases <= 0:
+        return ["backend memory diagnostics gate requires at least one completed matrix case"]
+    projected = diagnostics.get("cases_with_projected_device_memory")
+    if projected != total_cases:
+        failures.append(
+            "backend memory diagnostics missing projected_device_memory_mib "
+            f"({projected}/{total_cases})"
+        )
+    breakdown = diagnostics.get("cases_with_accelerator_breakdown")
+    if breakdown != total_cases:
+        failures.append(
+            "backend memory diagnostics missing non-host accelerator breakdown "
+            f"({breakdown}/{total_cases})"
+        )
+    return failures
 
 
 def add_metric(case_values: dict[str, list[float]], key: str, value: Any) -> None:
@@ -486,6 +570,24 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     if isinstance(aggregate_failures, list) and aggregate_failures:
         lines.extend(["", "## Aggregate Gate Failures", ""])
         for failure in aggregate_failures:
+            lines.append(f"- {failure}")
+    backend_memory = summary.get("backend_memory_diagnostics", {})
+    if isinstance(backend_memory, dict):
+        lines.extend(
+            [
+                "",
+                "## Backend Memory Diagnostics",
+                "",
+                f"- available: `{backend_memory.get('available', False)}`",
+                f"- total cases: `{backend_memory.get('total_cases', 0)}`",
+                f"- projected device memory cases: `{backend_memory.get('cases_with_projected_device_memory', 0)}`",
+                f"- accelerator breakdown cases: `{backend_memory.get('cases_with_accelerator_breakdown', 0)}`",
+            ]
+        )
+    backend_failures = summary.get("backend_memory_diagnostic_failures", [])
+    if isinstance(backend_failures, list) and backend_failures:
+        lines.extend(["", "## Backend Memory Diagnostic Failures", ""])
+        for failure in backend_failures:
             lines.append(f"- {failure}")
     lines.extend(["", summary["boundary"], ""])
     path.write_text("\n".join(lines), encoding="utf-8")
