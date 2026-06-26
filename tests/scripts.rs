@@ -223,8 +223,8 @@ fn live_vram_matrix_passes_explicit_llama_cpp_source_to_evidence_runner() {
     let output = run_python_snippet(
         r#"
 import importlib.util, sys, tempfile
+import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 spec = importlib.util.spec_from_file_location("matrix", "scripts/llama_cpp_live_vram_matrix.py")
 module = importlib.util.module_from_spec(spec)
@@ -233,11 +233,11 @@ spec.loader.exec_module(module)
 
 captured = {}
 
-def fake_run(command, cwd, text, capture_output, timeout):
+def fake_run_child_command(command, cwd, timeout):
     captured["command"] = command
-    return SimpleNamespace(returncode=1, stdout="", stderr="synthetic failure")
+    return subprocess.CompletedProcess(command, 1, "", "synthetic failure")
 
-module.subprocess.run = fake_run
+module.run_child_command = fake_run_child_command
 
 with tempfile.TemporaryDirectory() as raw_tmp:
     result = module.run_case(
@@ -639,6 +639,63 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         assert cleanup["escalated"] is False
         assert isinstance(cleanup["returncode"], int)
         assert "started child" in (exc.output or "")
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_matrix_run_child_command_times_out_process_group() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, subprocess, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("matrix", "scripts/llama_cpp_live_vram_matrix.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    runner = tmp / "hung_matrix_child.py"
+    marker = tmp / "child-terminated.txt"
+    runner.write_text(
+        "import subprocess, signal, sys, time\n"
+        "from pathlib import Path\n"
+        "marker = Path(sys.argv[1])\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    str(marker),\n"
+        "])\n"
+        "print('started matrix child', child.pid, flush=True)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    try:
+        module.run_child_command([sys.executable, str(runner), str(marker)], cwd=Path.cwd(), timeout=1)
+        raise AssertionError("expected timeout")
+    except subprocess.TimeoutExpired as exc:
+        cleanup = getattr(exc, "cleanup")
+        assert cleanup["attempted"] is True
+        assert cleanup["signal"] == "SIGTERM"
+        assert cleanup["escalated"] is False
+        assert isinstance(cleanup["returncode"], int)
+        assert "started matrix child" in (exc.output or "")
     deadline = time.time() + 3
     while not marker.exists() and time.time() < deadline:
         time.sleep(0.05)

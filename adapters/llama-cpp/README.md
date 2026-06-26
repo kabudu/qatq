@@ -614,7 +614,10 @@ per-run export directories after each case. Use
 `--max-mixed-token-p99-regression-ratio` when you want the matrix to fail closed
 unless the short full-GPU and mixed-KV runs contain enough token samples and the
 mixed path stays within the configured p95/p99 per-token decode regression
-budget. The single evidence runner and the matrix runner both support
+budget. The matrix runner starts each evidence child in its own process group;
+if a case exceeds its outer timeout, it tears down the whole group with
+SIGTERM/SIGKILL and records the cleanup signal/escalation in the failure
+section. The single evidence runner and the matrix runner both support
 `--deep-latency-baseline`, `--min-deep-token-latency-samples`,
 `--max-deep-mixed-token-p95-regression-ratio`, and
 `--max-deep-mixed-token-p99-regression-ratio` for the stricter long-context

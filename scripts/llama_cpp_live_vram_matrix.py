@@ -15,8 +15,10 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -82,6 +84,10 @@ class CaseResult:
     deep_mixed_p99_regression: float
     elapsed_seconds: float
     failure: str
+    timed_out: bool = False
+    timeout_seconds: int = 0
+    cleanup_signal: str | None = None
+    cleanup_escalated: bool = False
 
 
 @dataclass(frozen=True)
@@ -794,11 +800,14 @@ def run_case(
     (case_work_dir / "matrix-command.txt").write_text(shell_join(command) + "\n", encoding="utf-8")
     started = time.time()
     try:
-        completed = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=timeout + 60)
+        completed = run_child_command(command, cwd=root, timeout=timeout + 60)
     except subprocess.TimeoutExpired as exc:
         elapsed = time.time() - started
         log_text = timeout_output_to_text(exc.stdout) + timeout_output_to_text(exc.stderr)
         (case_work_dir / "matrix-run.log").write_text(log_text, encoding="utf-8")
+        cleanup = getattr(exc, "cleanup", {})
+        cleanup_signal = cleanup.get("signal") if isinstance(cleanup, dict) else None
+        cleanup_escalated = bool(cleanup.get("escalated")) if isinstance(cleanup, dict) else False
         return empty_result(
             case_id=case_id,
             iteration=iteration,
@@ -808,8 +817,15 @@ def run_case(
             elapsed_seconds=elapsed,
             failure=augment_failure_with_stage_status(
                 case_work_dir,
-                f"matrix case timed out after {timeout + 60}s",
+                (
+                    f"matrix case timed out after {timeout + 60}s; "
+                    f"cleanup={cleanup_signal or 'unknown'}"
+                ),
             ),
+            timed_out=True,
+            timeout_seconds=timeout + 60,
+            cleanup_signal=cleanup_signal,
+            cleanup_escalated=cleanup_escalated,
         )
     elapsed = time.time() - started
     (case_work_dir / "matrix-run.log").write_text(completed.stdout + completed.stderr, encoding="utf-8")
@@ -948,6 +964,10 @@ def empty_result(
     work_dir: Path,
     elapsed_seconds: float,
     failure: str,
+    timed_out: bool = False,
+    timeout_seconds: int = 0,
+    cleanup_signal: str | None = None,
+    cleanup_escalated: bool = False,
 ) -> CaseResult:
     return CaseResult(
         case_id=case_id,
@@ -992,6 +1012,10 @@ def empty_result(
         deep_mixed_p99_regression=0.0,
         elapsed_seconds=elapsed_seconds,
         failure=failure,
+        timed_out=timed_out,
+        timeout_seconds=timeout_seconds,
+        cleanup_signal=cleanup_signal,
+        cleanup_escalated=cleanup_escalated,
     )
 
 
@@ -1031,6 +1055,72 @@ def timeout_output_to_text(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def run_child_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        cleanup = terminate_process_group(proc)
+        timeout_stdout, timeout_stderr = proc.communicate()
+        exc.output = timeout_output_to_text(exc.output) + timeout_output_to_text(timeout_stdout)
+        exc.stderr = timeout_output_to_text(exc.stderr) + timeout_output_to_text(timeout_stderr)
+        exc.cleanup = cleanup
+        raise
+    return subprocess.CompletedProcess(
+        command,
+        proc.returncode if proc.returncode is not None else -1,
+        stdout,
+        stderr,
+    )
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": proc.poll(),
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        cleanup["signal"] = "exited"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
+    except PermissionError:
+        cleanup["signal"] = "permission-denied"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            cleanup["signal"] = "exited"
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["returncode"] = None
+        return cleanup
 
 
 def parse_token_latency_stats(path: Path, *, baseline_run: str, candidate_run: str) -> TokenLatencyStats:
@@ -1232,6 +1322,11 @@ def build_matrix_summary(
         out += "\n## Failures\n\n"
         for result in failures:
             out += f"### {result.case_id}\n\n"
+            if result.timed_out:
+                out += f"- timed out: `{result.timed_out}`\n"
+                out += f"- timeout seconds: `{result.timeout_seconds}`\n"
+                out += f"- cleanup signal: `{result.cleanup_signal}`\n"
+                out += f"- cleanup escalated: `{result.cleanup_escalated}`\n\n"
             out += fenced(result.failure[-4000:] or "unknown failure")
             out += "\n"
     out += "\n## Claim Boundary\n\n"

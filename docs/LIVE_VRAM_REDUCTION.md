@@ -2509,7 +2509,10 @@ Exit criteria:
 - [x] Reproducible llama.cpp evidence runner exposes `--require-live-paging` as
       a fail-closed scoped gate for page-granular runtime reclaim.
 - [x] Reproducible llama.cpp matrix runner exposes `--require-live-paging` and
-      refuses to claim strict live-paging support when any case fails.
+      refuses to claim strict live-paging support when any case fails. Direct
+      matrix case execution now starts the evidence child in its own process
+      group, tears down the group on timeout, and reports cleanup
+      signal/escalation details in the failure section.
 - [x] Reproducible llama.cpp evidence and matrix runners expose
       `--require-native-page-streaming` as the future production gate for a
       non-concat native attention path.
