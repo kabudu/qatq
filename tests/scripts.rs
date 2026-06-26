@@ -2048,6 +2048,37 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_burnin_workflow_invokes_sustained_soak_gates() {
+    let output = run_python_snippet(
+        r#"
+from pathlib import Path
+
+workflow = Path(".github/workflows/live-vram-burnin.yml").read_text()
+assert "workflow_dispatch:" in workflow
+assert "runs-on: [self-hosted, live-vram]" in workflow
+assert "timeout-minutes: ${{ fromJSON(inputs.job_timeout_minutes) }}" in workflow
+assert "actions/checkout@v7" in workflow
+assert "actions/upload-artifact@v4" in workflow
+assert "MIN_PASSED_SECONDS=3600" in workflow
+assert "MIN_PASSED_SECONDS=28800" in workflow
+assert "--min-passed-elapsed-seconds" in workflow
+assert "--require-backend-memory-diagnostics" in workflow
+assert "--require-soak-memory-metrics" in workflow
+assert "--max-rss-tail-growth-jitter-ratio" in workflow
+assert "--max-direct-peak-vram-jitter-ratio" in workflow
+assert "if-no-files-found: warn" in workflow
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_hardware_counter_report_separates_backend_diagnostics_from_peak_vram() {
     let output = run_python_snippet(
         r#"

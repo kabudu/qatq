@@ -123,6 +123,11 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > tail metric diagnostics in both JSON and Markdown summaries and fail closed
 > when a long-run claim lacks enough passed wall-clock time or exported memory
 > metrics.
+> `.github/workflows/live-vram-burnin.yml` is now the manual self-hosted launch
+> path for those gates: it targets runners labelled `live-vram`, verifies the
+> patched `llama-server`, runs one-hour/overnight/custom profiles, and uploads
+> the burn-in plan plus JSON/Markdown summaries. `job_timeout_minutes` must be
+> set high enough for the selected profile.
 > This re-closes bounded accepted-policy repeatability and makes future
 > one-hour/overnight claims machine-checkable. Overnight burn-in and direct
 > peak-VRAM hardware-counter proof remain open.

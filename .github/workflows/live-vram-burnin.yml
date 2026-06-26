@@ -1,0 +1,144 @@
+name: live-vram-burnin
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Burn-in duration profile"
+        type: choice
+        options:
+          - one-hour
+          - overnight
+          - custom
+        default: one-hour
+      config:
+        description: "Server matrix config JSON"
+        default: adapters/llama-cpp/live-vram-server-family-policy-soak-notrace.local.example.json
+      llama_server:
+        description: "Patched llama-server binary on the self-hosted runner"
+        default: /opt/qatq/llama.cpp/build/bin/llama-server
+      work_dir:
+        description: "Burn-in artifact directory on the self-hosted runner"
+        default: /var/tmp/qatq-live-vram-server-burnin
+      runs:
+        description: "Matrix repeats"
+        default: "3"
+      max_cases:
+        description: "Maximum matrix cases, or 0 for all"
+        default: "0"
+      timeout_seconds:
+        description: "Per-case matrix timeout"
+        default: "1800"
+      run_timeout_seconds:
+        description: "Whole matrix-run timeout"
+        default: "7200"
+      max_total_seconds:
+        description: "Total burn-in budget, or 0 for uncapped"
+        default: "0"
+      min_passed_elapsed_seconds:
+        description: "Custom minimum passed elapsed seconds when mode=custom"
+        default: "3600"
+      max_rss_growth_jitter_ratio:
+        description: "Repeated-run RSS growth jitter ceiling, or 0 to disable"
+        default: "2.0"
+      max_rss_tail_growth_jitter_ratio:
+        description: "Repeated-run steady-state RSS tail-growth jitter ceiling, or 0 to disable"
+        default: "1.5"
+      max_backend_kv_jitter_ratio:
+        description: "Repeated-run backend K/V memory jitter ceiling"
+        default: "1.001"
+      max_projected_device_jitter_ratio:
+        description: "Repeated-run projected device memory jitter ceiling"
+        default: "1.001"
+      max_direct_peak_vram_jitter_ratio:
+        description: "Repeated-run direct peak VRAM jitter ceiling, or 0 to disable"
+        default: "0"
+      job_timeout_minutes:
+        description: "Workflow job timeout on the self-hosted runner"
+        default: "360"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-vram-burnin-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  burn-in:
+    name: ${{ inputs.mode }} live VRAM burn-in
+    runs-on: [self-hosted, live-vram]
+    timeout-minutes: ${{ fromJSON(inputs.job_timeout_minutes) }}
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --format-version 1
+      - name: Verify patched llama-server
+        run: test -x "${{ inputs.llama_server }}"
+      - name: Run sustained live VRAM burn-in
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIG: ${{ inputs.config }}
+          LLAMA_SERVER: ${{ inputs.llama_server }}
+          WORK_DIR: ${{ inputs.work_dir }}
+          RUNS: ${{ inputs.runs }}
+          MAX_CASES: ${{ inputs.max_cases }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+          RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
+          MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
+          CUSTOM_MIN_PASSED_SECONDS: ${{ inputs.min_passed_elapsed_seconds }}
+          MAX_RSS_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_growth_jitter_ratio }}
+          MAX_RSS_TAIL_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_tail_growth_jitter_ratio }}
+          MAX_BACKEND_KV_JITTER_RATIO: ${{ inputs.max_backend_kv_jitter_ratio }}
+          MAX_PROJECTED_DEVICE_JITTER_RATIO: ${{ inputs.max_projected_device_jitter_ratio }}
+          MAX_DIRECT_PEAK_VRAM_JITTER_RATIO: ${{ inputs.max_direct_peak_vram_jitter_ratio }}
+        run: |
+          set -euo pipefail
+
+          case "${MODE}" in
+            one-hour)
+              MIN_PASSED_SECONDS=3600
+              ;;
+            overnight)
+              MIN_PASSED_SECONDS=28800
+              ;;
+            custom)
+              MIN_PASSED_SECONDS="${CUSTOM_MIN_PASSED_SECONDS}"
+              ;;
+            *)
+              echo "unknown burn-in mode: ${MODE}" >&2
+              exit 64
+              ;;
+          esac
+
+          python3 scripts/llama_cpp_live_vram_server_burnin.py \
+            --config "${CONFIG}" \
+            --llama-server "${LLAMA_SERVER}" \
+            --work-dir "${WORK_DIR}" \
+            --runs "${RUNS}" \
+            --max-cases "${MAX_CASES}" \
+            --timeout "${TIMEOUT_SECONDS}" \
+            --run-timeout "${RUN_TIMEOUT_SECONDS}" \
+            --max-total-seconds "${MAX_TOTAL_SECONDS}" \
+            --min-passed-elapsed-seconds "${MIN_PASSED_SECONDS}" \
+            --require-backend-memory-diagnostics \
+            --require-soak-memory-metrics \
+            --max-rss-growth-jitter-ratio "${MAX_RSS_GROWTH_JITTER_RATIO}" \
+            --max-rss-tail-growth-jitter-ratio "${MAX_RSS_TAIL_GROWTH_JITTER_RATIO}" \
+            --max-backend-kv-jitter-ratio "${MAX_BACKEND_KV_JITTER_RATIO}" \
+            --max-projected-device-jitter-ratio "${MAX_PROJECTED_DEVICE_JITTER_RATIO}" \
+            --max-direct-peak-vram-jitter-ratio "${MAX_DIRECT_PEAK_VRAM_JITTER_RATIO}"
+      - name: Upload burn-in summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-vram-burnin-summary
+          path: |
+            ${{ inputs.work_dir }}/server-burnin-plan.json
+            ${{ inputs.work_dir }}/summary.json
+            ${{ inputs.work_dir }}/summary.md
+          if-no-files-found: warn

@@ -454,6 +454,15 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       passing runs do not meet the requested duration or completed cases do not
       export RSS growth/tail metrics. This makes the one-hour and overnight
       claims auditable, but the actual long-duration runs remain open below.
+- [x] Add a manual self-hosted live-VRAM burn-in workflow. The workflow at
+      `.github/workflows/live-vram-burnin.yml` targets runners labelled
+      `self-hosted` and `live-vram`, offers one-hour, overnight, and custom
+      profiles, verifies the patched `llama-server` path, invokes the burn-in
+      wrapper with backend-memory, soak-memory, elapsed-duration, and jitter
+      gates, accepts a `job_timeout_minutes` ceiling for long runs, and uploads
+      the plan/summary artifacts. This is the reproducible launch path for the
+      real long soaks; the soaks themselves remain open until the workflow has
+      passed on suitable hardware.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

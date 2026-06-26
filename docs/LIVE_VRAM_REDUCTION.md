@@ -2867,6 +2867,15 @@ Exit criteria:
       `cargo test --locked --test scripts live_vram_server_burnin -- --nocapture`
       proves the gates fail closed. This enables, but does not replace, the
       real one-hour and overnight runtime soaks below.
+- [x] Manual self-hosted sustained burn-in workflow. The
+      `.github/workflows/live-vram-burnin.yml` workflow runs the burn-in wrapper
+      on a self-hosted runner labelled `live-vram`, supports `one-hour`,
+      `overnight`, and `custom` modes, uploads the plan/summary artifacts, and
+      always forwards the backend-memory, soak-memory, elapsed-duration, and
+      repeated-jitter gates. `job_timeout_minutes` must be set high enough for
+      the chosen profile. It is intentionally not a GitHub-hosted workflow; the
+      patched runtime, model files, accelerator telemetry, and long-running
+      process control must come from the dedicated runner.
 - [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 

@@ -1069,9 +1069,12 @@ python3 scripts/llama_cpp_live_vram_server_burnin.py \
   --max-cases 2 \
   --timeout 1800 \
   --run-timeout 2400 \
+  --min-passed-elapsed-seconds 3600 \
   --require-backend-memory-diagnostics \
+  --require-soak-memory-metrics \
   --max-backend-kv-jitter-ratio 1.001 \
-  --max-projected-device-jitter-ratio 1.001
+  --max-projected-device-jitter-ratio 1.001 \
+  --max-rss-tail-growth-jitter-ratio 1.5
 ```
 
 The runner repeats the matrix, fails on the first failed run, starts each matrix
@@ -1085,7 +1088,16 @@ unless each gated metric has at least two non-zero samples. Use
 `--require-backend-memory-diagnostics` for production-shaped burn-ins; it fails
 unless every completed matrix case carries projected device memory and a
 non-host accelerator memory breakdown, even if a matrix config forgot to
-require backend diagnostics per case. The server probe's
+require backend diagnostics per case. Use `--min-passed-elapsed-seconds 3600`
+for the one-hour gate and `28800` or higher for overnight soak evidence.
+`--require-soak-memory-metrics` fails unless every completed case exports RSS
+growth, RSS tail growth, and RSS tail range metrics, and
+`--max-rss-tail-growth-jitter-ratio` rejects unstable repeated tail growth. The
+manual `.github/workflows/live-vram-burnin.yml` workflow runs this same wrapper
+on self-hosted runners labelled `live-vram`; set `job_timeout_minutes` high
+enough for the selected one-hour, overnight, or custom profile. GitHub-hosted
+runners are not a substitute because they do not provide the patched runtime,
+model files, or direct accelerator telemetry. The server probe's
 steady-state tail gate now fails on positive RSS tail growth rather than raw
 tail range, so a process that returns memory during the tail window is reported
 as volatile but is not rejected as leaking. The accepted comparison gate uses
