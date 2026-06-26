@@ -1155,6 +1155,128 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_burnin_rejects_missing_or_malformed_matrix_summary() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    config = tmp / "config.json"
+    config.write_text(json.dumps({
+        "cases": [
+            {
+                "id": "summary-integrity",
+                "model": "/tmp/model-a.gguf",
+                "model_id": "summary-integrity"
+            }
+        ]
+    }), encoding="utf-8")
+    llama_server = tmp / "llama-server"
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+
+    missing_runner = tmp / "missing_summary_matrix.py"
+    missing_runner.write_text(
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "Path(args.work_dir).mkdir(parents=True, exist_ok=True)\n"
+        "print('matrix exited without summary')\n",
+        encoding="utf-8",
+    )
+    missing_work = tmp / "missing-summary"
+    missing = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--matrix-runner",
+            str(missing_runner),
+            "--probe-runner",
+            "scripts/llama_cpp_live_vram_server_cancel_probe.py",
+            "--llama-server",
+            str(llama_server),
+            "--work-dir",
+            str(missing_work),
+            "--runs",
+            "1",
+            "--timeout",
+            "10",
+            "--run-timeout",
+            "10",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert missing.returncode == 1, missing.stdout
+    missing_summary = json.loads((missing_work / "summary.json").read_text())
+    assert missing_summary["status"] == "fail"
+    assert missing_summary["runs"][0]["returncode"] == 0
+    assert "matrix summary missing" in missing_summary["runs"][0]["failure"]
+
+    malformed_runner = tmp / "malformed_summary_matrix.py"
+    malformed_runner.write_text(
+        "import argparse, json\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "work = Path(args.work_dir)\n"
+        "work.mkdir(parents=True, exist_ok=True)\n"
+        "(work / 'summary.json').write_text(json.dumps({\n"
+        "    'format': 'wrong-format',\n"
+        "    'status': 'pass',\n"
+        "    'cases': []\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+    malformed_work = tmp / "malformed-summary"
+    malformed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--matrix-runner",
+            str(malformed_runner),
+            "--probe-runner",
+            "scripts/llama_cpp_live_vram_server_cancel_probe.py",
+            "--llama-server",
+            str(llama_server),
+            "--work-dir",
+            str(malformed_work),
+            "--runs",
+            "1",
+            "--timeout",
+            "10",
+            "--run-timeout",
+            "10",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert malformed.returncode == 1, malformed.stdout
+    malformed_summary = json.loads((malformed_work / "summary.json").read_text())
+    assert malformed_summary["status"] == "fail"
+    assert "unexpected format" in malformed_summary["runs"][0]["failure"]
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_total_budget_caps_active_run_timeout() {
     let output = run_python_snippet(
         r#"

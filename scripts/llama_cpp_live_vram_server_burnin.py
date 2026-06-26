@@ -240,10 +240,13 @@ def run_matrix(
         )
     stderr_path.write_text(stderr_text, encoding="utf-8")
     elapsed = time.monotonic() - started
-    summary = load_json(summary_path)
+    summary, summary_failure = load_matrix_summary(summary_path)
     status = str(summary.get("status") or ("fail" if returncode else "pass"))
     if returncode != 0:
         status = "fail"
+    if summary_failure:
+        status = "fail"
+        failure = summary_failure if not failure else f"{failure}; {summary_failure}"
     if status not in {"pass", "dry-run"} and not failure:
         failure = summarise_matrix_failure(summary)
     return BurnInRun(
@@ -511,14 +514,28 @@ def timeout_output_to_text(value: str | bytes | None) -> str:
     return value
 
 
-def load_json(path: Path) -> dict[str, Any]:
+def load_matrix_summary(path: Path) -> tuple[dict[str, Any], str]:
     if not path.is_file():
-        return {}
+        return {}, f"matrix summary missing: {path}"
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    return value if isinstance(value, dict) else {}
+    except json.JSONDecodeError as exc:
+        return {}, f"matrix summary is invalid JSON: {path}: {exc}"
+    if not isinstance(value, dict):
+        return {}, f"matrix summary is not a JSON object: {path}"
+    expected_format = "qatq-live-vram-server-cancel-matrix-summary-v1"
+    if value.get("format") != expected_format:
+        return value, (
+            "matrix summary has unexpected format: "
+            f"{value.get('format')!r}; expected {expected_format}"
+        )
+    status = value.get("status")
+    if status not in {"pass", "dry-run", "fail"}:
+        return value, f"matrix summary has invalid status: {status!r}"
+    cases = value.get("cases")
+    if not isinstance(cases, list):
+        return value, "matrix summary missing cases array"
+    return value, ""
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
