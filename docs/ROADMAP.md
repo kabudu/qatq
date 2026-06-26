@@ -564,6 +564,18 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       at `528`, `416`, and `0` KiB for Qwen 1.5B, Qwen 3B, and Phi. This
       narrows the failed overnight signal further, but overnight and direct
       hardware peak-VRAM proof remain open.
+- [x] Re-run rotated mixed-model burn-in through the one-hour gate. The longer
+      local proof at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate-onehour-20260626`
+      passed `7/7` repeats, `21/21` real cases, and `3996.35` passed seconds
+      against the `3600` second gate. It covered two full all-order cycles plus
+      one original-order repeat, held projected device memory stable at
+      `1426`, `2391`, and `5304` MiB, and kept max steady-state RSS-tail
+      growth at `368`, `528`, and `624` KiB for Qwen 1.5B, Qwen 3B, and Phi
+      under the unchanged `4096` KiB gate. The hardware-counter report confirms
+      backend diagnostics for `21/21` cases while direct peak-VRAM remains
+      unavailable on this Apple Metal host. Overnight and direct hardware
+      peak-VRAM proof remain open.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

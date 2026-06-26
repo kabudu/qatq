@@ -22,7 +22,13 @@ from typing import Any
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--matrix-summary", help="Optional server matrix summary.json to inspect")
+    parser.add_argument(
+        "--matrix-summary",
+        help=(
+            "Optional server matrix summary.json or server burn-in summary.json "
+            "to inspect."
+        ),
+    )
     parser.add_argument("--output", default="/tmp/qatq-live-vram-hardware-counters.json")
     parser.add_argument(
         "--require-backend-memory-diagnostics",
@@ -432,6 +438,9 @@ def inspect_matrix_summary(path: Path | None) -> dict[str, Any]:
         return {
             "present": False,
             "available": False,
+            "summary_kind": None,
+            "summary_status": None,
+            "completed_runs": 0,
             "cases_with_projected_device_memory": 0,
             "cases_with_accelerator_breakdown": 0,
             "reason": "no --matrix-summary was provided",
@@ -440,13 +449,77 @@ def inspect_matrix_summary(path: Path | None) -> dict[str, Any]:
         return {
             "present": False,
             "available": False,
+            "summary_kind": None,
+            "summary_status": None,
+            "completed_runs": 0,
             "cases_with_projected_device_memory": 0,
             "cases_with_accelerator_breakdown": 0,
             "reason": "matrix summary does not exist",
         }
     summary = load_json(path)
+    if summary.get("format") == "qatq-live-vram-server-burnin-summary-v1":
+        return inspect_burnin_summary(path, summary)
+    return inspect_case_summary(summary, summary_kind="matrix")
+
+
+def inspect_burnin_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
+    runs = summary.get("runs")
+    runs = runs if isinstance(runs, list) else []
+    cases: list[dict[str, Any]] = []
+    missing: list[str] = []
+    completed_runs = 0
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        run_summary_path = run.get("summary")
+        if not isinstance(run_summary_path, str) or not run_summary_path:
+            missing.append(f"run {run.get('index', '<unknown>')}: missing summary path")
+            continue
+        resolved = Path(run_summary_path)
+        if not resolved.is_absolute():
+            resolved = path.parent / resolved
+        run_summary = load_json(resolved)
+        if run_summary.get("status") != "pass":
+            missing.append(f"run {run.get('index', '<unknown>')}: summary status is not pass")
+            continue
+        run_cases = run_summary.get("cases")
+        if not isinstance(run_cases, list) or not run_cases:
+            missing.append(f"run {run.get('index', '<unknown>')}: no cases")
+            continue
+        completed_runs += 1
+        cases.extend(case for case in run_cases if isinstance(case, dict))
+
+    result = inspect_cases(
+        cases,
+        status=summary.get("status"),
+        summary_kind="burn-in",
+        completed_runs=completed_runs,
+    )
+    if missing and result["available"]:
+        result["available"] = False
+        result["reason"] = "; ".join(missing[:8])
+    result["missing_run_summaries"] = missing[:16]
+    return result
+
+
+def inspect_case_summary(summary: dict[str, Any], *, summary_kind: str) -> dict[str, Any]:
     cases = summary.get("cases")
     cases = cases if isinstance(cases, list) else []
+    return inspect_cases(
+        cases,
+        status=summary.get("status"),
+        summary_kind=summary_kind,
+        completed_runs=1 if summary.get("status") == "pass" else 0,
+    )
+
+
+def inspect_cases(
+    cases: list[dict[str, Any]],
+    *,
+    status: Any,
+    summary_kind: str,
+    completed_runs: int,
+) -> dict[str, Any]:
     projected = 0
     breakdown = 0
     for case in cases:
@@ -462,7 +535,6 @@ def inspect_matrix_summary(path: Path | None) -> dict[str, Any]:
         )
         if isinstance(memory_breakdown, dict) and any(key != "Host" for key in memory_breakdown):
             breakdown += 1
-    status = summary.get("status")
     available = (
         status == "pass"
         and len(cases) > 0
@@ -487,7 +559,9 @@ def inspect_matrix_summary(path: Path | None) -> dict[str, Any]:
     return {
         "present": True,
         "available": available,
-        "summary_status": summary.get("status"),
+        "summary_kind": summary_kind,
+        "summary_status": status,
+        "completed_runs": completed_runs,
         "total_cases": len(cases),
         "cases_with_projected_device_memory": projected,
         "cases_with_accelerator_breakdown": breakdown,

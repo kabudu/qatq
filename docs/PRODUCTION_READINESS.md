@@ -142,8 +142,11 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > A local rotated mixed-model proof passed `3/3` repeats and `9/9` cases with
 > Phi last, middle, and first, stable projected device memory, max `0` KiB Phi
 > steady-state RSS-tail growth, and max `6.63108s` Phi follow-up p95/p99
-> latency. Overnight mixed-model burn-in and direct peak-VRAM hardware-counter
-> proof remain open.
+> latency. A longer rotated one-hour proof then passed `7/7` repeats,
+> `21/21` cases, and `3996.35` passed seconds, with stable projected device
+> memory, max `624` KiB Phi steady-state RSS-tail growth, and max `6.49400s`
+> Phi follow-up p95/p99 latency. Overnight mixed-model burn-in and direct
+> peak-VRAM hardware-counter proof remain open.
 
 ## Implemented Evidence
 
@@ -312,3 +315,14 @@ device memory stayed stable at `1426`, `2391`, and `5304` MiB, and max
 steady-state RSS-tail growth stayed at `528`, `416`, and `0` KiB for Qwen
 1.5B, Qwen 3B, and Phi. This strengthens the sequence-sensitivity evidence,
 but it is still a compact burn-in rather than an overnight production pass.
+The longer rotated one-hour run at
+`/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate-onehour-20260626`
+then passed `7/7` repeats and `21/21` real cases, banked `3996.35` passed
+seconds against the `3600` second gate, and covered two full all-order cycles
+plus one original-order repeat. Projected device memory stayed stable at
+`1426`, `2391`, and `5304` MiB; max steady-state RSS-tail growth was `368`,
+`528`, and `624` KiB for Qwen 1.5B, Qwen 3B, and Phi; and max follow-up p95
+latency was `2.56212s`, `5.49039s`, and `6.49400s`. Its
+`hardware-counters.json` report confirms backend diagnostics for all `21`
+cases while direct peak-VRAM counters remain unavailable on this Apple Metal
+host.

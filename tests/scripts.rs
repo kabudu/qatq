@@ -2767,6 +2767,79 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_hardware_counter_report_accepts_burnin_summary() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+def case(case_id):
+    return {
+        "id": case_id,
+        "projected_device_memory_mib": 1458,
+        "backend_memory": {
+            "memory_breakdown_mib": {
+                "MTL0 (Apple M4)": {"self": 1458, "context": 224, "compute": 299},
+                "Host": {"self": 196},
+            }
+        },
+    }
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    for index in (1, 2):
+        run = tmp / f"run-{index:03d}"
+        run.mkdir()
+        (run / "summary.json").write_text(json.dumps({
+            "status": "pass",
+            "cases": [case(f"case-{index}-a"), case(f"case-{index}-b")],
+        }), encoding="utf-8")
+    burnin = tmp / "summary.json"
+    output = tmp / "hardware.json"
+    burnin.write_text(json.dumps({
+        "format": "qatq-live-vram-server-burnin-summary-v1",
+        "status": "pass",
+        "runs": [
+            {"index": 1, "summary": str(tmp / "run-001" / "summary.json")},
+            {"index": 2, "summary": str(tmp / "run-002" / "summary.json")},
+        ],
+    }), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_hardware_counters.py",
+            "--matrix-summary",
+            str(burnin),
+            "--output",
+            str(output),
+            "--require-backend-memory-diagnostics",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(output.read_text())
+    backend = report["backend_memory_diagnostics"]
+    assert backend["available"] is True
+    assert backend["summary_kind"] == "burn-in"
+    assert backend["completed_runs"] == 2
+    assert backend["total_cases"] == 4
+    assert backend["cases_with_projected_device_memory"] == 4
+    assert backend["cases_with_accelerator_breakdown"] == 4
+    assert backend["direct_peak_vram_counter"] is False
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_hardware_counter_report_requires_backend_memory_diagnostics() {
     let output = run_python_snippet(
         r#"

@@ -3042,6 +3042,23 @@ Exit criteria:
       evidence and shows the failed overnight Phi tail spike is not reproduced
       by a compact all-orders burn-in, but it still does not close overnight
       soak or direct hardware peak-VRAM proof.
+- [x] Re-run the rotated mixed-model burn-in through a one-hour gate. The
+      longer local run at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate-onehour-20260626`
+      passed `7/7` repeats and `21/21` real cancellation/follow-up cases,
+      banked `3996.35` passed seconds against the `3600` second gate, and
+      covered two complete all-order cycles plus a final original-order repeat.
+      Projected device memory stayed exactly stable at `1426`, `2391`, and
+      `5304` MiB. Max steady-state RSS-tail growth stayed well under the
+      unchanged `4096` KiB ceiling at `368`, `528`, and `624` KiB for Qwen
+      1.5B, Qwen 3B, and Phi. Max follow-up p95 latency was `2.56212s`,
+      `5.49039s`, and `6.49400s`, while average p50 predicted throughput was
+      `76.1863`, `39.2627`, and `33.6160` tok/s. The companion
+      `hardware-counters.json` confirms all `21/21` cases had projected device
+      memory and accelerator breakdown diagnostics, but direct peak-VRAM
+      counters remain unavailable on this Apple Metal host. This is the
+      strongest current long-running sequence-sensitivity pass, but it still
+      does not close overnight soak or direct hardware peak-VRAM proof.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests
