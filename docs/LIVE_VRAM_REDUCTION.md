@@ -1919,7 +1919,11 @@ and `gpu_allocation_granularity`; non-zero reclaimed GPU bytes; a GPU saved
 ratio at or above the threshold; exact restore coverage; restore-deadline
 compliance; and every offloaded page being QATQ-compressed and better than the
 best general-codec baseline. It allows `whole-tensor` evidence because that is
-the current llama.cpp mixed-layer adapter granularity.
+the current llama.cpp mixed-layer adapter granularity. JSON emitted by this gate
+is labelled with `claim_scope: "runtime-kv-allocation-reclaim"` so automated
+release, website, or benchmark consumers do not confuse it with
+`claim_scope: "token-page-live-paging"` evidence from the stricter live-paging
+gate.
 
 Use the typed attention-equivalence gate before claiming that an adapter's
 attention path can operate over bounded KV pages:

@@ -966,11 +966,60 @@ fn run_live_vram_export_report(
         }
     }
 
-    Ok(report.to_json_with_runtime_estimates_and_event_trace(
-        residency_estimate.as_ref(),
-        restore_deadline_report.as_ref(),
-        event_trace_report.as_ref(),
+    Ok(render_live_vram_cli_json(
+        &report.to_json_with_runtime_estimates_and_event_trace(
+            residency_estimate.as_ref(),
+            restore_deadline_report.as_ref(),
+            event_trace_report.as_ref(),
+        ),
+        options.proof_gate,
+        options.runtime_reclaim_gate,
+        options.live_paging_gate,
     ))
+}
+
+fn render_live_vram_cli_json(
+    report_json: &str,
+    proof_gate: bool,
+    runtime_reclaim_gate: bool,
+    live_paging_gate: bool,
+) -> String {
+    let (claim_scope, claim_scope_detail) = if live_paging_gate {
+        (
+            "token-page-live-paging",
+            "Strict live-paging evidence: per-page residency, page-level reclaim, sealed restore, restore-before-attention event trace, restore-deadline, and codec gates passed.",
+        )
+    } else if runtime_reclaim_gate {
+        (
+            "runtime-kv-allocation-reclaim",
+            "Scoped runtime allocation evidence: GPU KV allocation bytes fell against runtime-attested totals, but whole-tensor allocation granularity is not token-page live paging.",
+        )
+    } else if proof_gate {
+        (
+            "experimental-proof-estimate",
+            "Strict QATQ proof-gate evidence over exported pages and allocator metadata; use live-paging gate for token-page runtime claims.",
+        )
+    } else {
+        (
+            "experimental-evidence",
+            "Ungated QATQ live-VRAM evidence report over exported pages; not a live VRAM reduction claim.",
+        )
+    };
+    inject_live_vram_claim_scope(report_json, claim_scope, claim_scope_detail)
+}
+
+fn inject_live_vram_claim_scope(report_json: &str, claim_scope: &str, detail: &str) -> String {
+    let Some(rest) = report_json.strip_prefix("{\n") else {
+        return report_json.to_string();
+    };
+    let mut out = String::from("{\n");
+    out.push_str("  \"claim_scope\": ");
+    push_json_string(&mut out, claim_scope);
+    out.push_str(",\n  \"claim_scope_detail\": ");
+    push_json_string(&mut out, detail);
+    out.push_str(",\n");
+    out.push_str(rest);
+    out
 }
 
 fn format_failure_messages(messages: impl IntoIterator<Item = impl ToString>) -> String {

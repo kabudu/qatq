@@ -988,6 +988,8 @@ fn kv_bench_live_vram_export_writes_json_evidence() {
     assert!(status.success());
 
     let json = fs::read_to_string(&output).expect("read evidence");
+    assert!(json.contains("\"claim_scope\": \"experimental-evidence\""));
+    assert!(json.contains("not a live VRAM reduction claim"));
     assert!(json.contains("\"adapter_contract_version\": \"qatq-live-vram-adapter-v0\""));
     assert!(json.contains("\"total_pages\": 1"));
     assert!(json.contains("\"verified_restores\": 1"));
@@ -1269,6 +1271,8 @@ fn kv_bench_live_vram_runtime_reclaim_gate_accepts_whole_tensor_reclaim() {
     assert!(status.success());
 
     let json = fs::read_to_string(&output).expect("read evidence");
+    assert!(json.contains("\"claim_scope\": \"runtime-kv-allocation-reclaim\""));
+    assert!(json.contains("not token-page live paging"));
     assert!(json.contains("\"allocation_granularity\": \"whole-tensor\""));
     assert!(json.contains("\"gpu_context_bytes_before\": 32768"));
     assert!(json.contains("\"gpu_context_bytes_after\": 16384"));
@@ -1428,6 +1432,8 @@ fn kv_bench_live_vram_live_paging_gate_accepts_safe_event_trace() {
     assert!(status.success());
 
     let json = fs::read_to_string(&output).expect("read evidence");
+    assert!(json.contains("\"claim_scope\": \"token-page-live-paging\""));
+    assert!(json.contains("Strict live-paging evidence"));
     assert!(json.contains("\"allocation_granularity\": \"per-page\""));
     assert!(json.contains("\"gpu_context_bytes_before\": 32768"));
     assert!(json.contains("\"gpu_context_bytes_after\": 16384"));
