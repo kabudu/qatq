@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -103,16 +104,27 @@ def main() -> int:
             "--output",
             str(kv_report),
         ]
-        kv_run = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=args.timeout)
-        if kv_run.returncode == 0:
-            kv_report_text = kv_report.read_text(encoding="utf-8")
-        else:
+        try:
+            kv_run = run_command(command, cwd=root, timeout=args.timeout)
+        except subprocess.TimeoutExpired as error:
+            cleanup = getattr(error, "cleanup", {})
             kv_report_text = (
                 "## KV Compression Attempt\n\n"
                 f"- command: `{shell_join(command)}`\n"
-                f"- exit code: `{kv_run.returncode}`\n"
-                f"- stderr: `{trim(kv_run.stderr, 2000)}`\n"
+                f"- result: timeout after `{args.timeout}s`\n"
+                f"- cleanup signal: `{cleanup.get('signal', 'unknown')}`\n"
+                f"- stderr: `{trim(text_or_empty(error.stderr), 2000)}`\n"
             )
+        else:
+            if kv_run.returncode == 0:
+                kv_report_text = kv_report.read_text(encoding="utf-8")
+            else:
+                kv_report_text = (
+                    "## KV Compression Attempt\n\n"
+                    f"- command: `{shell_join(command)}`\n"
+                    f"- exit code: `{kv_run.returncode}`\n"
+                    f"- stderr: `{trim(kv_run.stderr, 2000)}`\n"
+                )
     elif kv_dir:
         kv_report_text = (
             "## KV Compression Attempt\n\n"
@@ -181,10 +193,8 @@ def run_prompt(args, model: ModelSpec, prompt_label: str, prompt: str, work_dir:
     ]
     started = time.time()
     try:
-        completed = subprocess.run(
+        completed = run_command(
             command,
-            text=True,
-            capture_output=True,
             timeout=args.timeout,
             cwd=Path.cwd(),
         )
@@ -204,6 +214,7 @@ def run_prompt(args, model: ModelSpec, prompt_label: str, prompt: str, work_dir:
         elapsed = time.time() - started
         stdout = text_or_empty(error.stdout)
         stderr = text_or_empty(error.stderr)
+        cleanup = getattr(error, "cleanup", {})
         stdout_path.write_text(stdout, encoding="utf-8")
         stderr_path.write_text(stderr, encoding="utf-8")
         return PromptResult(
@@ -213,14 +224,73 @@ def run_prompt(args, model: ModelSpec, prompt_label: str, prompt: str, work_dir:
             elapsed=elapsed,
             stdout=stdout,
             stderr=stderr,
-            error=f"timeout after {args.timeout}s",
+            error=f"timeout after {args.timeout}s; cleanup={cleanup.get('signal', 'unknown')}",
         )
 
 
 def ensure_kv_bench(path: Path) -> None:
     if path.exists():
         return
-    subprocess.run(["cargo", "build", "--release", "--bin", "qatq-kv-bench"], check=True)
+    completed = run_command(["cargo", "build", "--release", "--bin", "qatq-kv-bench"], cwd=Path.cwd(), timeout=240)
+    if completed.returncode != 0:
+        raise RuntimeError(f"failed to build qatq-kv-bench: {trim(completed.stderr, 2000)}")
+
+
+def run_command(command: list[str], *, cwd: Path | None, timeout: float) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired as error:
+        cleanup = terminate_process_group(proc)
+        timeout_error = subprocess.TimeoutExpired(
+            command,
+            timeout,
+            output=text_or_empty(error.stdout),
+            stderr=text_or_empty(error.stderr),
+        )
+        timeout_error.cleanup = cleanup  # type: ignore[attr-defined]
+        raise timeout_error from error
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": None,
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        cleanup["error"] = str(error)
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            pass
+        except PermissionError as error:
+            cleanup["error"] = str(error)
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["error"] = "process group did not exit after SIGKILL"
+        return cleanup
 
 
 def render_report(args, models, results, kv_report_text: str, elapsed: float) -> str:
