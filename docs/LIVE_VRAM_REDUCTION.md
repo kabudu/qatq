@@ -2886,7 +2886,13 @@ Exit criteria:
       production gates fail early. `job_timeout_minutes` must be set high enough
       for the chosen profile. It is intentionally not a GitHub-hosted workflow;
       the patched runtime, model files, accelerator telemetry, and long-running
-      process control must come from the dedicated runner.
+      process control must come from the dedicated runner. A local
+      production-shaped preflight at
+      `/private/tmp/qatq-live-vram-server-family-policy-preflight-20260626`
+      passed all checks for the six accepted family soak cases using the
+      bootstrapped patched `llama-server`, `--model-root`, the one-hour elapsed
+      gate, backend-memory diagnostics, and soak-memory metrics. This proves the
+      runner-input gate, not the sustained runtime soak.
 - [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 

@@ -234,6 +234,9 @@ installed-runtime reruns cover breadth profiles, sustained Coder profiles,
 bf16/f32 dtype profiles, page-size variation, and sealed metadata evidence. The
 manual self-hosted live-VRAM burn-in workflow now performs a strict preflight
 before long runs, including patched-runtime checks, model-root-resolved config
-artifacts, selected-model presence, and required sustained-soak gates. The
+artifacts, selected-model presence, and required sustained-soak gates. The local
+preflight at `/private/tmp/qatq-live-vram-server-family-policy-preflight-20260626`
+passed all checks for the six accepted family soak cases, but that is still
+runner-input evidence rather than a one-hour or overnight stability claim. The
 implementation and validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).

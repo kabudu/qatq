@@ -465,7 +465,10 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       binaries, model files, model-root mappings, or required production gates
       fail early. This is the reproducible launch path for the real long soaks;
       the soaks themselves remain open until the workflow has passed on suitable
-      hardware.
+      hardware. A local production-shaped preflight at
+      `/private/tmp/qatq-live-vram-server-family-policy-preflight-20260626`
+      passed all checks for the six accepted family soak cases, proving the
+      runner-input gate before the still-open sustained runtime soak.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5
