@@ -1069,6 +1069,7 @@ python3 scripts/llama_cpp_live_vram_server_burnin.py \
   --max-cases 2 \
   --timeout 1800 \
   --run-timeout 2400 \
+  --require-backend-memory-diagnostics \
   --max-backend-kv-jitter-ratio 1.001 \
   --max-projected-device-jitter-ratio 1.001
 ```
@@ -1078,7 +1079,10 @@ run in its own process group, and records `timed_out`, `cleanup_signal`,
 `cleanup_escalated`, and `timeout_seconds` for every run. A matrix timeout
 therefore tears down nested probe/server children instead of leaving live
 runtime processes behind. The runner can also enforce aggregate jitter gates
-across repeated case metrics. The server probe's
+across repeated case metrics. Use `--require-backend-memory-diagnostics` for
+production-shaped burn-ins; it fails unless every completed matrix case carries
+projected device memory and a non-host accelerator memory breakdown, even if a
+matrix config forgot to require backend diagnostics per case. The server probe's
 steady-state tail gate now fails on positive RSS tail growth rather than raw
 tail range, so a process that returns memory during the tail window is reported
 as volatile but is not rejected as leaking. The accepted comparison gate uses
@@ -1112,7 +1116,8 @@ a completed matrix, run:
 ```sh
 python3 scripts/llama_cpp_live_vram_hardware_counters.py \
   --matrix-summary /tmp/qatq-live-vram-server-family-policy/summary.json \
-  --output /tmp/qatq-live-vram-server-family-policy/hardware-counters.json
+  --output /tmp/qatq-live-vram-server-family-policy/hardware-counters.json \
+  --require-backend-memory-diagnostics
 ```
 
 On NVIDIA hosts, run the same helper while the target `llama-server` process is
@@ -1122,6 +1127,7 @@ alive to capture sampled per-process peak GPU memory:
 python3 scripts/llama_cpp_live_vram_hardware_counters.py \
   --matrix-summary /tmp/qatq-live-vram-server-family-policy/summary.json \
   --output /tmp/qatq-live-vram-server-family-policy/hardware-counters.json \
+  --require-backend-memory-diagnostics \
   --sample-pid "$LLAMA_SERVER_PID" \
   --sample-seconds 30 \
   --sample-interval-ms 100 \
