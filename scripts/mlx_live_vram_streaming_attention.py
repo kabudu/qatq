@@ -17,7 +17,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -43,6 +45,12 @@ def main() -> int:
         help="Encode selected K/V pages to QATQ and stream from verified decoded page restores",
     )
     parser.add_argument("--qatq-bin", default="target/release/qatq", help="qatq CLI used for page encode/decode")
+    parser.add_argument(
+        "--qatq-timeout",
+        type=float,
+        default=120.0,
+        help="seconds allowed for each QATQ encode/decode page command",
+    )
     parser.add_argument("--qatq-store-dir", help="directory for encoded QATQ page store")
     parser.add_argument("--keep-qatq-store", action="store_true")
     parser.add_argument(
@@ -82,6 +90,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("--tolerance must be finite and non-negative")
     if not math.isfinite(args.max_peak_page_kv_ratio) or args.max_peak_page_kv_ratio <= 0.0:
         raise ValueError("--max-peak-page-kv-ratio must be finite and positive")
+    if not math.isfinite(args.qatq_timeout) or args.qatq_timeout <= 0.0:
+        raise ValueError("--qatq-timeout must be finite and positive")
 
     export_dir = Path(args.export_dir)
     fixture_dir = Path(args.attention_fixture_dir)
@@ -101,6 +111,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             key_pages_meta=key_pages_meta,
             value_pages_meta=value_pages_meta,
             qatq_bin=Path(args.qatq_bin),
+            qatq_timeout=args.qatq_timeout,
             store_dir=Path(args.qatq_store_dir) if args.qatq_store_dir else None,
             keep_store=args.keep_qatq_store,
         )
@@ -530,6 +541,7 @@ def build_qatq_page_store(
     key_pages_meta: list[dict[str, Any]],
     value_pages_meta: list[dict[str, Any]],
     qatq_bin: Path,
+    qatq_timeout: float,
     store_dir: Path | None,
     keep_store: bool,
 ) -> QatqPageStore:
@@ -556,31 +568,38 @@ def build_qatq_page_store(
     decoded_bytes = 0
     encode_seconds = 0.0
     decode_seconds = 0.0
-    for meta in metas:
-        source = export_dir / str(meta["file"])
-        if not source.exists():
-            raise ValueError(f"missing source page {source}")
-        dtype = page_dtype(meta)
-        if dtype not in ("f16", "bf16", "f32"):
-            raise ValueError(f"unsupported QATQ page dtype {dtype}")
-        encoded = encoded_dir / f"{source.name}.qatq"
-        decoded = decoded_dir / source.name
+    try:
+        for meta in metas:
+            source = export_dir / str(meta["file"])
+            if not source.exists():
+                raise ValueError(f"missing source page {source}")
+            dtype = page_dtype(meta)
+            if dtype not in ("f16", "bf16", "f32"):
+                raise ValueError(f"unsupported QATQ page dtype {dtype}")
+            encoded = encoded_dir / f"{source.name}.qatq"
+            decoded = decoded_dir / source.name
 
-        started = time.perf_counter()
-        run_qatq([qatq_bin, "encode", "--mode", "qatq-exact", "--dtype", dtype, source, encoded])
-        encode_seconds += time.perf_counter() - started
-        started = time.perf_counter()
-        run_qatq([qatq_bin, "decode", encoded, decoded])
-        decode_seconds += time.perf_counter() - started
+            started = time.perf_counter()
+            run_qatq([qatq_bin, "encode", "--mode", "qatq-exact", "--dtype", dtype, source, encoded], timeout=qatq_timeout)
+            encode_seconds += time.perf_counter() - started
+            started = time.perf_counter()
+            run_qatq([qatq_bin, "decode", encoded, decoded], timeout=qatq_timeout)
+            decode_seconds += time.perf_counter() - started
 
-        raw = source.read_bytes()
-        restored = decoded.read_bytes()
-        if restored != raw:
-            raise ValueError(f"QATQ restore mismatch for {source.name}")
-        raw_bytes += len(raw)
-        stored_bytes += encoded.stat().st_size
-        decoded_bytes += len(restored)
-        decoded_by_file[str(meta["file"])] = decoded
+            raw = source.read_bytes()
+            restored = decoded.read_bytes()
+            if restored != raw:
+                raise ValueError(f"QATQ restore mismatch for {source.name}")
+            raw_bytes += len(raw)
+            stored_bytes += encoded.stat().st_size
+            decoded_bytes += len(restored)
+            decoded_by_file[str(meta["file"])] = decoded
+    except Exception:
+        if temp_root is not None:
+            temp_root.cleanup()
+        elif not keep_store and root.exists():
+            shutil.rmtree(root)
+        raise
 
     return QatqPageStore(
         store_dir=root,
@@ -596,18 +615,62 @@ def build_qatq_page_store(
     )
 
 
-def run_qatq(command: list[Path | str]) -> None:
-    completed = subprocess.run(
-        [str(part) for part in command],
+def run_qatq(command: list[Path | str], *, timeout: float) -> None:
+    argv = [str(part) for part in command]
+    proc = subprocess.Popen(
+        argv,
         text=True,
-        capture_output=True,
-        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
     )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        cleanup = terminate_process_group(proc)
+        raise ValueError(
+            "QATQ command timed out after "
+            f"{timeout:g}s; cleanup={cleanup.get('signal', 'unknown')}"
+        ) from error
+    completed = subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
     if completed.returncode != 0:
         stderr = completed.stderr.strip()
         stdout = completed.stdout.strip()
         detail = stderr or stdout or f"exit code {completed.returncode}"
         raise ValueError(f"QATQ command failed: {detail}")
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": None,
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        cleanup["error"] = str(error)
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            pass
+        except PermissionError as error:
+            cleanup["error"] = str(error)
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["error"] = "process group did not exit after SIGKILL"
+        return cleanup
 
 
 def load_json(path: Path) -> dict[str, Any]:

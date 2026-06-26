@@ -3547,6 +3547,66 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn mlx_live_vram_streaming_attention_qatq_timeout_cleans_process_group() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, subprocess, sys, tempfile, time, types
+from pathlib import Path
+
+mlx_pkg = types.ModuleType("mlx")
+mlx_pkg.__path__ = []
+mlx_core = types.ModuleType("mlx.core")
+mlx_pkg.core = mlx_core
+sys.modules["mlx"] = mlx_pkg
+sys.modules["mlx.core"] = mlx_core
+sys.modules["numpy"] = types.ModuleType("numpy")
+
+spec = importlib.util.spec_from_file_location("mlx_attention", "scripts/mlx_live_vram_streaming_attention.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    marker = tmp / "child-terminated.txt"
+    runner = tmp / "hung_qatq.py"
+    runner.write_text(
+        "import subprocess, sys, time\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    sys.argv[1],\n"
+        "])\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    try:
+        module.run_qatq([sys.executable, str(runner), str(marker)], timeout=1)
+    except ValueError as error:
+        message = str(error)
+    else:
+        raise AssertionError("expected timeout")
+    assert "QATQ command timed out after 1s" in message
+    assert "cleanup=SIGTERM" in message
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_classifies_context_http_400_as_fatal_shape_failure() {
     let output = run_python_snippet(
         r#"
