@@ -785,7 +785,9 @@ but direct hardware peak-VRAM counters remain a separate production gate.
 `scripts/llama_cpp_live_vram_server_burnin.py` now repeats a configured server
 matrix as a bounded burn-in gate. It fails on the first failed matrix run and
 can enforce aggregate jitter ceilings for RSS growth, backend K/V memory, and
-projected device memory across repeated runs. Each repeated matrix run executes
+projected device memory across repeated runs. Enabled jitter gates fail closed
+unless each gated metric has at least two non-zero samples. Each repeated matrix
+run executes
 in its own process group; if a run exceeds `--run-timeout`, the wrapper sends
 SIGTERM/SIGKILL to the full group and records `timed_out`, `cleanup_signal`,
 `cleanup_escalated`, and `timeout_seconds` in `summary.json`.

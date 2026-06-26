@@ -355,7 +355,9 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       `scripts/llama_cpp_live_vram_server_burnin.py` repeats a configured
       server-cancellation matrix, fails on the first failed run, and can enforce
       aggregate jitter gates for RSS growth, backend K/V memory, and projected
-      device memory across repeated runs. A first two-run layer-policy attempt
+      device memory across repeated runs. Enabled jitter gates fail closed unless
+      each gated metric has at least two non-zero samples. A first two-run
+      layer-policy attempt
       at
       `/private/tmp/qatq-live-vram-server-layer-policy-burnin2-device-jitter-20260625`
       failed correctly because the QATQ/native RSS-growth ratio hit 2.401x

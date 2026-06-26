@@ -1079,10 +1079,12 @@ run in its own process group, and records `timed_out`, `cleanup_signal`,
 `cleanup_escalated`, and `timeout_seconds` for every run. A matrix timeout
 therefore tears down nested probe/server children instead of leaving live
 runtime processes behind. The runner can also enforce aggregate jitter gates
-across repeated case metrics. Use `--require-backend-memory-diagnostics` for
-production-shaped burn-ins; it fails unless every completed matrix case carries
-projected device memory and a non-host accelerator memory breakdown, even if a
-matrix config forgot to require backend diagnostics per case. The server probe's
+across repeated case metrics; enabled jitter gates fail closed unless each
+gated metric has at least two non-zero samples. Use
+`--require-backend-memory-diagnostics` for production-shaped burn-ins; it fails
+unless every completed matrix case carries projected device memory and a
+non-host accelerator memory breakdown, even if a matrix config forgot to
+require backend diagnostics per case. The server probe's
 steady-state tail gate now fails on positive RSS tail growth rather than raw
 tail range, so a process that returns memory during the tail window is reported
 as volatile but is not rejected as leaking. The accepted comparison gate uses
