@@ -253,6 +253,22 @@ gate failures. Backend projected device memory stayed stable at `1426` MiB for
 Qwen2.5 1.5B, `2391` MiB for Qwen2.5 3B, and `5304` MiB for Phi 3.5 mini.
 The companion hardware-counter report confirms backend diagnostics are present
 but direct per-process peak VRAM counters are unavailable on this Apple Metal
-host, so overnight soak and direct hardware peak-VRAM proof remain open. The
+host, so overnight soak and direct hardware peak-VRAM proof remain open. A
+subsequent overnight-style rerun correctly failed the strict RSS-tail evidence
+path before completion: Qwen2.5 3B reached `6000` KiB tail growth against the
+`4096` KiB ceiling, and a focused two-warmup rerun reproduced the issue at
+`6592` KiB. The burn-in wrapper now stops early on conclusive aggregate gate
+failure, and the mixed-model soak config now uses eight warmup
+cancellation/follow-up cycles before measured iterations. The focused
+warmup-eight Qwen2.5 3B proof at
+`/private/tmp/qatq-live-vram-qwen3b-warmup8-burnin-20260626` passed `4/4`
+repeats, `666.995` passed seconds, stable `2391` MiB projected device memory,
+and `0` to `112` KiB measured RSS-tail growth under the unchanged `4096` KiB
+ceiling. The subsequent mixed-model warmup-eight burn-in at
+`/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-burnin3-20260626`
+passed `3/3` repeats and `9/9` live cancellation/follow-up cases, banked
+`1609.72` passed seconds, kept projected device memory stable at `1426`,
+`2391`, and `5304` MiB, and kept positive measured RSS-tail growth at `0` KiB
+for every completed case under the unchanged `4096` KiB ceiling. The
 implementation and validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).

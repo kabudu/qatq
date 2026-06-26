@@ -13,6 +13,7 @@
     "cache_type_v": "f16",
     "n_predict": 512,
     "cancel_after_bytes": 256,
+    "warmup_iterations": 8,
     "prompt_repeat": 72,
     "host_memory_pressure_mib": 1024,
     "concurrent_followup_during_cancel": true,

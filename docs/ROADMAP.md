@@ -487,6 +487,28 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       per-process peak-VRAM counters remain unavailable on the Apple Metal host,
       so the one-hour soak does not close the separate hardware-counter proof or
       overnight soak items.
+- [x] Fail fast on conclusive sustained-soak aggregate breaches and calibrate
+      mixed-model warmup depth. The first restored overnight-style mixed-model
+      run was stopped after partial aggregate metrics showed Qwen2.5 3B
+      `rss_tail_growth_kib: 6000`, above the strict `4096` KiB ceiling. A
+      focused two-warmup Qwen2.5 3B rerun reproduced the failure at `6592` KiB
+      and proved that the wrapper now stops immediately once a conclusive
+      aggregate gate is already broken. The checked-in mixed-model soak config
+      now runs eight warmup cancellation/follow-up cycles before measured
+      cycles; the focused proof at
+      `/private/tmp/qatq-live-vram-qwen3b-warmup8-burnin-20260626` passed
+      `4/4` Qwen2.5 3B repeats with `666.995` passed seconds, stable `2391`
+      MiB projected device memory, and `0..112` KiB measured RSS-tail growth
+      under the unchanged `4096` KiB ceiling.
+- [x] Re-run the mixed-model source config with the warmup-eight profile. The
+      bounded burn-in at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-burnin3-20260626`
+      passed `3/3` repeats and `9/9` live cancellation/follow-up cases, banked
+      `1609.72` passed seconds against the `1200` second gate, kept projected
+      device memory stable at `1426`, `2391`, and `5304` MiB, and kept
+      positive measured RSS-tail growth at `0` KiB for every case under the
+      unchanged `4096` KiB ceiling. This closes the bounded warmup-depth
+      regression before the still-open one-hour/overnight reruns.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

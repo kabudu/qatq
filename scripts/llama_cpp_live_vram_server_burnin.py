@@ -156,6 +156,7 @@ def main() -> int:
         return 0
 
     runs: list[BurnInRun] = []
+    early_stop_reason = ""
     started = time.monotonic()
     for index in range(1, args.runs + 1):
         if args.max_total_seconds > 0.0 and time.monotonic() - started >= args.max_total_seconds:
@@ -192,8 +193,16 @@ def main() -> int:
         runs.append(run)
         if run.status == "fail":
             break
+        if not args.dry_run:
+            aggregate_gate_failures = evaluate_fail_fast_aggregate_gates(args, aggregate_case_metrics(runs))
+            if aggregate_gate_failures:
+                early_stop_reason = (
+                    f"aggregate gate failed after run {index}: "
+                    + "; ".join(aggregate_gate_failures)
+                )
+                break
 
-    summary = build_summary(args, work_dir, runs)
+    summary = build_summary(args, work_dir, runs, early_stop_reason=early_stop_reason)
     summary["preflight"] = preflight
     summary["config"] = str(prepared_config.effective_path)
     summary["original_config"] = str(prepared_config.original_path)
@@ -562,6 +571,11 @@ def run_matrix(
             f"run {index} exceeded timeout of {format_seconds(run_timeout)}s; "
             f"cleanup={cleanup_signal}"
         )
+    except KeyboardInterrupt:
+        cleanup_signal, cleanup_escalated = terminate_process_group(proc)
+        stdout, stderr = proc.communicate()
+        returncode = 130
+        failure = f"run {index} interrupted; cleanup={cleanup_signal}"
     stdout_path.write_text(timeout_output_to_text(stdout), encoding="utf-8")
     stderr_text = timeout_output_to_text(stderr)
     if timed_out:
@@ -598,7 +612,13 @@ def run_matrix(
     )
 
 
-def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun]) -> dict[str, Any]:
+def build_summary(
+    args: argparse.Namespace,
+    work_dir: Path,
+    runs: list[BurnInRun],
+    *,
+    early_stop_reason: str = "",
+) -> dict[str, Any]:
     run_summaries = [summarise_run(run) for run in runs]
     failures = [run for run in runs if run.status not in {"pass", "dry-run"}]
     aggregate = aggregate_case_metrics(runs)
@@ -625,6 +645,7 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
         or backend_memory_failures
         or soak_memory_failures
         or len(runs) != args.runs
+        or early_stop_reason
     ):
         status = "fail"
     return {
@@ -637,6 +658,7 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
         "passed": sum(1 for run in runs if run.status == "pass"),
         "dry_run_runs": sum(1 for run in runs if run.status == "dry-run"),
         "failed": len(failures),
+        "early_stop_reason": early_stop_reason,
         "runs": run_summaries,
         "sustained_runtime": sustained_runtime,
         "sustained_runtime_failures": sustained_runtime_failures,
@@ -946,6 +968,16 @@ def evaluate_aggregate_gates(args: argparse.Namespace, aggregate: dict[str, Any]
     return failures
 
 
+def evaluate_fail_fast_aggregate_gates(args: argparse.Namespace, aggregate: dict[str, Any]) -> list[str]:
+    """Return aggregate gate failures that are already conclusive mid-burn-in."""
+
+    return [
+        failure
+        for failure in evaluate_aggregate_gates(args, aggregate)
+        if "requires at least two non-zero samples" not in failure
+    ]
+
+
 def summarise_matrix_failure(summary: dict[str, Any]) -> str:
     failures: list[str] = []
     for item in summary.get("comparison_gate_failures", []):
@@ -1078,6 +1110,9 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
             )
             + " |"
         )
+    early_stop_reason = summary.get("early_stop_reason")
+    if isinstance(early_stop_reason, str) and early_stop_reason:
+        lines.extend(["", "## Early Stop", "", f"- {early_stop_reason}"])
     sustained_runtime = summary.get("sustained_runtime", {})
     if isinstance(sustained_runtime, dict):
         lines.extend(

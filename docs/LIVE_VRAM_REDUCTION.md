@@ -2877,6 +2877,9 @@ Exit criteria:
       `rss_tail_growth_kib` jitter with `--max-rss-tail-growth-jitter-ratio`
       or absolute repeated-run leak ceilings with `--max-rss-growth-kib` and
       `--max-rss-tail-growth-kib`.
+      It also stops immediately after a passing repeat if the completed
+      aggregate metrics already breach a conclusive gate, instead of spending
+      hours on a soak that cannot produce a passing summary.
       The focused regression
       `cargo test --locked --test scripts live_vram_server_burnin -- --nocapture`
       proves the gates fail closed. This enables, but does not replace, the
@@ -2925,6 +2928,42 @@ Exit criteria:
       confirms backend diagnostics are present but direct per-process peak VRAM
       counters are unavailable on this Apple Metal host, so direct hardware
       peak-VRAM proof remains separate from this one-hour soak.
+- [x] Add warmup-depth evidence for the strict mixed-model RSS-tail gate. The
+      first overnight-style rerun at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-overnight-restored-20260626`
+      was stopped after the partial aggregate showed Qwen2.5 3B
+      `rss_tail_growth_kib: 6000`, above the strict `4096` KiB ceiling. A
+      focused two-warmup Qwen2.5 3B rerun at
+      `/private/tmp/qatq-live-vram-qwen3b-warmup-burnin-20260626-r2` failed
+      fast after repeat two with `6592` KiB tail growth, confirming that the
+      spike was reproducible under shallow warmup. The checked-in mixed-model
+      soak config now uses eight warmup cancellation/follow-up cycles before
+      the ten measured cycles. The focused warmup-eight proof at
+      `/private/tmp/qatq-live-vram-qwen3b-warmup8-burnin-20260626` passed
+      `4/4` Qwen2.5 3B repeats, banked `666.995` passed seconds against the
+      `600` second gate, kept projected device memory stable at `2391` MiB,
+      and kept measured steady-state RSS tail growth between `0` and `112`
+      KiB under the unchanged `4096` KiB ceiling. This proves the Qwen2.5 3B
+      focused warmup depth, not the full mixed-model one-hour or overnight
+      soak.
+- [x] Re-run the mixed-model soak with warmup-eight. The bounded source-config
+      burn-in at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-burnin3-20260626`
+      passed `3/3` mixed-model repeats and `9/9` live
+      cancellation/follow-up cases, banking `1609.72` passed seconds against
+      the `1200` second gate. Backend diagnostics and soak RSS metrics were
+      present for every case, aggregate gate failures were empty, and projected
+      device memory stayed stable at `1426` MiB for Qwen2.5 1.5B, `2391` MiB
+      for Qwen2.5 3B, and `5304` MiB for Phi 3.5 mini. Positive measured
+      RSS-tail growth was `0` KiB for every completed case under the unchanged
+      `4096` KiB ceiling. Phi reported a large raw tail range in repeat one
+      because RSS fell during the tail window; the positive-growth gate kept
+      the leak signal at `0` KiB. The hardware-counter report at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-burnin3-20260626/hardware-counters.json`
+      again confirms backend diagnostics are present while direct per-process
+      peak-VRAM counters are unavailable on this Apple Metal host. This closes
+      the bounded warmup-depth regression, but it is still not the one-hour or
+      overnight soak.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests

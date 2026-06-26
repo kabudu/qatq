@@ -1573,6 +1573,127 @@ model.unlink()
 }
 
 #[test]
+fn live_vram_server_burnin_stops_early_on_conclusive_aggregate_gate_failure() {
+    let output = run_python_snippet(
+        r###"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    work_dir = tmp / "server-burnin"
+    config = tmp / "config.json"
+    runner = tmp / "tail_gate_matrix.py"
+    llama_server = tmp / "llama-server"
+    model = tmp / "model-a.gguf"
+    model.write_bytes(b"fake model")
+    config.write_text(json.dumps({
+        "defaults": {},
+        "cases": [
+            {
+                "id": "tail-gate",
+                "model": str(model),
+            }
+        ]
+    }), encoding="utf-8")
+    runner.write_text(
+        """
+import argparse, json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument('--work-dir', required=True)
+args, _ = parser.parse_known_args()
+work = Path(args.work_dir)
+work.mkdir(parents=True, exist_ok=True)
+(work / 'summary.json').write_text(json.dumps({
+    'format': 'qatq-live-vram-server-cancel-matrix-summary-v1',
+    'status': 'pass',
+    'dry_run': False,
+    'work_dir': str(work),
+    'total_cases': 1,
+    'passed': 1,
+    'dry_run_cases': 0,
+    'failed': 0,
+    'cases': [
+        {
+            'id': 'tail-gate',
+            'status': 'pass',
+            'elapsed_seconds': 1.0,
+            'rss_growth_kib': 100,
+            'rss_tail_growth_kib': 6000,
+            'rss_tail_range_kib': 6000,
+            'projected_device_memory_mib': 42,
+            'backend_memory': {
+                'memory_breakdown_mib': {
+                    'MTL0': {'self': 42, 'context': 8},
+                    'Host': {'self': 4}
+                }
+            }
+        }
+    ],
+    'comparisons': {},
+    'comparison_gates': {},
+    'comparison_gate_failures': [],
+    'boundary': 'fake matrix'
+}), encoding='utf-8')
+""",
+        encoding="utf-8",
+    )
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--matrix-runner",
+            str(runner),
+            "--probe-runner",
+            "scripts/llama_cpp_live_vram_server_cancel_probe.py",
+            "--llama-server",
+            str(llama_server),
+            "--work-dir",
+            str(work_dir),
+            "--runs",
+            "3",
+            "--timeout",
+            "10",
+            "--run-timeout",
+            "10",
+            "--max-rss-tail-growth-kib",
+            "4096",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1, result.stdout
+    summary = json.loads((work_dir / "summary.json").read_text())
+    assert summary["status"] == "fail"
+    assert summary["runs_requested"] == 3
+    assert summary["runs_completed"] == 1
+    assert summary["passed"] == 1
+    assert summary["failed"] == 0
+    assert "aggregate gate failed after run 1" in summary["early_stop_reason"]
+    assert "tail-gate: rss_tail_growth_kib exceeded absolute gate: 6000.0 > 4096.0" in summary["early_stop_reason"]
+    assert not (work_dir / "run-002").exists()
+    markdown = (work_dir / "summary.md").read_text()
+    assert "## Early Stop" in markdown
+    assert "aggregate gate failed after run 1" in markdown
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_times_out_hung_matrix_process_group() {
     let output = run_python_snippet(
         r#"
@@ -2101,6 +2222,7 @@ assert "case-a: rss_growth_kib jitter gate requires at least two non-zero sample
 assert "case-a: backend_accelerator_context_mib jitter gate requires at least two non-zero samples" in failures
 assert "case-a: projected_device_memory_mib jitter gate requires at least two non-zero samples" in failures
 assert "case-a: direct_peak_vram_mib jitter gate requires at least two non-zero samples" in failures
+assert module.evaluate_fail_fast_aggregate_gates(Args(), aggregate) == []
 "#,
     );
 
