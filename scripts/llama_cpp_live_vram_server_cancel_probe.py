@@ -23,6 +23,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -34,6 +35,8 @@ from llama_cpp_live_vram_hardware_counters import parse_nvidia_smi_process_memor
 
 READY_PATH = "/health"
 COMPLETION_PATH = "/completion"
+DEFAULT_MAX_TRACE_BYTES = 256 * 1024 * 1024
+DEFAULT_MAX_TRACE_LINE_BYTES = 1024 * 1024
 
 
 def main() -> int:
@@ -269,6 +272,24 @@ def main() -> int:
     parser.add_argument("--request-timeout", type=float, default=120.0)
     parser.add_argument("--shutdown-timeout", type=float, default=20.0)
     parser.add_argument(
+        "--max-trace-bytes",
+        type=int,
+        default=DEFAULT_MAX_TRACE_BYTES,
+        help=(
+            "Maximum bytes accepted per QATQ JSONL trace file before evidence "
+            "validation fails closed. Default 268435456."
+        ),
+    )
+    parser.add_argument(
+        "--max-trace-line-bytes",
+        type=int,
+        default=DEFAULT_MAX_TRACE_LINE_BYTES,
+        help=(
+            "Maximum bytes accepted for one JSONL trace line before that line "
+            "is skipped and the evidence gate fails. Default 1048576."
+        ),
+    )
+    parser.add_argument(
         "--prompt",
         default=(
             "You are validating a live LLM runtime migration engine. Explain "
@@ -316,6 +337,8 @@ def main() -> int:
         "require_flattened_flash_consumer": args.require_flattened_flash_consumer,
         "require_live_offloaded_stream_count": args.require_live_offloaded_stream_count,
         "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+        "max_trace_bytes": args.max_trace_bytes,
+        "max_trace_line_bytes": args.max_trace_line_bytes,
         "sample_direct_peak_vram": args.sample_direct_peak_vram,
         "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
         "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
@@ -346,6 +369,8 @@ def main() -> int:
             "require_flattened_flash_consumer": args.require_flattened_flash_consumer,
             "require_live_offloaded_stream_count": args.require_live_offloaded_stream_count,
             "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+            "max_trace_bytes": args.max_trace_bytes,
+            "max_trace_line_bytes": args.max_trace_line_bytes,
             "sample_direct_peak_vram": args.sample_direct_peak_vram,
             "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
             "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
@@ -511,6 +536,8 @@ def main() -> int:
         require_live_offloaded_stream_count=args.require_live_offloaded_stream_count,
         qatq_live_vram=not args.native_baseline,
         qatq_trace_evidence=qatq_traces_enabled(args),
+        max_trace_bytes=args.max_trace_bytes,
+        max_trace_line_bytes=args.max_trace_line_bytes,
     )
     summary = {
         "format": "qatq-live-vram-server-cancel-probe-summary-v1",
@@ -538,6 +565,8 @@ def main() -> int:
         "require_flattened_flash_consumer": args.require_flattened_flash_consumer,
         "require_live_offloaded_stream_count": args.require_live_offloaded_stream_count,
         "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+        "max_trace_bytes": args.max_trace_bytes,
+        "max_trace_line_bytes": args.max_trace_line_bytes,
         "sample_direct_peak_vram": args.sample_direct_peak_vram,
         "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
         "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
@@ -657,6 +686,8 @@ def validate_args(args: argparse.Namespace) -> None:
     require(args.startup_timeout > 0, "--startup-timeout must be positive")
     require(args.request_timeout > 0, "--request-timeout must be positive")
     require(args.shutdown_timeout > 0, "--shutdown-timeout must be positive")
+    require(args.max_trace_bytes > 0, "--max-trace-bytes must be positive")
+    require(args.max_trace_line_bytes > 0, "--max-trace-line-bytes must be positive")
     require(args.prompt_repeat > 0, "--prompt-repeat must be positive")
 
 
@@ -1546,12 +1577,20 @@ def evaluate_result(
     require_live_offloaded_stream_count: int = 0,
     qatq_live_vram: bool = True,
     qatq_trace_evidence: bool = True,
+    max_trace_bytes: int = DEFAULT_MAX_TRACE_BYTES,
+    max_trace_line_bytes: int = DEFAULT_MAX_TRACE_LINE_BYTES,
 ) -> dict[str, object]:
     failures = list(startup_failures)
     event_trace = artifacts["event_trace"]
     page_segments = artifacts["page_segments"]
     persistent_page_source = artifacts["persistent_page_source"]
     persistent_pool = artifacts["persistent_pool"]
+    trace_files = {
+        "event_trace": event_trace,
+        "page_segments": page_segments,
+        "persistent_page_source": persistent_page_source,
+        "persistent_pool": persistent_pool,
+    }
 
     if not stream_cancelled:
         failures.append("streaming request was not cancelled")
@@ -1569,12 +1608,39 @@ def evaluate_result(
         and (not page_segments.is_file() or page_segments.stat().st_size == 0)
     ):
         failures.append("QATQ page-segment trace is missing or empty")
+    if qatq_trace_evidence:
+        failures.extend(trace_file_limit_failures(trace_files, max_trace_bytes))
 
-    event_counts = count_events(event_trace)
-    segment_counts = count_page_segment_events(page_segments) if qatq_trace_evidence else {}
-    persistent_page_source_stats = (
-        count_persistent_page_source_events(persistent_page_source) if qatq_trace_evidence else {}
+    event_counts = (
+        count_events(
+            event_trace,
+            max_trace_bytes=max_trace_bytes,
+            max_trace_line_bytes=max_trace_line_bytes,
+        )
+        if qatq_trace_evidence
+        else {}
     )
+    segment_counts = (
+        count_page_segment_events(
+            page_segments,
+            max_trace_bytes=max_trace_bytes,
+            max_trace_line_bytes=max_trace_line_bytes,
+        )
+        if qatq_trace_evidence
+        else {}
+    )
+    persistent_page_source_stats = (
+        count_persistent_page_source_events(
+            persistent_page_source,
+            max_trace_bytes=max_trace_bytes,
+            max_trace_line_bytes=max_trace_line_bytes,
+        )
+        if qatq_trace_evidence
+        else {}
+    )
+    failures.extend(trace_parse_failures("event trace", event_counts))
+    failures.extend(trace_parse_failures("page-segment trace", segment_counts))
+    failures.extend(trace_parse_failures("persistent page-source trace", persistent_page_source_stats))
     if (
         qatq_live_vram
         and qatq_trace_evidence
@@ -1631,39 +1697,111 @@ def evaluate_result(
         if persistent_page_source.exists()
         else 0,
         "persistent_pool_bytes": persistent_pool.stat().st_size if persistent_pool.exists() else 0,
+        "max_trace_bytes": max_trace_bytes,
+        "max_trace_line_bytes": max_trace_line_bytes,
         "event_counts": event_counts,
         "page_segment_counts": segment_counts,
         "persistent_page_source_stats": persistent_page_source_stats,
     }
 
 
-def count_events(path: Path) -> dict[str, int]:
-    counts: dict[str, int] = {}
+def trace_file_limit_failures(trace_files: dict[str, Path], max_trace_bytes: int) -> list[str]:
+    failures: list[str] = []
+    for name, path in trace_files.items():
+        if not path.exists():
+            continue
+        size = path.stat().st_size
+        if size > max_trace_bytes:
+            failures.append(
+                f"{name} exceeds --max-trace-bytes: {size} > {max_trace_bytes}"
+            )
+    return failures
+
+
+def trace_parse_failures(name: str, stats: dict[str, object]) -> list[str]:
+    failures: list[str] = []
+    oversized_lines = stats.get("_oversized_lines")
+    if isinstance(oversized_lines, int) and oversized_lines > 0:
+        failures.append(f"{name} contains {oversized_lines} oversized JSONL lines")
+    if stats.get("_trace_limit_exceeded") is True:
+        failures.append(f"{name} was not parsed because it exceeds --max-trace-bytes")
+    return failures
+
+
+def new_trace_parse_stats() -> dict[str, int | bool]:
+    return {
+        "_oversized_lines": 0,
+        "_invalid_json_lines": 0,
+        "_parsed_lines": 0,
+        "_trace_limit_exceeded": False,
+    }
+
+
+def stream_jsonl_payloads(
+    path: Path,
+    *,
+    max_trace_bytes: int,
+    max_trace_line_bytes: int,
+    stats: dict[str, int | bool],
+) -> Iterator[dict[str, object]]:
     if not path.exists():
-        return counts
-    for line in path.read_text(errors="replace").splitlines():
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line).get("event")
-        except json.JSONDecodeError:
-            continue
+        return
+    size = path.stat().st_size
+    if size > max_trace_bytes:
+        stats["_trace_limit_exceeded"] = True
+        return
+
+    with path.open("rb") as handle:
+        for raw_line in handle:
+            if not raw_line.strip():
+                continue
+            if len(raw_line) > max_trace_line_bytes:
+                stats["_oversized_lines"] = int(stats["_oversized_lines"]) + 1
+                continue
+            try:
+                payload = json.loads(raw_line.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError:
+                stats["_invalid_json_lines"] = int(stats["_invalid_json_lines"]) + 1
+                continue
+            if isinstance(payload, dict):
+                stats["_parsed_lines"] = int(stats["_parsed_lines"]) + 1
+                yield payload
+
+
+def count_events(
+    path: Path,
+    *,
+    max_trace_bytes: int = DEFAULT_MAX_TRACE_BYTES,
+    max_trace_line_bytes: int = DEFAULT_MAX_TRACE_LINE_BYTES,
+) -> dict[str, int | bool]:
+    counts: dict[str, int] = {}
+    stats = new_trace_parse_stats()
+    for payload in stream_jsonl_payloads(
+        path,
+        max_trace_bytes=max_trace_bytes,
+        max_trace_line_bytes=max_trace_line_bytes,
+        stats=stats,
+    ):
+        event = payload.get("event")
         if isinstance(event, str):
             counts[event] = counts.get(event, 0) + 1
-    return counts
+    return {**counts, **stats}
 
 
-def count_page_segment_events(path: Path) -> dict[str, int]:
+def count_page_segment_events(
+    path: Path,
+    *,
+    max_trace_bytes: int = DEFAULT_MAX_TRACE_BYTES,
+    max_trace_line_bytes: int = DEFAULT_MAX_TRACE_LINE_BYTES,
+) -> dict[str, int | bool]:
     counts: dict[str, int] = {}
-    if not path.exists():
-        return counts
-    for line in path.read_text(errors="replace").splitlines():
-        if not line.strip():
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    stats = new_trace_parse_stats()
+    for payload in stream_jsonl_payloads(
+        path,
+        max_trace_bytes=max_trace_bytes,
+        max_trace_line_bytes=max_trace_line_bytes,
+        stats=stats,
+    ):
         event = payload.get("event")
         if isinstance(event, str):
             counts[event] = counts.get(event, 0) + 1
@@ -1692,10 +1830,15 @@ def count_page_segment_events(path: Path) -> dict[str, int]:
                 if isinstance(shape, list) and all(isinstance(dim, int) for dim in shape):
                     live_shape_key = "live_offloaded_shape." + "x".join(str(dim) for dim in shape)
                     counts[live_shape_key] = counts.get(live_shape_key, 0) + 1
-    return counts
+    return {**counts, **stats}
 
 
-def count_persistent_page_source_events(path: Path) -> dict[str, object]:
+def count_persistent_page_source_events(
+    path: Path,
+    *,
+    max_trace_bytes: int = DEFAULT_MAX_TRACE_BYTES,
+    max_trace_line_bytes: int = DEFAULT_MAX_TRACE_LINE_BYTES,
+) -> dict[str, object]:
     stats: dict[str, object] = {
         "events": 0,
         "max_retained_bytes": 0,
@@ -1708,16 +1851,15 @@ def count_persistent_page_source_events(path: Path) -> dict[str, object]:
         "native_page_streaming_true": 0,
         "native_page_streaming_false": 0,
     }
-    if not path.exists():
-        return stats
+    parse_stats = new_trace_parse_stats()
+    payload_iter = stream_jsonl_payloads(
+        path,
+        max_trace_bytes=max_trace_bytes,
+        max_trace_line_bytes=max_trace_line_bytes,
+        stats=parse_stats,
+    )
     composition_counts: dict[str, int] = {}
-    for line in path.read_text(errors="replace").splitlines():
-        if not line.strip():
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for payload in payload_iter:
         stats["events"] = int(stats["events"]) + 1
         for key in (
             "retained_bytes",
@@ -1741,6 +1883,7 @@ def count_persistent_page_source_events(path: Path) -> dict[str, object]:
         elif native_page_streaming is False:
             stats["native_page_streaming_false"] = int(stats["native_page_streaming_false"]) + 1
     stats["composition_counts"] = composition_counts
+    stats.update(parse_stats)
     return stats
 
 
@@ -1885,6 +2028,8 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     out += f"- iterations completed: `{summary.get('iterations_completed', 0)}` / `{summary.get('iterations_requested', 1)}`\n"
     out += f"- host memory pressure: `{summary.get('host_memory_pressure_mib', 0)} MiB`\n"
     out += f"- QATQ traces enabled: `{summary.get('qatq_traces_enabled', False)}`\n"
+    out += f"- max trace bytes: `{summary.get('max_trace_bytes', DEFAULT_MAX_TRACE_BYTES)}`\n"
+    out += f"- max trace line bytes: `{summary.get('max_trace_line_bytes', DEFAULT_MAX_TRACE_LINE_BYTES)}`\n"
     out += f"- require backend memory diagnostics: `{summary.get('require_backend_memory_diagnostics', False)}`\n"
     direct_peak = summary.get("direct_peak_vram_counter", {})
     if isinstance(direct_peak, dict) and direct_peak.get("enabled"):

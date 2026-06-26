@@ -1156,6 +1156,10 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "250",
             "--direct-peak-vram-retain-samples",
             "2",
+            "--max-trace-bytes",
+            "4096",
+            "--max-trace-line-bytes",
+            "512",
             "--dry-run",
         ],
         check=False,
@@ -1204,6 +1208,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["require_flattened_flash_consumer"] is True
     assert plan["require_live_offloaded_stream_count"] == 2
     assert plan["require_backend_memory_diagnostics"] is True
+    assert plan["max_trace_bytes"] == 4096
+    assert plan["max_trace_line_bytes"] == 512
     assert plan["sample_direct_peak_vram"] is True
     assert plan["require_direct_peak_vram_counter"] is True
     assert plan["direct_peak_vram_sample_interval_ms"] == 250
@@ -1220,6 +1226,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["require_flattened_flash_consumer"] is True
     assert summary["require_live_offloaded_stream_count"] == 2
     assert summary["require_backend_memory_diagnostics"] is True
+    assert summary["max_trace_bytes"] == 4096
+    assert summary["max_trace_line_bytes"] == 512
     assert summary["sample_direct_peak_vram"] is True
     assert summary["require_direct_peak_vram_counter"] is True
     assert summary["direct_peak_vram_sample_interval_ms"] == 250
@@ -2398,6 +2406,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "require_direct_peak_vram_counter": True,
             "direct_peak_vram_sample_interval_ms": 250,
             "direct_peak_vram_retain_samples": 2,
+            "max_trace_bytes": 4096,
+            "max_trace_line_bytes": 512,
         },
         "cases": [
             {
@@ -2433,6 +2443,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert "--require-direct-peak-vram-counter" in command
     assert command[command.index("--direct-peak-vram-sample-interval-ms") + 1] == "250"
     assert command[command.index("--direct-peak-vram-retain-samples") + 1] == "2"
+    assert command[command.index("--max-trace-bytes") + 1] == "4096"
+    assert command[command.index("--max-trace-line-bytes") + 1] == "512"
     case = summary["cases"][0]
     assert case["sample_direct_peak_vram"] is True
     assert case["require_direct_peak_vram_counter"] is True
@@ -3282,6 +3294,81 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert "no flattened Flash attention consumers" in failures
     assert "unexpected attention consumers" in failures
     assert "1 live-offloaded stream indices" in failures
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_server_cancel_probe_rejects_oversized_trace_evidence() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, json, sys, tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp)
+    event_trace = work_dir / "event-trace.jsonl"
+    page_segments = work_dir / "page-segments.jsonl"
+    persistent_page_source = work_dir / "persistent-page-source.jsonl"
+    event_trace.write_text(json.dumps({"event": "ok"}) + "\n", encoding="utf-8")
+    page_segments.write_text(
+        json.dumps({
+            "event": "attention-page-segments",
+            "attention_consumed": True,
+            "consumer": "backend_scheduled_flattened_flash_attention",
+            "segments": [{"stream_index": 0, "live_offloaded": True, "shape": [128, 2, 64, 1]}],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    persistent_page_source.write_text(
+        json.dumps({
+            "event": "attention-persistent-page-source",
+            "native_page_streaming": True,
+            "retained_bytes": 1,
+        }) + "\n",
+        encoding="utf-8",
+    )
+    artifacts = {
+        "event_trace": event_trace,
+        "page_segments": page_segments,
+        "persistent_page_source": persistent_page_source,
+        "persistent_pool": work_dir / "persistent-pool.jsonl",
+    }
+    result = module.evaluate_result(
+        artifacts,
+        stream_cancelled=True,
+        stream_bytes=256,
+        health_after_cancel_ok=True,
+        followup_ok=True,
+        followup_bytes=128,
+        process_returncode=0,
+        startup_failures=[],
+        require_flattened_flash_consumer=True,
+        require_live_offloaded_stream_count=1,
+        max_trace_bytes=10,
+        max_trace_line_bytes=256,
+    )
+    failures = "\n".join(result["failures"])
+    assert "event_trace exceeds --max-trace-bytes" in failures
+    assert "page_segments exceeds --max-trace-bytes" in failures
+    assert "persistent_page_source exceeds --max-trace-bytes" in failures
+    assert "event trace was not parsed because it exceeds --max-trace-bytes" in failures
+    assert "page-segment trace was not parsed because it exceeds --max-trace-bytes" in failures
+    assert result["event_counts"]["_trace_limit_exceeded"] is True
+    assert result["page_segment_counts"]["_trace_limit_exceeded"] is True
+    assert result["persistent_page_source_stats"]["_trace_limit_exceeded"] is True
 "#,
     );
 

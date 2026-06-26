@@ -830,6 +830,11 @@ the same policy as `sample_direct_peak_vram`,
 so burn-in runs on suitable hosts can fail closed on missing direct counters.
 `direct_peak_vram_retain_samples` bounds the retained JSON samples for long
 runs while preserving complete `sample_count` and `peak_memory_mib`.
+The server probe now also bounds JSONL evidence ingestion with
+`--max-trace-bytes` and `--max-trace-line-bytes`. Trace files are parsed
+streamingly, and oversized files or pathological individual lines fail the
+evidence gate rather than being read into memory. Matrix configs can forward
+the same policy as `max_trace_bytes` and `max_trace_line_bytes`.
 For native/QATQ comparison groups, `comparison_gates` can now require direct
 hardware counters with `require_direct_peak_vram_counters: 1` and cap QATQ's
 direct peak-VRAM ratio with `max_direct_peak_vram_ratio`.
