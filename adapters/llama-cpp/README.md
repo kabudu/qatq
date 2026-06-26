@@ -1078,9 +1078,10 @@ The runner repeats the matrix, fails on the first failed run, starts each matrix
 run in its own process group, and records `timed_out`, `cleanup_signal`,
 `cleanup_escalated`, and `timeout_seconds` for every run. A matrix timeout
 therefore tears down nested probe/server children instead of leaving live
-runtime processes behind. The runner can also enforce aggregate jitter gates
-across repeated case metrics; enabled jitter gates fail closed unless each
-gated metric has at least two non-zero samples. Use
+runtime processes behind. If `--max-total-seconds` is set, the remaining total
+budget also caps the active matrix run timeout. The runner can enforce aggregate
+jitter gates across repeated case metrics; enabled jitter gates fail closed
+unless each gated metric has at least two non-zero samples. Use
 `--require-backend-memory-diagnostics` for production-shaped burn-ins; it fails
 unless every completed matrix case carries projected device memory and a
 non-host accelerator memory breakdown, even if a matrix config forgot to

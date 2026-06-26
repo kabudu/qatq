@@ -114,7 +114,8 @@ def main() -> int:
                 )
             )
             break
-        run = run_matrix(args, index, work_dir / f"run-{index:03d}")
+        run_timeout = run_timeout_for_remaining_total(args, started)
+        run = run_matrix(args, index, work_dir / f"run-{index:03d}", run_timeout=run_timeout)
         runs.append(run)
         if run.status == "fail":
             break
@@ -167,7 +168,21 @@ def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
     }
 
 
-def run_matrix(args: argparse.Namespace, index: int, work_dir: Path) -> BurnInRun:
+def run_timeout_for_remaining_total(args: argparse.Namespace, started: float) -> float:
+    run_timeout = float(args.run_timeout or derived_run_timeout(args))
+    if args.max_total_seconds <= 0.0:
+        return run_timeout
+    remaining = args.max_total_seconds - (time.monotonic() - started)
+    return max(0.001, min(run_timeout, remaining))
+
+
+def run_matrix(
+    args: argparse.Namespace,
+    index: int,
+    work_dir: Path,
+    *,
+    run_timeout: float | None = None,
+) -> BurnInRun:
     work_dir.mkdir(parents=True, exist_ok=True)
     stdout_path = work_dir / "matrix-stdout.log"
     stderr_path = work_dir / "matrix-stderr.log"
@@ -191,7 +206,7 @@ def run_matrix(args: argparse.Namespace, index: int, work_dir: Path) -> BurnInRu
         command.extend(["--max-cases", str(args.max_cases)])
     if args.dry_run:
         command.append("--dry-run")
-    run_timeout = args.run_timeout or derived_run_timeout(args)
+    run_timeout = float(run_timeout if run_timeout is not None else args.run_timeout or derived_run_timeout(args))
     started = time.monotonic()
     failure = ""
     proc = subprocess.Popen(
@@ -213,14 +228,14 @@ def run_matrix(args: argparse.Namespace, index: int, work_dir: Path) -> BurnInRu
         stdout, stderr = proc.communicate()
         returncode = 124
         failure = (
-            f"run {index} exceeded timeout of {run_timeout}s; "
+            f"run {index} exceeded timeout of {format_seconds(run_timeout)}s; "
             f"cleanup={cleanup_signal}"
         )
     stdout_path.write_text(timeout_output_to_text(stdout), encoding="utf-8")
     stderr_text = timeout_output_to_text(stderr)
     if timed_out:
         stderr_text += (
-            f"\nserver burn-in matrix run exceeded timeout of {run_timeout}s; "
+            f"\nserver burn-in matrix run exceeded timeout of {format_seconds(run_timeout)}s; "
             f"cleanup={cleanup_signal}; escalated={str(cleanup_escalated).lower()}\n"
         )
     stderr_path.write_text(stderr_text, encoding="utf-8")
@@ -603,6 +618,12 @@ def format_metric(value: Any) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def format_seconds(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.3f}".rstrip("0").rstrip(".")
 
 
 def require(condition: bool, message: str) -> None:
