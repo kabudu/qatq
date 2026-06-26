@@ -150,8 +150,17 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > latency. A longer rotated one-hour proof then passed `7/7` repeats,
 > `21/21` cases, and `3996.35` passed seconds, with stable projected device
 > memory, max `624` KiB Phi steady-state RSS-tail growth, and max `6.49400s`
-> Phi follow-up p95/p99 latency. Overnight mixed-model burn-in and direct
-> peak-VRAM hardware-counter proof remain open.
+> Phi follow-up p95/p99 latency. A duration-targeted overnight attempt at
+> `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate-overnight-duration-20260626`
+> failed closed after `19` passing repeats, `57` passing real cases, and
+> `11,168.4` passing seconds. Projected device memory stayed stable at
+> `1426`/`2391`/`5304` MiB, max steady-state RSS-tail growth stayed under the
+> `4096` KiB gate at `3200`/`80`/`144` KiB, and all passing cases had backend
+> and soak metrics, but Qwen 1.5B hit one tail-latency outlier: iteration `10`
+> took `15.767s` against the strict `15.000s` ceiling after one `9475.494ms`
+> follow-up eval. Overnight mixed-model burn-in therefore remains open on
+> tail-latency resilience, and direct peak-VRAM hardware-counter proof remains
+> open.
 
 ## Implemented Evidence
 

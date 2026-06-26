@@ -3067,6 +3067,24 @@ Exit criteria:
       counters remain unavailable on this Apple Metal host. This is the
       strongest current long-running sequence-sensitivity pass, but it still
       does not close overnight soak or direct hardware peak-VRAM proof.
+- [x] Attempt the duration-targeted rotated mixed-model overnight gate. The
+      local run at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate-overnight-duration-20260626`
+      used the new `--stop-after-min-passed-elapsed` control with a `64` repeat
+      ceiling and a `28,800` second target. It failed closed at run `20` after
+      `19` passing repeats, `57` passing real cancellation/follow-up cases, and
+      `11,168.4` passing seconds. The failure was not memory drift: projected
+      device memory stayed exactly stable at `1426`, `2391`, and `5304` MiB;
+      max steady-state RSS-tail growth stayed within the `4096` KiB ceiling at
+      `3200`, `80`, and `144` KiB for Qwen 1.5B, Qwen 3B, and Phi; and backend
+      memory plus soak metrics were present for all `57` passing cases. The
+      blocker was a Qwen 1.5B tail-latency outlier when that case ran last in
+      the `qwen3b -> phi -> qwen1.5b` order: iteration `10` took `15.767s`
+      against the strict `15.000s` per-iteration ceiling, with one follow-up
+      eval at `9475.494ms` while the p50 follow-up throughput still held
+      `77.19` tok/s. This strengthens the memory-stability evidence beyond the
+      one-hour gate, but keeps overnight production readiness open on
+      tail-latency resilience.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests
