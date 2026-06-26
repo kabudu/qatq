@@ -796,7 +796,14 @@ matrix run timeout.
 `--require-backend-memory-diagnostics` makes the burn-in fail unless every
 completed matrix case has projected device memory and non-host accelerator
 memory breakdown, even if a matrix config forgot to require those diagnostics
-per case. The first
+per case. The wrapper also has explicit sustained-soak gates:
+`--min-passed-elapsed-seconds` fails unless passing matrix runs accumulate the
+requested wall-clock duration, `--require-soak-memory-metrics` fails unless
+every completed case exports `rss_growth_kib`, `rss_tail_growth_kib`, and
+`rss_tail_range_kib`, and `--max-rss-tail-growth-jitter-ratio` fails repeated
+runs whose steady-state RSS tail growth is unstable. This makes the future
+one-hour and overnight burn-in claims machine-checkable instead of relying on
+operator convention. The first
 layer-policy burn-in
 at `/private/tmp/qatq-live-vram-server-layer-policy-burnin2-device-jitter-20260625`
 failed correctly on the existing QATQ/native RSS-growth ratio gate
@@ -2850,6 +2857,16 @@ Exit criteria:
       The scheduled `kv-stress` workflow runs the same gate and asserts exact
       restore, no duplicate offload while inside prefetch or hot windows, bounded
       restore-stall accounting, and an empty CPU offload store at the end.
+- [x] Fail-closed sustained/overnight soak gates in the server burn-in wrapper.
+      `scripts/llama_cpp_live_vram_server_burnin.py` now records
+      `sustained_runtime`, rejects runs below `--min-passed-elapsed-seconds`,
+      requires exported RSS growth/tail metrics with
+      `--require-soak-memory-metrics`, and can cap repeated
+      `rss_tail_growth_kib` jitter with `--max-rss-tail-growth-jitter-ratio`.
+      The focused regression
+      `cargo test --locked --test scripts live_vram_server_burnin -- --nocapture`
+      proves the gates fail closed. This enables, but does not replace, the
+      real one-hour and overnight runtime soaks below.
 - [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 

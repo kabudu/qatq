@@ -1278,6 +1278,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "120",
             "--max-rss-growth-jitter-ratio",
             "1.5",
+            "--max-rss-tail-growth-jitter-ratio",
+            "1.4",
             "--max-backend-kv-jitter-ratio",
             "1.1",
             "--max-projected-device-jitter-ratio",
@@ -1297,12 +1299,16 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["runs"] == 2
     assert plan["timeout_seconds"] == 30
     assert plan["run_timeout_seconds"] == 120
+    assert plan["min_passed_elapsed_seconds"] == 0.0
     assert summary["format"] == "qatq-live-vram-server-burnin-summary-v1"
     assert summary["status"] == "dry-run"
     assert summary["runs_completed"] == 2
     assert summary["dry_run_runs"] == 2
     assert summary["aggregate_gate_failures"] == []
+    assert summary["sustained_runtime_failures"] == []
+    assert summary["soak_memory_metric_failures"] == []
     assert summary["gates"]["max_rss_growth_jitter_ratio"] == 1.5
+    assert summary["gates"]["max_rss_tail_growth_jitter_ratio"] == 1.4
     assert summary["gates"]["max_direct_peak_vram_jitter_ratio"] == 1.2
     for index in (1, 2):
         run_summary = work_dir / f"run-{index:03d}" / "summary.json"
@@ -1919,6 +1925,117 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     text = markdown.read_text()
     assert "## Backend Memory Diagnostics" in text
     assert "## Backend Memory Diagnostic Failures" in text
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_server_burnin_sustained_and_soak_memory_gates_fail_closed() {
+    let output = run_python_snippet(
+        r###"
+import importlib.util, sys, tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_burnin", "scripts/llama_cpp_live_vram_server_burnin.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+class Args:
+    dry_run = False
+    runs = 2
+    min_passed_elapsed_seconds = 10.0
+    require_backend_memory_diagnostics = False
+    require_soak_memory_metrics = True
+    max_rss_growth_jitter_ratio = 0.0
+    max_rss_tail_growth_jitter_ratio = 1.1
+    max_backend_kv_jitter_ratio = 0.0
+    max_projected_device_jitter_ratio = 0.0
+    max_direct_peak_vram_jitter_ratio = 0.0
+
+runs = [
+    module.BurnInRun(
+        index=1,
+        status="pass",
+        returncode=0,
+        elapsed_seconds=3.0,
+        work_dir=Path("/tmp/run1"),
+        summary_path=Path("/tmp/run1/summary.json"),
+        stdout_path=Path("/tmp/run1/stdout"),
+        stderr_path=Path("/tmp/run1/stderr"),
+        failure="",
+        summary={
+            "cases": [
+                {
+                    "id": "case-a",
+                    "rss_growth_kib": 100,
+                    "rss_tail_growth_kib": 10,
+                    "rss_tail_range_kib": 16,
+                },
+                {
+                    "id": "case-b",
+                    "rss_growth_kib": 120,
+                },
+            ]
+        },
+    ),
+    module.BurnInRun(
+        index=2,
+        status="pass",
+        returncode=0,
+        elapsed_seconds=4.0,
+        work_dir=Path("/tmp/run2"),
+        summary_path=Path("/tmp/run2/summary.json"),
+        stdout_path=Path("/tmp/run2/stdout"),
+        stderr_path=Path("/tmp/run2/stderr"),
+        failure="",
+        summary={
+            "cases": [
+                {
+                    "id": "case-a",
+                    "rss_growth_kib": 100,
+                    "rss_tail_growth_kib": 14,
+                    "rss_tail_range_kib": 18,
+                },
+                {
+                    "id": "case-b",
+                    "rss_growth_kib": 125,
+                    "rss_tail_growth_kib": 1,
+                    "rss_tail_range_kib": 2,
+                },
+            ]
+        },
+    ),
+]
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp)
+    summary = module.build_summary(Args(), work_dir, runs)
+    assert summary["status"] == "fail"
+    assert summary["sustained_runtime"]["passed_elapsed_seconds"] == 7.0
+    assert "sustained runtime below required passed elapsed seconds: 7 < 10" in "\n".join(summary["sustained_runtime_failures"])
+    soak = summary["soak_memory_metrics"]
+    assert soak["total_cases"] == 4
+    assert soak["cases_with_rss_growth"] == 4
+    assert soak["cases_with_rss_tail_growth"] == 3
+    assert soak["cases_with_rss_tail_range"] == 3
+    soak_failures = "\n".join(summary["soak_memory_metric_failures"])
+    assert "soak memory metrics missing rss_tail_growth_kib (3/4)" in soak_failures
+    assert "soak memory metrics missing rss_tail_range_kib (3/4)" in soak_failures
+    aggregate_failures = "\n".join(summary["aggregate_gate_failures"])
+    assert "case-a: rss_tail_growth_kib jitter ratio exceeded: 1.4 > 1.1" in aggregate_failures
+    markdown = work_dir / "summary.md"
+    module.write_markdown(markdown, summary)
+    text = markdown.read_text()
+    assert "## Sustained Runtime Failures" in text
+    assert "## Soak Memory Metric Failures" in text
 "###,
     );
 

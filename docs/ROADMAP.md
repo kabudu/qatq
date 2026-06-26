@@ -446,6 +446,14 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       tools: `nvidia-smi` is absent, `powermetrics` requires superuser and
       exposes per-process GPU time, not per-process peak GPU memory, and
       `vmmap` reports virtual memory maps, not a peak GPU memory counter.
+- [x] Add fail-closed elapsed-duration and memory-metric gates for sustained
+      server burn-in. The burn-in wrapper now supports
+      `--min-passed-elapsed-seconds`, `--require-soak-memory-metrics`, and
+      `--max-rss-tail-growth-jitter-ratio`, records sustained-runtime and soak
+      memory diagnostics in JSON/Markdown summaries, and fails closed when
+      passing runs do not meet the requested duration or completed cases do not
+      export RSS growth/tail metrics. This makes the one-hour and overnight
+      claims auditable, but the actual long-duration runs remain open below.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

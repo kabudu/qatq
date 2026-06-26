@@ -69,6 +69,16 @@ def main() -> int:
     parser.add_argument("--max-cases", type=int, default=0)
     parser.add_argument("--max-total-seconds", type=float, default=0.0)
     parser.add_argument(
+        "--min-passed-elapsed-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "Fail unless completed passing runs accumulate at least this many "
+            "wall-clock seconds. Use 3600 for the sustained one-hour gate and "
+            "28800 or higher for overnight soak evidence."
+        ),
+    )
+    parser.add_argument(
         "--require-backend-memory-diagnostics",
         action="store_true",
         help=(
@@ -76,7 +86,16 @@ def main() -> int:
             "memory plus non-host accelerator memory breakdown."
         ),
     )
+    parser.add_argument(
+        "--require-soak-memory-metrics",
+        action="store_true",
+        help=(
+            "Fail unless every completed matrix case exports RSS growth, "
+            "steady-state RSS tail growth, and RSS tail range metrics."
+        ),
+    )
     parser.add_argument("--max-rss-growth-jitter-ratio", type=float, default=0.0)
+    parser.add_argument("--max-rss-tail-growth-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-backend-kv-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-direct-peak-vram-jitter-ratio", type=float, default=0.0)
@@ -133,7 +152,12 @@ def validate_args(args: argparse.Namespace) -> None:
     require(args.run_timeout >= 0, "--run-timeout must be non-negative")
     require(args.max_cases >= 0, "--max-cases must be non-negative")
     require(args.max_total_seconds >= 0.0, "--max-total-seconds must be non-negative")
+    require(args.min_passed_elapsed_seconds >= 0.0, "--min-passed-elapsed-seconds must be non-negative")
     require(args.max_rss_growth_jitter_ratio >= 0.0, "--max-rss-growth-jitter-ratio must be non-negative")
+    require(
+        args.max_rss_tail_growth_jitter_ratio >= 0.0,
+        "--max-rss-tail-growth-jitter-ratio must be non-negative",
+    )
     require(args.max_backend_kv_jitter_ratio >= 0.0, "--max-backend-kv-jitter-ratio must be non-negative")
     require(
         args.max_projected_device_jitter_ratio >= 0.0,
@@ -158,8 +182,11 @@ def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
         "run_timeout_seconds": args.run_timeout,
         "max_cases": args.max_cases,
         "max_total_seconds": args.max_total_seconds,
+        "min_passed_elapsed_seconds": args.min_passed_elapsed_seconds,
         "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+        "require_soak_memory_metrics": args.require_soak_memory_metrics,
         "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
+        "max_rss_tail_growth_jitter_ratio": args.max_rss_tail_growth_jitter_ratio,
         "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
         "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
@@ -272,14 +299,29 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
     failures = [run for run in runs if run.status not in {"pass", "dry-run"}]
     aggregate = aggregate_case_metrics(runs)
     aggregate_failures = [] if args.dry_run else evaluate_aggregate_gates(args, aggregate)
+    sustained_runtime = aggregate_sustained_runtime(args, runs)
+    sustained_runtime_failures = [] if args.dry_run else evaluate_sustained_runtime(args, sustained_runtime)
     backend_memory_diagnostics = aggregate_backend_memory_diagnostics(runs)
     backend_memory_failures = (
         []
         if args.dry_run or not args.require_backend_memory_diagnostics
         else evaluate_backend_memory_diagnostics(backend_memory_diagnostics)
     )
+    soak_memory_metrics = aggregate_soak_memory_metrics(runs)
+    soak_memory_failures = (
+        []
+        if args.dry_run or not getattr(args, "require_soak_memory_metrics", False)
+        else evaluate_soak_memory_metrics(soak_memory_metrics)
+    )
     status = "dry-run" if runs and all(run.status == "dry-run" for run in runs) else "pass"
-    if failures or aggregate_failures or backend_memory_failures or len(runs) != args.runs:
+    if (
+        failures
+        or aggregate_failures
+        or sustained_runtime_failures
+        or backend_memory_failures
+        or soak_memory_failures
+        or len(runs) != args.runs
+    ):
         status = "fail"
     return {
         "format": "qatq-live-vram-server-burnin-summary-v1",
@@ -292,21 +334,29 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
         "dry_run_runs": sum(1 for run in runs if run.status == "dry-run"),
         "failed": len(failures),
         "runs": run_summaries,
+        "sustained_runtime": sustained_runtime,
+        "sustained_runtime_failures": sustained_runtime_failures,
         "aggregate_case_metrics": aggregate,
         "aggregate_gate_failures": aggregate_failures,
         "backend_memory_diagnostics": backend_memory_diagnostics,
         "backend_memory_diagnostic_failures": backend_memory_failures,
+        "soak_memory_metrics": soak_memory_metrics,
+        "soak_memory_metric_failures": soak_memory_failures,
         "gates": {
+            "min_passed_elapsed_seconds": getattr(args, "min_passed_elapsed_seconds", 0.0),
             "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+            "require_soak_memory_metrics": getattr(args, "require_soak_memory_metrics", False),
             "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
+            "max_rss_tail_growth_jitter_ratio": getattr(args, "max_rss_tail_growth_jitter_ratio", 0.0),
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
         },
         "boundary": (
             "Bounded burn-in repetition for the configured llama-server live-VRAM "
-            "matrix. It proves only the selected matrix config, run count, and "
-            "aggregate jitter gates."
+            "matrix. It proves only the selected matrix config, run count, "
+            "elapsed-duration gate, exported memory metrics, and aggregate "
+            "jitter gates."
         ),
     }
 
@@ -337,6 +387,29 @@ def summarise_run(run: BurnInRun) -> dict[str, Any]:
     }
 
 
+def aggregate_sustained_runtime(args: argparse.Namespace, runs: list[BurnInRun]) -> dict[str, Any]:
+    passed_elapsed = sum(run.elapsed_seconds for run in runs if run.status == "pass")
+    return {
+        "passed_elapsed_seconds": passed_elapsed,
+        "required_passed_elapsed_seconds": getattr(args, "min_passed_elapsed_seconds", 0.0),
+        "passing_runs": sum(1 for run in runs if run.status == "pass"),
+        "completed_runs": len(runs),
+    }
+
+
+def evaluate_sustained_runtime(args: argparse.Namespace, sustained_runtime: dict[str, Any]) -> list[str]:
+    required = getattr(args, "min_passed_elapsed_seconds", 0.0)
+    if required <= 0.0:
+        return []
+    elapsed = sustained_runtime.get("passed_elapsed_seconds")
+    if not isinstance(elapsed, (int, float)) or elapsed < required:
+        return [
+            "sustained runtime below required passed elapsed seconds: "
+            f"{format_metric(elapsed)} < {format_metric(required)}"
+        ]
+    return []
+
+
 def aggregate_case_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
     values: dict[str, dict[str, list[float]]] = {}
     for run in runs:
@@ -365,6 +438,76 @@ def aggregate_case_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
         }
         for case_id, case_values in sorted(values.items())
     }
+
+
+def aggregate_soak_memory_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
+    total_cases = 0
+    with_rss_growth = 0
+    with_tail_growth = 0
+    with_tail_range = 0
+    missing_rss_growth: list[str] = []
+    missing_tail_growth: list[str] = []
+    missing_tail_range: list[str] = []
+    for run in runs:
+        if run.status not in {"pass", "dry-run"}:
+            continue
+        cases = run.summary.get("cases")
+        if not isinstance(cases, list):
+            continue
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            total_cases += 1
+            case_label = f"run-{run.index}:{case.get('id', '<unknown>')}"
+            if isinstance(case.get("rss_growth_kib"), (int, float)):
+                with_rss_growth += 1
+            else:
+                missing_rss_growth.append(case_label)
+            if isinstance(case.get("rss_tail_growth_kib"), (int, float)):
+                with_tail_growth += 1
+            else:
+                missing_tail_growth.append(case_label)
+            if isinstance(case.get("rss_tail_range_kib"), (int, float)):
+                with_tail_range += 1
+            else:
+                missing_tail_range.append(case_label)
+    return {
+        "available": (
+            total_cases > 0
+            and with_rss_growth == total_cases
+            and with_tail_growth == total_cases
+            and with_tail_range == total_cases
+        ),
+        "total_cases": total_cases,
+        "cases_with_rss_growth": with_rss_growth,
+        "cases_with_rss_tail_growth": with_tail_growth,
+        "cases_with_rss_tail_range": with_tail_range,
+        "missing_rss_growth": missing_rss_growth[:16],
+        "missing_rss_tail_growth": missing_tail_growth[:16],
+        "missing_rss_tail_range": missing_tail_range[:16],
+        "missing_lists_truncated": (
+            len(missing_rss_growth) > 16
+            or len(missing_tail_growth) > 16
+            or len(missing_tail_range) > 16
+        ),
+    }
+
+
+def evaluate_soak_memory_metrics(metrics: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    total_cases = metrics.get("total_cases")
+    if not isinstance(total_cases, int) or total_cases <= 0:
+        return ["soak memory metrics gate requires at least one completed matrix case"]
+    rss_growth = metrics.get("cases_with_rss_growth")
+    if rss_growth != total_cases:
+        failures.append(f"soak memory metrics missing rss_growth_kib ({rss_growth}/{total_cases})")
+    tail_growth = metrics.get("cases_with_rss_tail_growth")
+    if tail_growth != total_cases:
+        failures.append(f"soak memory metrics missing rss_tail_growth_kib ({tail_growth}/{total_cases})")
+    tail_range = metrics.get("cases_with_rss_tail_range")
+    if tail_range != total_cases:
+        failures.append(f"soak memory metrics missing rss_tail_range_kib ({tail_range}/{total_cases})")
+    return failures
 
 
 def aggregate_backend_memory_diagnostics(runs: list[BurnInRun]) -> dict[str, Any]:
@@ -456,6 +599,7 @@ def evaluate_aggregate_gates(args: argparse.Namespace, aggregate: dict[str, Any]
     failures: list[str] = []
     gate_map = {
         "rss_growth_kib": args.max_rss_growth_jitter_ratio,
+        "rss_tail_growth_kib": getattr(args, "max_rss_tail_growth_jitter_ratio", 0.0),
         "backend_accelerator_context_mib": args.max_backend_kv_jitter_ratio,
         "projected_device_memory_mib": args.max_projected_device_jitter_ratio,
         "direct_peak_vram_mib": args.max_direct_peak_vram_jitter_ratio,
@@ -571,6 +715,23 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
             )
             + " |"
         )
+    sustained_runtime = summary.get("sustained_runtime", {})
+    if isinstance(sustained_runtime, dict):
+        lines.extend(
+            [
+                "",
+                "## Sustained Runtime",
+                "",
+                f"- passed elapsed seconds: `{format_metric(sustained_runtime.get('passed_elapsed_seconds'))}`",
+                f"- required passed elapsed seconds: `{format_metric(sustained_runtime.get('required_passed_elapsed_seconds'))}`",
+                f"- passing runs: `{sustained_runtime.get('passing_runs', 0)}`",
+            ]
+        )
+    sustained_failures = summary.get("sustained_runtime_failures", [])
+    if isinstance(sustained_failures, list) and sustained_failures:
+        lines.extend(["", "## Sustained Runtime Failures", ""])
+        for failure in sustained_failures:
+            lines.append(f"- {failure}")
     aggregate = summary.get("aggregate_case_metrics", {})
     if isinstance(aggregate, dict) and aggregate:
         lines.extend(
@@ -624,6 +785,25 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     if isinstance(backend_failures, list) and backend_failures:
         lines.extend(["", "## Backend Memory Diagnostic Failures", ""])
         for failure in backend_failures:
+            lines.append(f"- {failure}")
+    soak_memory = summary.get("soak_memory_metrics", {})
+    if isinstance(soak_memory, dict):
+        lines.extend(
+            [
+                "",
+                "## Soak Memory Metrics",
+                "",
+                f"- available: `{soak_memory.get('available', False)}`",
+                f"- total cases: `{soak_memory.get('total_cases', 0)}`",
+                f"- RSS growth cases: `{soak_memory.get('cases_with_rss_growth', 0)}`",
+                f"- RSS tail growth cases: `{soak_memory.get('cases_with_rss_tail_growth', 0)}`",
+                f"- RSS tail range cases: `{soak_memory.get('cases_with_rss_tail_range', 0)}`",
+            ]
+        )
+    soak_failures = summary.get("soak_memory_metric_failures", [])
+    if isinstance(soak_failures, list) and soak_failures:
+        lines.extend(["", "## Soak Memory Metric Failures", ""])
+        for failure in soak_failures:
             lines.append(f"- {failure}")
     lines.extend(["", summary["boundary"], ""])
     path.write_text("\n".join(lines), encoding="utf-8")
