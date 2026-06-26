@@ -1062,8 +1062,12 @@ python3 scripts/llama_cpp_live_vram_server_burnin.py \
   --max-projected-device-jitter-ratio 1.001
 ```
 
-The runner repeats the matrix, fails on the first failed run, and can enforce
-aggregate jitter gates across repeated case metrics. The server probe's
+The runner repeats the matrix, fails on the first failed run, starts each matrix
+run in its own process group, and records `timed_out`, `cleanup_signal`,
+`cleanup_escalated`, and `timeout_seconds` for every run. A matrix timeout
+therefore tears down nested probe/server children instead of leaving live
+runtime processes behind. The runner can also enforce aggregate jitter gates
+across repeated case metrics. The server probe's
 steady-state tail gate now fails on positive RSS tail growth rather than raw
 tail range, so a process that returns memory during the tail window is reported
 as volatile but is not rejected as leaking. The accepted comparison gate uses

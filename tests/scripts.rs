@@ -887,6 +887,103 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_burnin_times_out_hung_matrix_process_group() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile, time
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    work_dir = tmp / "server-burnin"
+    config = tmp / "config.json"
+    runner = tmp / "hung_matrix.py"
+    llama_server = tmp / "llama-server"
+    config.write_text(json.dumps({
+        "cases": [
+            {
+                "id": "hung-case",
+                "model": "/tmp/model-a.gguf",
+                "model_id": "hung-case"
+            }
+        ]
+    }), encoding="utf-8")
+    runner.write_text(
+        "import argparse, subprocess, sys, time\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "work = Path(args.work_dir)\n"
+        "work.mkdir(parents=True, exist_ok=True)\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    str(work / 'child-terminated.txt'),\n"
+        "])\n"
+        "print(f'started child {child.pid}', flush=True)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--matrix-runner",
+            str(runner),
+            "--probe-runner",
+            "scripts/llama_cpp_live_vram_server_cancel_probe.py",
+            "--llama-server",
+            str(llama_server),
+            "--work-dir",
+            str(work_dir),
+            "--runs",
+            "1",
+            "--timeout",
+            "10",
+            "--run-timeout",
+            "1",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert completed.returncode == 1, completed.stdout
+    summary = json.loads((work_dir / "summary.json").read_text())
+    assert summary["status"] == "fail"
+    assert summary["failed"] == 1
+    run = summary["runs"][0]
+    assert run["timed_out"] is True
+    assert run["timeout_seconds"] == 1
+    assert run["cleanup_signal"] == "SIGTERM"
+    assert run["cleanup_escalated"] is False
+    assert run["returncode"] == 124
+    assert "cleanup=SIGTERM" in run["failure"]
+    marker = Path(run["work_dir"]) / "child-terminated.txt"
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
+    stderr = Path(run["stderr"]).read_text()
+    assert "server burn-in matrix run exceeded timeout of 1s; cleanup=SIGTERM" in stderr
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_aggregate_gates_fail_closed() {
     let output = run_python_snippet(
         r#"

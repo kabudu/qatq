@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -31,6 +33,10 @@ class BurnInRun:
     stderr_path: Path
     failure: str
     summary: dict[str, Any]
+    timed_out: bool = False
+    timeout_seconds: int = 0
+    cleanup_signal: str | None = None
+    cleanup_escalated: bool = False
 
 
 def main() -> int:
@@ -95,6 +101,8 @@ def main() -> int:
                     stderr_path=work_dir / f"run-{index:03d}" / "matrix-stderr.log",
                     failure=f"burn-in exceeded max total seconds before run {index}",
                     summary={},
+                    timed_out=False,
+                    timeout_seconds=args.run_timeout or derived_run_timeout(args),
                 )
             )
             break
@@ -177,23 +185,36 @@ def run_matrix(args: argparse.Namespace, index: int, work_dir: Path) -> BurnInRu
     run_timeout = args.run_timeout or derived_run_timeout(args)
     started = time.monotonic()
     failure = ""
+    proc = subprocess.Popen(
+        command,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    timed_out = False
+    cleanup_signal: str | None = None
+    cleanup_escalated = False
     try:
-        with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open(
-            "w",
-            encoding="utf-8",
-        ) as stderr:
-            completed = subprocess.run(
-                command,
-                check=False,
-                text=True,
-                stdout=stdout,
-                stderr=stderr,
-                timeout=run_timeout,
-            )
-        returncode = completed.returncode
+        stdout, stderr = proc.communicate(timeout=run_timeout)
+        returncode = proc.returncode if proc.returncode is not None else -1
     except subprocess.TimeoutExpired:
+        timed_out = True
+        cleanup_signal, cleanup_escalated = terminate_process_group(proc)
+        stdout, stderr = proc.communicate()
         returncode = 124
-        failure = f"run {index} exceeded timeout of {run_timeout}s"
+        failure = (
+            f"run {index} exceeded timeout of {run_timeout}s; "
+            f"cleanup={cleanup_signal}"
+        )
+    stdout_path.write_text(timeout_output_to_text(stdout), encoding="utf-8")
+    stderr_text = timeout_output_to_text(stderr)
+    if timed_out:
+        stderr_text += (
+            f"\nserver burn-in matrix run exceeded timeout of {run_timeout}s; "
+            f"cleanup={cleanup_signal}; escalated={str(cleanup_escalated).lower()}\n"
+        )
+    stderr_path.write_text(stderr_text, encoding="utf-8")
     elapsed = time.monotonic() - started
     summary = load_json(summary_path)
     status = str(summary.get("status") or ("fail" if returncode else "pass"))
@@ -212,6 +233,10 @@ def run_matrix(args: argparse.Namespace, index: int, work_dir: Path) -> BurnInRu
         stderr_path=stderr_path,
         failure=failure,
         summary=summary,
+        timed_out=timed_out,
+        timeout_seconds=run_timeout,
+        cleanup_signal=cleanup_signal,
+        cleanup_escalated=cleanup_escalated,
     )
 
 
@@ -269,6 +294,10 @@ def summarise_run(run: BurnInRun) -> dict[str, Any]:
         "total_cases": run.summary.get("total_cases"),
         "passed": run.summary.get("passed"),
         "comparison_gate_failures": run.summary.get("comparison_gate_failures", []),
+        "timed_out": run.timed_out,
+        "timeout_seconds": run.timeout_seconds,
+        "cleanup_signal": run.cleanup_signal,
+        "cleanup_escalated": run.cleanup_escalated,
     }
 
 
@@ -357,6 +386,28 @@ def summarise_matrix_failure(summary: dict[str, Any]) -> str:
     return "; ".join(failures)
 
 
+def terminate_process_group(proc: subprocess.Popen[str]) -> tuple[str, bool]:
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            proc.wait(timeout=5.0)
+            return "SIGTERM", False
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=5.0)
+            return "SIGKILL", True
+    except ProcessLookupError:
+        return "exited", False
+
+
+def timeout_output_to_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def load_json(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
@@ -381,8 +432,8 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- passed: `{summary['passed']}`",
         f"- failed: `{summary['failed']}`",
         "",
-        "| run | status | cases | elapsed seconds | summary |",
-        "| ---: | --- | ---: | ---: | --- |",
+        "| run | status | cases | timed out | cleanup | elapsed seconds | summary |",
+        "| ---: | --- | ---: | --- | --- | ---: | --- |",
     ]
     for run in summary["runs"]:
         lines.append(
@@ -392,6 +443,8 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
                     str(run["index"]),
                     f"`{run['status']}`",
                     str(run.get("total_cases", "")),
+                    str(run.get("timed_out", False)).lower(),
+                    str(run.get("cleanup_signal") or ""),
                     f"{float(run['elapsed_seconds']):.3f}",
                     str(run["summary"]),
                 ]
