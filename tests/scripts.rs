@@ -1825,6 +1825,53 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_hardware_counter_sampling_respects_sample_window() {
+    let output = run_python_snippet(
+        r###"
+import importlib.util, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("hardware", "scripts/llama_cpp_live_vram_hardware_counters.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    fake = tmp / "nvidia-smi"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import time\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    started = time.monotonic()
+    sample = module.sample_nvidia_smi_process_memory(
+        str(fake),
+        sample_pid=4242,
+        sample_seconds=0.2,
+        sample_interval_ms=1000,
+        max_retained_samples=16,
+    )
+    elapsed = time.monotonic() - started
+    assert elapsed < 2.0
+    assert sample["peak_memory_mib"] is None
+    assert sample["sample_count"] == 0
+    assert sample["errors"], sample
+    assert "command timed out after" in sample["errors"][0]
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn llama_cpp_runtime_kv_timeout_cleans_process_group() {
     let output = run_python_snippet(
         r#"

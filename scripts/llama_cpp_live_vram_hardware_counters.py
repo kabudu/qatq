@@ -237,15 +237,18 @@ def sample_nvidia_smi_process_memory(
     sample_count = 0
     peak: int | None = None
     errors: list[str] = []
+    one_shot = sample_seconds == 0.0
 
     while True:
+        remaining = deadline - time.monotonic()
+        probe_timeout = 5.0 if one_shot else max(0.001, min(5.0, remaining))
         result = run_probe_command(
             [
                 path,
                 "--query-compute-apps=pid,used_memory",
                 "--format=csv,noheader,nounits",
             ],
-            timeout=5.0,
+            timeout=probe_timeout,
         )
         if result.returncode != 0:
             text = (result.stderr or result.stdout).strip()
@@ -258,9 +261,10 @@ def sample_nvidia_smi_process_memory(
                 if len(samples) < max_retained_samples:
                     samples.append(value)
 
-        if time.monotonic() >= deadline:
+        remaining = deadline - time.monotonic()
+        if one_shot or remaining <= 0.0:
             break
-        time.sleep(interval_seconds)
+        time.sleep(min(interval_seconds, remaining))
 
     reason = (
         "sampled per-process GPU memory with nvidia-smi"
