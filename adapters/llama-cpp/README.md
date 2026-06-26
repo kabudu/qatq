@@ -1119,6 +1119,12 @@ python3 scripts/llama_cpp_live_vram_server_cancel_probe.py \
 The probe stores `direct_peak_vram_counter` in `summary.json` and fails closed
 when the required counter cannot be sampled.
 
+Matrix configs can carry the same policy keys:
+`sample_direct_peak_vram`, `require_direct_peak_vram_counter`, and
+`direct_peak_vram_sample_interval_ms`. Use those keys only for runs on hosts
+with suitable direct counters; the local Apple Metal policy examples leave them
+disabled because `nvidia-smi` is absent.
+
 The report is deliberately fail-closed if `--require-direct-peak-vram` is set.
 On the current Apple Metal host, the report at
 `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`

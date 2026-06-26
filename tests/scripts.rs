@@ -2332,6 +2332,75 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_matrix_passes_direct_peak_vram_sampling_flags() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    config = tmp / "direct-peak-vram-matrix.json"
+    work_dir = tmp / "server-cancel-matrix"
+    config.write_text(json.dumps({
+        "defaults": {
+            "ctx_size": 4096,
+            "parallel_slots": 1,
+            "page_tokens": 64,
+            "current_token": 2048,
+            "sample_direct_peak_vram": True,
+            "require_direct_peak_vram_counter": True,
+            "direct_peak_vram_sample_interval_ms": 250,
+        },
+        "cases": [
+            {
+                "id": "direct-counter-case",
+                "model": "/tmp/nonexistent-model.gguf",
+                "model_id": "direct-counter-case",
+            }
+        ],
+    }), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_cancel_matrix.py",
+            "--config",
+            str(config),
+            "--probe-runner",
+            "scripts/llama_cpp_live_vram_server_cancel_probe.py",
+            "--llama-server",
+            "/tmp/nonexistent-llama-server",
+            "--work-dir",
+            str(work_dir),
+            "--dry-run",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    plan = json.loads((work_dir / "server-cancel-matrix-plan.json").read_text())
+    summary = json.loads((work_dir / "summary.json").read_text())
+    command = plan["cases"][0]["command"]
+    assert "--sample-direct-peak-vram" in command
+    assert "--require-direct-peak-vram-counter" in command
+    assert command[command.index("--direct-peak-vram-sample-interval-ms") + 1] == "250"
+    case = summary["cases"][0]
+    assert case["sample_direct_peak_vram"] is True
+    assert case["require_direct_peak_vram_counter"] is True
+    assert case["direct_peak_vram_counter_available"] is None
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_matrix_dry_run_builds_layer_policy_notrace_candidate() {
     let output = run_python_snippet(
         r#"

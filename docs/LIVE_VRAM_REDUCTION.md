@@ -824,8 +824,11 @@ per-process `pid,used_memory` samples for the target runtime. Detecting
 probe also supports integrated sampling with `--sample-direct-peak-vram`,
 `--require-direct-peak-vram-counter`, and
 `--direct-peak-vram-sample-interval-ms`, storing the resulting
-`direct_peak_vram_counter` object in `summary.json`. On this host,
-`nvidia-smi` is absent;
+`direct_peak_vram_counter` object in `summary.json`. Matrix configs can carry
+the same policy as `sample_direct_peak_vram`,
+`require_direct_peak_vram_counter`, and `direct_peak_vram_sample_interval_ms`,
+so burn-in runs on suitable hosts can fail closed on missing direct counters.
+On this host, `nvidia-smi` is absent;
 `powermetrics` is present but requires superuser and documents per-process GPU
 time rather than per-process peak GPU memory; `vmmap` is present but reports
 virtual memory regions, not direct peak GPU memory. Backend projected memory,

@@ -82,6 +82,7 @@ SCALAR_FLAGS = {
     "startup_timeout": "--startup-timeout",
     "request_timeout": "--request-timeout",
     "shutdown_timeout": "--shutdown-timeout",
+    "direct_peak_vram_sample_interval_ms": "--direct-peak-vram-sample-interval-ms",
     "prompt": "--prompt",
     "prompt_repeat": "--prompt-repeat",
 }
@@ -94,6 +95,8 @@ BOOLEAN_FLAGS = {
     "native_baseline": "--native-baseline",
     "require_flattened_flash_consumer": "--require-flattened-flash-consumer",
     "require_backend_memory_diagnostics": "--require-backend-memory-diagnostics",
+    "sample_direct_peak_vram": "--sample-direct-peak-vram",
+    "require_direct_peak_vram_counter": "--require-direct-peak-vram-counter",
 }
 
 METADATA_KEYS = {"comparison_group"}
@@ -423,6 +426,10 @@ def summarise_case(result: CaseResult) -> dict[str, Any]:
     followup_completion_metrics = result.probe_summary.get("followup_completion_metrics")
     backend_memory = result.probe_summary.get("backend_memory")
     backend_memory = backend_memory if isinstance(backend_memory, dict) else {}
+    direct_peak_vram_counter = result.probe_summary.get("direct_peak_vram_counter")
+    direct_peak_vram_counter = (
+        direct_peak_vram_counter if isinstance(direct_peak_vram_counter, dict) else {}
+    )
     accelerator_memory = select_accelerator_memory(backend_memory)
     return {
         "id": result.case_id,
@@ -470,6 +477,13 @@ def summarise_case(result: CaseResult) -> dict[str, Any]:
         "live_offloaded_segments": page_counts.get("live_offloaded_segments"),
         "persistent_page_source_stats": persistent_page_source_stats,
         "max_retained_bytes": persistent_page_source_stats.get("max_retained_bytes"),
+        "sample_direct_peak_vram": result.probe_summary.get("sample_direct_peak_vram"),
+        "require_direct_peak_vram_counter": result.probe_summary.get(
+            "require_direct_peak_vram_counter",
+        ),
+        "direct_peak_vram_counter_available": direct_peak_vram_counter.get("available"),
+        "direct_peak_vram_mib": direct_peak_vram_counter.get("peak_memory_mib"),
+        "direct_peak_vram_backend": direct_peak_vram_counter.get("backend"),
         "backend_memory": backend_memory,
         "backend_accelerator": accelerator_memory.get("backend"),
         "backend_accelerator_self_mib": accelerator_memory.get("self"),
