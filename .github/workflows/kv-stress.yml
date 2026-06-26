@@ -5,12 +5,80 @@ on:
     - cron: "41 4 * * 2"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: kv-stress-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   kv-stress:
-    name: deterministic KV stress matrix
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: exact KV codec stress
+            filter: exact_kv_cache_stress_matrix
+            cargo_flags: ""
+            timeout_minutes: 25
+            kv_cases: "4096"
+          - name: exact KV codec release throughput stress
+            filter: exact_kv_cache_stress_matrix
+            cargo_flags: "--release"
+            timeout_minutes: 25
+            kv_cases: "4096"
+          - name: live VRAM corruption fail-closed stress
+            filter: live_vram_corruption_injection_rates_fail_closed
+            cargo_flags: ""
+            timeout_minutes: 25
+            live_vram_corruption_cases: "2048"
+          - name: live VRAM cross-request isolation stress
+            filter: live_vram_cross_request_key_isolation_stress
+            cargo_flags: ""
+            timeout_minutes: 25
+            live_vram_isolation_cases: "2048"
+          - name: live VRAM sealed multi-sequence stress
+            filter: live_vram_sealed_multi_sequence_interleaving_stress
+            cargo_flags: ""
+            timeout_minutes: 30
+            live_vram_multi_sequence_cases: "2048"
+            live_vram_multi_sequence_workers: "8"
+          - name: live VRAM sealed CPU-tier budget stress
+            filter: live_vram_sealed_cpu_tier_budget_pressure_stress
+            cargo_flags: ""
+            timeout_minutes: 25
+            live_vram_cpu_budget_cases: "2048"
+          - name: live VRAM runtime adapter concurrency stress
+            filter: live_vram_runtime_adapter_concurrency_stress
+            cargo_flags: ""
+            timeout_minutes: 30
+            live_vram_runtime_concurrency_cases: "2048"
+            live_vram_runtime_concurrency_workers: "8"
+          - name: live VRAM restore/cancel race stress
+            filter: live_vram_runtime_restore_cancel_race_stress
+            cargo_flags: ""
+            timeout_minutes: 25
+            live_vram_runtime_race_cases: "1024"
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+      QATQ_KV_STRESS_CASES: ${{ matrix.kv_cases }}
+      QATQ_LIVE_VRAM_CORRUPTION_CASES: ${{ matrix.live_vram_corruption_cases }}
+      QATQ_LIVE_VRAM_ISOLATION_CASES: ${{ matrix.live_vram_isolation_cases }}
+      QATQ_LIVE_VRAM_MULTI_SEQUENCE_CASES: ${{ matrix.live_vram_multi_sequence_cases }}
+      QATQ_LIVE_VRAM_MULTI_SEQUENCE_WORKERS: ${{ matrix.live_vram_multi_sequence_workers }}
+      QATQ_LIVE_VRAM_CPU_BUDGET_CASES: ${{ matrix.live_vram_cpu_budget_cases }}
+      QATQ_LIVE_VRAM_RUNTIME_CONCURRENCY_CASES: ${{ matrix.live_vram_runtime_concurrency_cases }}
+      QATQ_LIVE_VRAM_RUNTIME_CONCURRENCY_WORKERS: ${{ matrix.live_vram_runtime_concurrency_workers }}
+      QATQ_LIVE_VRAM_RUNTIME_RACE_CASES: ${{ matrix.live_vram_runtime_race_cases }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - name: Run deterministic KV stress matrix
-        run: cargo test --test kv_stress -- --ignored --nocapture
+      - name: Verify locked dependency graph
+        run: cargo metadata --locked --format-version 1
+      - name: Run deterministic stress gate
+        run: cargo test --locked ${{ matrix.cargo_flags }} --test kv_stress ${{ matrix.filter }} -- --ignored --nocapture
