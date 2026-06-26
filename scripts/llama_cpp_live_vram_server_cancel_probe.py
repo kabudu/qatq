@@ -1787,11 +1787,11 @@ def stream_jsonl_payloads(
         return
 
     with path.open("rb") as handle:
-        for raw_line in handle:
-            if not raw_line.strip():
-                continue
-            if len(raw_line) > max_trace_line_bytes:
+        for raw_line, oversized in bounded_jsonl_lines(handle, max_trace_line_bytes):
+            if oversized:
                 stats["_oversized_lines"] = int(stats["_oversized_lines"]) + 1
+                continue
+            if not raw_line.strip():
                 continue
             try:
                 payload = json.loads(raw_line.decode("utf-8", errors="replace"))
@@ -1801,6 +1801,20 @@ def stream_jsonl_payloads(
             if isinstance(payload, dict):
                 stats["_parsed_lines"] = int(stats["_parsed_lines"]) + 1
                 yield payload
+
+
+def bounded_jsonl_lines(handle: Any, max_line_bytes: int) -> Iterator[tuple[bytes, bool]]:
+    while True:
+        raw_line = handle.readline(max_line_bytes + 1)
+        if not raw_line:
+            return
+        if len(raw_line) <= max_line_bytes:
+            yield raw_line, False
+            continue
+
+        while raw_line and not raw_line.endswith(b"\n"):
+            raw_line = handle.readline(max_line_bytes + 1)
+        yield b"", True
 
 
 def count_events(

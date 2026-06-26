@@ -4638,6 +4638,51 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_probe_recovers_after_oversized_trace_line() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, json, sys, tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp)
+    page_segments = work_dir / "page-segments.jsonl"
+    valid = json.dumps({
+        "event": "attention-page-segments",
+        "attention_consumed": True,
+        "consumer": "backend_scheduled_flattened_flash_attention",
+        "segments": [{"stream_index": 0, "live_offloaded": True, "shape": [128, 2, 64, 1]}],
+    }) + "\n"
+    with page_segments.open("wb") as handle:
+        handle.write(b"x" * 512 + b"\n")
+        handle.write(valid.encode("utf-8"))
+    counts = module.count_page_segment_events(
+        page_segments,
+        max_trace_bytes=4096,
+        max_trace_line_bytes=512,
+    )
+    assert counts["_oversized_lines"] == 1
+    assert counts["_invalid_json_lines"] == 0
+    assert counts["_parsed_lines"] == 1
+    assert counts["attention-page-segments"] == 1
+    assert counts["live_offloaded_segments"] == 1
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_summarises_persistent_page_source_retention() {
     let output = run_python_snippet(
         r#"
