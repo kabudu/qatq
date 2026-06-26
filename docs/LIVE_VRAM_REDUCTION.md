@@ -2509,8 +2509,11 @@ Exit criteria:
       jitter, and bounded host-memory pressure.
 - [x] Reproducible llama.cpp parallel stress runner shards matrix cases into
       concurrent one-case jobs, captures per-job logs, and fails closed when
-      any real-runtime child matrix fails. This covers process-level patched
-      runtime contention; in-process request cancellation remains separate. A
+      any real-runtime child matrix fails or exceeds the outer `--job-timeout`
+      wall-clock bound. `--job-timeout 0` derives `--timeout + 120`, so the
+      wrapper cannot hang indefinitely if a child process stalls before its own
+      matrix timeout reports. This covers process-level patched runtime
+      contention; in-process request cancellation remains separate. A
       bounded 2026-06-25 Qwen2.5 1.5B smoke passed 2/2, and the broader
       16-token breadth stress at
       `/private/tmp/qatq-live-vram-parallel-stress-breadth-3case-16tok-20260625`
@@ -3361,6 +3364,10 @@ pipeline timing noise without relaxing correctness, native-page, MLX, or codec
 gates. This proves reproducible process-level patched-runtime contention and
 log isolation for the current native route; it still does not prove in-process
 multi-request cancellation inside one llama.cpp server.
+The wrapper now also records `timed_out` and `job_timeout_seconds` in
+`summary.json`, writes partial child stdout/stderr on timeout, and marks the
+aggregate failed, preventing unattended process-level stress jobs from stalling
+without evidence.
 
 A fresh installed-runtime verification on 2026-06-24 reran that proof from
 `/private/tmp/qatq-llama.cpp/build/bin/llama-simple` and widened it across the

@@ -687,6 +687,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "--dry-run",
         "--jobs", "2",
         "--iterations", "2",
+        "--job-timeout", "99",
         "--require-live-paging",
         "--require-native-page-streaming",
         "--native-page-streaming-attention-backend-op",
@@ -702,6 +703,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert ids == ["case-a", "case-b", "case-a", "case-b"]
     for job in plan["jobs"]:
         command = job["command"]
+        assert job["job_timeout_seconds"] == 99
         assert "--require-live-paging" in command
         assert "--require-native-page-streaming" in command
         assert "--native-page-streaming-attention-backend-op" in command
@@ -713,6 +715,74 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["dry_run"] is True
     assert summary["total_jobs"] == 4
     assert summary["failed"] == 0
+    assert summary["timed_out"] == 0
+    assert summary["job_timeout_seconds"] == 99
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_parallel_stress_times_out_hung_child_jobs() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    config = tmp / "config.json"
+    runner = tmp / "hung_matrix.py"
+    llama_simple = tmp / "llama-simple"
+    work = tmp / "work"
+    config.write_text(json.dumps({
+        "cases": [
+            {
+                "id": "hung-case",
+                "model": "/tmp/model-a.gguf",
+                "model_id": "hung-case",
+                "sweep_kv_gpu_layers": [1],
+                "short_prompt": "a",
+                "deep_prompt_seed": "aa"
+            }
+        ]
+    }), encoding="utf-8")
+    runner.write_text(
+        "import time\n"
+        "print('starting hung child', flush=True)\n"
+        "time.sleep(5)\n",
+        encoding="utf-8",
+    )
+    llama_simple.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    completed = subprocess.run([
+        sys.executable,
+        "scripts/llama_cpp_live_vram_parallel_stress.py",
+        "--config", str(config),
+        "--matrix-runner", str(runner),
+        "--llama-simple", str(llama_simple),
+        "--work-dir", str(work),
+        "--jobs", "1",
+        "--iterations", "1",
+        "--timeout", "10",
+        "--job-timeout", "1"
+    ], text=True, capture_output=True)
+    assert completed.returncode == 1, completed.stdout
+    summary = json.loads((work / "summary.json").read_text())
+    assert summary["status"] == "fail"
+    assert summary["failed"] == 1
+    assert summary["timed_out"] == 1
+    result = summary["results"][0]
+    assert result["timed_out"] is True
+    assert result["returncode"] == -1
+    assert result["timeout_seconds"] == 1
+    stderr = Path(result["stderr"]).read_text()
+    assert "parallel stress job exceeded timeout of 1s" in stderr
 "#,
     );
 

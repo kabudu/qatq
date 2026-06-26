@@ -43,6 +43,8 @@ class StressResult:
     returncode: int
     stdout_path: Path
     stderr_path: Path
+    timed_out: bool = False
+    timeout_seconds: int = 0
 
 
 def main() -> int:
@@ -56,6 +58,15 @@ def main() -> int:
     parser.add_argument("--iterations", type=int, default=1)
     parser.add_argument("--max-cases", type=int, default=0)
     parser.add_argument("--timeout", type=int, default=1200)
+    parser.add_argument(
+        "--job-timeout",
+        type=int,
+        default=0,
+        help=(
+            "Outer wall-clock timeout for each child matrix process. Default 0 "
+            "derives --timeout + 120 seconds."
+        ),
+    )
     parser.add_argument("--keep-work-dir", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--require-live-paging", action="store_true")
@@ -86,7 +97,9 @@ def main() -> int:
     require(args.iterations > 0, "--iterations must be positive")
     require(args.max_cases >= 0, "--max-cases must be non-negative")
     require(args.timeout > 0, "--timeout must be positive")
+    require(args.job_timeout >= 0, "--job-timeout must be non-negative")
     require(args.host_memory_pressure_mib >= 0, "--host-memory-pressure-mib must be non-negative")
+    job_timeout = args.job_timeout or args.timeout + 120
 
     root = Path.cwd()
     config_path = root / args.config
@@ -120,6 +133,7 @@ def main() -> int:
                         "config": str(job.config_path),
                         "work_dir": str(job.work_dir),
                         "command": job.command,
+                        "job_timeout_seconds": job_timeout,
                     }
                     for job in jobs
                 ],
@@ -142,24 +156,30 @@ def main() -> int:
                 returncode=0,
                 stdout_path=job.work_dir / "stdout.log",
                 stderr_path=job.work_dir / "stderr.log",
+                timed_out=False,
+                timeout_seconds=job_timeout,
             )
             for job in jobs
         ]
     else:
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
-            results = list(executor.map(run_job, jobs))
+            results = list(executor.map(lambda job: run_job(job, timeout=job_timeout), jobs))
 
     summary = build_summary(results, jobs=args.jobs, dry_run=args.dry_run)
+    status = "dry-run" if args.dry_run else ("fail" if any(result.status == "fail" for result in results) else "pass")
     (work_dir / "summary.md").write_text(summary, encoding="utf-8")
     (work_dir / "summary.json").write_text(
         json.dumps(
             {
                 "format": "qatq-live-vram-parallel-stress-summary-v1",
+                "status": status,
                 "dry_run": args.dry_run,
                 "jobs_requested": args.jobs,
                 "total_jobs": len(results),
                 "passed": sum(1 for result in results if result.status in {"pass", "dry-run"}),
                 "failed": sum(1 for result in results if result.status == "fail"),
+                "timed_out": sum(1 for result in results if result.timed_out),
+                "job_timeout_seconds": job_timeout,
                 "results": [
                     {
                         "index": result.index,
@@ -169,6 +189,8 @@ def main() -> int:
                         "work_dir": str(result.work_dir),
                         "elapsed_seconds": result.elapsed_seconds,
                         "returncode": result.returncode,
+                        "timed_out": result.timed_out,
+                        "timeout_seconds": result.timeout_seconds,
                         "stdout": str(result.stdout_path),
                         "stderr": str(result.stderr_path),
                     }
@@ -267,11 +289,38 @@ def build_matrix_command(args: argparse.Namespace, matrix_runner: Path, config_p
     return command
 
 
-def run_job(job: StressJob) -> StressResult:
+def run_job(job: StressJob, *, timeout: int) -> StressResult:
     stdout_path = job.work_dir / "stdout.log"
     stderr_path = job.work_dir / "stderr.log"
     start = time.monotonic()
-    completed = subprocess.run(job.command, text=True, capture_output=True)
+    try:
+        completed = subprocess.run(
+            job.command,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        elapsed = time.monotonic() - start
+        stdout_path.write_text(timeout_output_to_text(exc.stdout), encoding="utf-8")
+        stderr_path.write_text(
+            timeout_output_to_text(exc.stderr)
+            + f"\nparallel stress job exceeded timeout of {timeout}s\n",
+            encoding="utf-8",
+        )
+        return StressResult(
+            index=job.index,
+            case_id=job.case_id,
+            iteration=job.iteration,
+            status="fail",
+            work_dir=job.work_dir,
+            elapsed_seconds=elapsed,
+            returncode=-1,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            timed_out=True,
+            timeout_seconds=timeout,
+        )
     elapsed = time.monotonic() - start
     stdout_path.write_text(completed.stdout, encoding="utf-8")
     stderr_path.write_text(completed.stderr, encoding="utf-8")
@@ -285,12 +334,15 @@ def run_job(job: StressJob) -> StressResult:
         returncode=completed.returncode,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
+        timed_out=False,
+        timeout_seconds=timeout,
     )
 
 
 def build_summary(results: list[StressResult], jobs: int, dry_run: bool) -> str:
     passed = sum(1 for result in results if result.status in {"pass", "dry-run"})
     failed = sum(1 for result in results if result.status == "fail")
+    timed_out = sum(1 for result in results if result.timed_out)
     lines = [
         "# QATQ live VRAM parallel stress",
         "",
@@ -299,17 +351,27 @@ def build_summary(results: list[StressResult], jobs: int, dry_run: bool) -> str:
         f"- total jobs: {len(results)}",
         f"- passed: {passed}",
         f"- failed: {failed}",
+        f"- timed out: {timed_out}",
         "",
-        "| job | case | iteration | status | elapsed s | return code | work dir |",
-        "| ---: | --- | ---: | --- | ---: | ---: | --- |",
+        "| job | case | iteration | status | timed out | elapsed s | return code | work dir |",
+        "| ---: | --- | ---: | --- | --- | ---: | ---: | --- |",
     ]
     for result in results:
         lines.append(
             f"| {result.index} | `{result.case_id}` | {result.iteration} | {result.status} | "
-            f"{result.elapsed_seconds:.2f} | {result.returncode} | `{result.work_dir}` |"
+            f"{str(result.timed_out).lower()} | {result.elapsed_seconds:.2f} | "
+            f"{result.returncode} | `{result.work_dir}` |"
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def timeout_output_to_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
 
 
 def load_json(path: Path) -> dict:
