@@ -479,7 +479,14 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       model root was removed; the burn-in wrapper now re-checks runtime inputs
       before each repeat and fails closed with an explicit
       `runtime input changed before run N` reason when required model files or
-      binaries disappear mid-soak.
+      binaries disappear mid-soak. The restored-model rerun at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-restored-20260626`
+      passed the one-hour gate with `13/13` repeats, `39/39` live
+      cancellation/follow-up cases, `3887.49` passed seconds, backend and soak
+      memory metrics for every case, and no aggregate gate failures. Direct
+      per-process peak-VRAM counters remain unavailable on the Apple Metal host,
+      so the one-hour soak does not close the separate hardware-counter proof or
+      overnight soak items.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

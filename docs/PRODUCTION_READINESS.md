@@ -244,6 +244,15 @@ produced five passing mixed-model repeats with backend and soak memory metrics,
 then failed on repeat six after the external model root was removed. The
 burn-in wrapper now re-checks runtime inputs before each repeat and fails with a
 direct `runtime input changed before run N` reason when required binaries or
-model files disappear mid-soak. The
+model files disappear mid-soak. The restored-model rerun at
+`/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-restored-20260626`
+then passed the sustained one-hour gate: `13/13` repeats, `39/39` live
+cancellation/follow-up cases, `3887.49` passed seconds against the `3600`
+second gate, backend and soak memory metrics for every case, and no aggregate
+gate failures. Backend projected device memory stayed stable at `1426` MiB for
+Qwen2.5 1.5B, `2391` MiB for Qwen2.5 3B, and `5304` MiB for Phi 3.5 mini.
+The companion hardware-counter report confirms backend diagnostics are present
+but direct per-process peak VRAM counters are unavailable on this Apple Metal
+host, so overnight soak and direct hardware peak-VRAM proof remain open. The
 implementation and validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).

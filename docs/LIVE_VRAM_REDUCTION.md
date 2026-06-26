@@ -2909,7 +2909,22 @@ Exit criteria:
       case launched. The new guard fails with an explicit
       `runtime input changed before run N` artefact before launching another
       probe, rather than cascading through a missing probe summary.
-- [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
+- [x] Sustained generation for at least 1 hour under mixed prompt lengths. The
+      restored-model burn-in at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-restored-20260626`
+      passed `13/13` mixed-model repeats across Qwen2.5 1.5B daily-driver,
+      Qwen2.5 3B code-review, and Phi 3.5 mini ops-incident prompts. It banked
+      `3887.49` passed seconds against the `3600` second gate, completed `39`
+      live cancellation/follow-up cases, exported backend memory diagnostics
+      and soak RSS metrics for every case, and reported no aggregate gate
+      failures. Backend projected device memory was stable across all repeats:
+      `1426` MiB for Qwen2.5 1.5B, `2391` MiB for Qwen2.5 3B, and `5304` MiB
+      for Phi 3.5 mini; backend accelerator context was `192`, `256`, and
+      `2976` MiB respectively. The hardware-counter report at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-onehour-restored-20260626/hardware-counters.json`
+      confirms backend diagnostics are present but direct per-process peak VRAM
+      counters are unavailable on this Apple Metal host, so direct hardware
+      peak-VRAM proof remains separate from this one-hour soak.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests
