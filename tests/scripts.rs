@@ -1345,6 +1345,96 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_burnin_summarise_existing_refreshes_impact_summary() {
+    let output = run_python_snippet(
+        r###"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp) / "existing-burnin"
+    run_dir = work_dir / "run-001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(json.dumps({
+        "format": "qatq-live-vram-server-cancel-matrix-summary-v1",
+        "status": "pass",
+        "total_cases": 1,
+        "passed": 1,
+        "cases": [
+            {
+                "id": "qwen-impact",
+                "status": "pass",
+                "elapsed_seconds": 12.5,
+                "rss_growth_kib": 64,
+                "rss_tail_growth_kib": 8,
+                "rss_tail_range_kib": 16,
+                "backend_accelerator_context_mib": 224,
+                "projected_device_memory_mib": 1426,
+                "iteration_latency": {"p95": 1.5},
+                "followup_latency": {"p95": 2.25, "p99": 2.5},
+                "followup_completion_metrics": {
+                    "predicted_per_second": {"p05": 70.0, "p50": 78.0, "p95": 82.0}
+                },
+                "live_offloaded_segments": 1024,
+                "backend_memory": {
+                    "memory_breakdown_mib": {
+                        "Metal": {"self": 900, "context": 224, "compute": 32},
+                        "Host": {"self": 196}
+                    },
+                    "projected_device_memory_mib": 1426
+                }
+            }
+        ]
+    }), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            "adapters/llama-cpp/live-vram-server-layer-policy-notrace.local.example.json",
+            "--work-dir",
+            str(work_dir),
+            "--runs",
+            "1",
+            "--summarise-existing",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    summary = json.loads((work_dir / "summary.json").read_text())
+    assert summary["status"] == "pass"
+    assert summary["refreshed_from_existing_work_dir"] is True
+    assert summary["runs_completed"] == 1
+    assert summary["passed"] == 1
+    impact = summary["impact_summary"]["qwen-impact"]
+    assert impact["completed_repeats"] == 1
+    assert impact["projected_device_memory_mib_min"] == 1426.0
+    assert impact["projected_device_memory_mib_max"] == 1426.0
+    assert impact["projected_device_memory_stable"] is True
+    assert impact["rss_growth_kib_max"] == 64.0
+    assert impact["rss_tail_growth_kib_max"] == 8.0
+    assert impact["followup_latency_p95_seconds_max"] == 2.25
+    assert impact["followup_latency_p99_seconds_max"] == 2.5
+    assert impact["predicted_tokens_per_second_p50_average"] == 78.0
+    assert impact["live_offloaded_segments_total"] == 1024.0
+    markdown = (work_dir / "summary.md").read_text()
+    assert "## Impact Summary" in markdown
+    assert "qwen-impact" in markdown
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_preflight_resolves_model_root_and_fails_closed() {
     let output = run_python_snippet(
         r###"
