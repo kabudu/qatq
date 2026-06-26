@@ -2175,6 +2175,125 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_burnin_preflight_requires_direct_peak_sampling_policy() {
+    let output = run_python_snippet(
+        r###"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    model_root = tmp / "models"
+    model_root.mkdir()
+    (model_root / "model-a.gguf").write_bytes(b"fake model")
+    llama_server = tmp / "llama-server"
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
+
+    missing_policy_config = tmp / "missing-policy.json"
+    missing_policy_config.write_text(json.dumps({
+        "defaults": {},
+        "cases": [
+            {
+                "id": "missing-direct-counter-policy",
+                "model": "/runner-specific/path/model-a.gguf",
+            }
+        ]
+    }), encoding="utf-8")
+    failed_work = tmp / "missing-policy-work"
+    failed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(missing_policy_config),
+            "--llama-server",
+            str(llama_server),
+            "--model-root",
+            str(model_root),
+            "--work-dir",
+            str(failed_work),
+            "--runs",
+            "1",
+            "--timeout",
+            "30",
+            "--min-passed-elapsed-seconds",
+            "3600",
+            "--require-backend-memory-diagnostics",
+            "--require-soak-memory-metrics",
+            "--max-direct-peak-vram-jitter-ratio",
+            "1.001",
+            "--preflight-only",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert failed.returncode == 1, failed.stdout
+    failed_preflight = json.loads((failed_work / "preflight.json").read_text())
+    failures = "\n".join(failure["detail"] for failure in failed_preflight["failures"])
+    assert "missing-direct-counter-policy: sample_direct_peak_vram must be true" in failures
+    assert "missing-direct-counter-policy: require_direct_peak_vram_counter must be true" in failures
+    assert "direct-peak-vram-sampling-policy" in (failed_work / "preflight.md").read_text()
+
+    passing_config = tmp / "passing-policy.json"
+    passing_config.write_text(json.dumps({
+        "defaults": {
+            "sample_direct_peak_vram": True,
+            "require_direct_peak_vram_counter": True,
+        },
+        "cases": [
+            {
+                "id": "direct-counter-policy",
+                "model": "/runner-specific/path/model-a.gguf",
+            }
+        ]
+    }), encoding="utf-8")
+    passed_work = tmp / "passing-policy-work"
+    passed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(passing_config),
+            "--llama-server",
+            str(llama_server),
+            "--model-root",
+            str(model_root),
+            "--work-dir",
+            str(passed_work),
+            "--runs",
+            "1",
+            "--timeout",
+            "30",
+            "--min-passed-elapsed-seconds",
+            "3600",
+            "--require-backend-memory-diagnostics",
+            "--require-soak-memory-metrics",
+            "--max-direct-peak-vram-jitter-ratio",
+            "1.001",
+            "--preflight-only",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert passed.returncode == 0, passed.stdout + passed.stderr
+    passed_preflight = json.loads((passed_work / "preflight.json").read_text())
+    checks = {check["name"]: check for check in passed_preflight["checks"]}
+    assert checks["direct-peak-vram-sampling-policy"]["status"] == "pass"
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_aggregate_gates_fail_closed() {
     let output = run_python_snippet(
         r#"

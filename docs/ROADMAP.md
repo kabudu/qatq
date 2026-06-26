@@ -440,7 +440,10 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       `require_direct_peak_vram_counters` and `max_direct_peak_vram_ratio`.
       The burn-in wrapper also supports `--max-direct-peak-vram-jitter-ratio`
       so repeated hardware-counter runs can fail on unstable direct peak-VRAM
-      measurements. The server evidence probe also bounds JSONL trace
+      measurements. Burn-in preflight fails early when that direct peak-VRAM
+      jitter gate is enabled but any selected matrix case does not set both
+      `sample_direct_peak_vram` and `require_direct_peak_vram_counter`. The
+      server evidence probe also bounds JSONL trace
       ingestion with `--max-trace-bytes` and `--max-trace-line-bytes`; trace
       parsing is streaming, and oversized files, malformed JSONL rows, or
       individual oversized trace lines now fail closed instead of growing

@@ -400,6 +400,17 @@ def build_preflight_report(
         f"require_backend_memory_diagnostics={str(args.require_backend_memory_diagnostics).lower()}",
         required=not args.dry_run and args.preflight_only,
     )
+    direct_peak_policy_failures = direct_peak_vram_policy_failures(args, prepared_config.config)
+    add_check(
+        "direct-peak-vram-sampling-policy",
+        not direct_peak_policy_failures,
+        (
+            "all selected cases require direct peak-VRAM sampling"
+            if not direct_peak_policy_failures
+            else "; ".join(direct_peak_policy_failures[:16])
+        ),
+        required=not args.dry_run and args.max_direct_peak_vram_jitter_ratio > 0.0,
+    )
 
     failures = [check for check in checks if check["required"] and check["status"] == "fail"]
     return {
@@ -419,6 +430,37 @@ def build_preflight_report(
             "It does not prove runtime correctness or memory stability."
         ),
     }
+
+
+def direct_peak_vram_policy_failures(
+    args: argparse.Namespace,
+    config: dict[str, Any],
+) -> list[str]:
+    if args.max_direct_peak_vram_jitter_ratio <= 0.0:
+        return []
+    defaults = config.get("defaults", {})
+    defaults = defaults if isinstance(defaults, dict) else {}
+    cases = config.get("cases", [])
+    if not isinstance(cases, list):
+        return ["config cases are unavailable"]
+
+    failures: list[str] = []
+    for case in cases:
+        if not isinstance(case, dict):
+            failures.append("case entry is not an object")
+            continue
+        case_id = str(case.get("id", "<unknown>"))
+        sample = merged_config_value(defaults, case, "sample_direct_peak_vram")
+        require_counter = merged_config_value(defaults, case, "require_direct_peak_vram_counter")
+        if sample is not True:
+            failures.append(f"{case_id}: sample_direct_peak_vram must be true")
+        if require_counter is not True:
+            failures.append(f"{case_id}: require_direct_peak_vram_counter must be true")
+    return failures
+
+
+def merged_config_value(defaults: dict[str, Any], case: dict[str, Any], key: str) -> Any:
+    return case[key] if key in case else defaults.get(key)
 
 
 def build_preflight_only_summary(

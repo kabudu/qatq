@@ -872,6 +872,10 @@ probe also supports integrated sampling with `--sample-direct-peak-vram`,
 the same policy as `sample_direct_peak_vram`,
 `require_direct_peak_vram_counter`, and `direct_peak_vram_sample_interval_ms`,
 so burn-in runs on suitable hosts can fail closed on missing direct counters.
+The burn-in preflight now also rejects `--max-direct-peak-vram-jitter-ratio`
+when any selected matrix case does not enable both `sample_direct_peak_vram`
+and `require_direct_peak_vram_counter`, avoiding a long run that could only
+fail after producing no direct peak-VRAM samples.
 The standalone counter helper also supports
 `--require-backend-memory-diagnostics`; this gate only passes when the matrix
 summary status is `pass` and every case has both `projected_device_memory_mib`
