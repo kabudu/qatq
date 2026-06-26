@@ -124,6 +124,13 @@ page and removes the pending store entry before returning an error. That keeps a
 failed VRAM-saving attempt from silently becoming a correctness or accounting
 hazard.
 
+The measured reclaim controller also requires the adapter to report
+`LiveVramGpuAllocationGranularity::PerPage` from
+`gpu_allocation_granularity()`. Whole-context, whole-tensor, and unknown
+allocation granularities are rejected before snapshotting a page, because a
+falling byte counter is not enough evidence that the runtime can reclaim a
+logical KV page without freeing or perturbing a larger allocation.
+
 When a runtime path bypasses `try_restore_live_vram_page_from_store` and uploads
 stored page bytes directly, it must first build a sealed restore request:
 

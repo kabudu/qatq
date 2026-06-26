@@ -1954,6 +1954,9 @@ pub enum LiveVramMeasuredOffloadOutcome {
 #[derive(Debug, Eq, PartialEq)]
 pub enum LiveVramMeasuredOffloadError {
     InvalidReclaimPolicy,
+    AllocationGranularityCannotReclaimPages {
+        allocation_granularity: LiveVramGpuAllocationGranularity,
+    },
     MetricsBefore(LiveVramAdapterError),
     MetricsAfter(LiveVramAdapterError),
     Offload(LiveVramOffloadError),
@@ -1971,6 +1974,13 @@ impl fmt::Display for LiveVramMeasuredOffloadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidReclaimPolicy => write!(f, "live VRAM reclaim policy is invalid"),
+            Self::AllocationGranularityCannotReclaimPages {
+                allocation_granularity,
+            } => write!(
+                f,
+                "live VRAM allocation granularity {} cannot prove page-level GPU reclaim",
+                allocation_granularity.as_str()
+            ),
             Self::MetricsBefore(error) => {
                 write!(f, "live VRAM metrics before offload failed: {error}")
             }
@@ -2116,6 +2126,14 @@ where
     }
     if let LiveVramScheduleDecision::KeepResident(reason) = scheduler.decide(descriptor, state) {
         return Ok(LiveVramMeasuredOffloadOutcome::KeptResident(reason));
+    }
+    let allocation_granularity = adapter.gpu_allocation_granularity();
+    if !allocation_granularity.can_reclaim_logical_pages() {
+        return Err(
+            LiveVramMeasuredOffloadError::AllocationGranularityCannotReclaimPages {
+                allocation_granularity,
+            },
+        );
     }
 
     let metrics_before = adapter
@@ -10743,6 +10761,55 @@ mod tests {
     }
 
     #[test]
+    fn live_vram_measured_offload_rejects_unknown_allocation_granularity_before_snapshot() {
+        let snapshot = live_vram_snapshot(
+            repeated_u16_bytes(0x3f80, 512),
+            TensorDType::BF16,
+            vec![512],
+            Some(4096),
+        );
+        let mut adapter = RuntimeUnknownGranularityAdapter {
+            snapshot: snapshot.clone(),
+            snapshot_calls: 0,
+        };
+        let mut store = LiveVramOffloadStore::new(LiveVramLimits::default(), 8, 8 * 1024 * 1024);
+        let scheduler = FixedWindowLiveVramScheduler {
+            policy: LiveVramSchedulerPolicy {
+                hot_window_tokens: 0,
+                prefetch_window_tokens: 0,
+                max_queued_pages: 8,
+                max_cpu_stored_bytes: 8 * 1024 * 1024,
+                require_qatq_beats_best_general_codec: true,
+            },
+        };
+
+        let result = try_offload_live_vram_page_with_reclaim_check(
+            &mut adapter,
+            &mut store,
+            &scheduler,
+            &snapshot.descriptor,
+            LiveVramSchedulerState {
+                current_token: 0,
+                queued_pages: 0,
+                cpu_stored_bytes: 0,
+            },
+            LiveVramLimits::default(),
+            snapshot.bytes_le.len(),
+        );
+
+        assert!(matches!(
+            result,
+            Err(
+                LiveVramMeasuredOffloadError::AllocationGranularityCannotReclaimPages {
+                    allocation_granularity: LiveVramGpuAllocationGranularity::RuntimeUnknown
+                }
+            )
+        ));
+        assert_eq!(adapter.snapshot_calls, 0);
+        assert!(store.is_empty());
+    }
+
+    #[test]
     fn live_vram_controller_keeps_hot_pages_resident_without_snapshot() {
         let snapshot = live_vram_snapshot(
             repeated_u16_bytes(0x3f80, 512),
@@ -13382,6 +13449,65 @@ mod tests {
 
         fn metrics(&self) -> Result<LiveVramAdapterMetrics, LiveVramAdapterError> {
             Ok(self.metrics.clone())
+        }
+
+        fn gpu_allocation_granularity(&self) -> LiveVramGpuAllocationGranularity {
+            LiveVramGpuAllocationGranularity::PerPage
+        }
+    }
+
+    struct RuntimeUnknownGranularityAdapter {
+        snapshot: KvPageSnapshot,
+        snapshot_calls: usize,
+    }
+
+    impl LiveVramRuntimeAdapter for RuntimeUnknownGranularityAdapter {
+        fn identity(&self) -> LiveVramAdapterIdentity {
+            LiveVramAdapterIdentity {
+                runtime_id: "llama.cpp".to_string(),
+                runtime_commit: "test-commit".to_string(),
+                adapter_version: "qatq-runtime-unknown-granularity/0.1.0".to_string(),
+                adapter_contract_version: LIVE_VRAM_ADAPTER_CONTRACT_VERSION.to_string(),
+            }
+        }
+
+        fn snapshot_page(
+            &mut self,
+            descriptor: &KvPageDescriptor,
+            limits: LiveVramLimits,
+        ) -> Result<KvPageSnapshot, LiveVramAdapterError> {
+            self.snapshot_calls += 1;
+            descriptor
+                .validate(limits)
+                .map_err(|_| LiveVramAdapterError::SnapshotFailed("invalid descriptor"))?;
+            Ok(self.snapshot.clone())
+        }
+
+        fn commit_offload(
+            &mut self,
+            _encoded: &LiveVramPageEncodeResult,
+        ) -> Result<(), LiveVramAdapterError> {
+            panic!("runtime-unknown allocation granularity must be rejected before commit")
+        }
+
+        fn restore_committed_page(
+            &mut self,
+            _metadata: &LiveVramPageMetadata,
+            _bytes: &[u8],
+            _limits: LiveVramLimits,
+        ) -> Result<LiveVramRestoreStatus, LiveVramAdapterError> {
+            panic!("runtime-unknown allocation granularity test does not restore")
+        }
+
+        fn is_page_resident(
+            &self,
+            _descriptor: &KvPageDescriptor,
+        ) -> Result<bool, LiveVramAdapterError> {
+            Ok(true)
+        }
+
+        fn metrics(&self) -> Result<LiveVramAdapterMetrics, LiveVramAdapterError> {
+            Ok(LiveVramAdapterMetrics::default())
         }
     }
 
