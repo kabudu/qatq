@@ -1027,6 +1027,13 @@ class DirectPeakVramSampler:
                 or "nvidia-smi capability probe timed out"
             )
             return False
+        if result.returncode != 0:
+            text = (result.stderr or result.stdout).strip()
+            self._capability_reason = (
+                "nvidia-smi capability probe failed"
+                + (f": {text.splitlines()[0]}" if text else f": return code {result.returncode}")
+            )
+            return False
         help_text = result.stdout + result.stderr
         supported = "pid" in help_text and "used_memory" in help_text
         if not supported:

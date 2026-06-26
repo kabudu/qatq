@@ -2418,6 +2418,52 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_probe_rejects_failed_direct_peak_capability_probe() {
+    let output = run_python_snippet(
+        r###"
+import importlib.util, os, sys, tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    fake = tmp / "nvidia-smi"
+    fake.write_text("\n".join([
+        "#!/usr/bin/env python3",
+        "import sys",
+        "if '--help-query-compute-apps' in sys.argv:",
+        "    print('pid\\nused_memory')",
+        "    raise SystemExit(2)",
+        "raise SystemExit(2)",
+    ]) + "\n", encoding="utf-8")
+    fake.chmod(0o755)
+    old_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = str(tmp) + os.pathsep + old_path
+    try:
+        sampler = module.DirectPeakVramSampler(4242, interval_ms=100, max_retained_samples=4)
+        sampler.start()
+        summary = sampler.stop()
+    finally:
+        os.environ["PATH"] = old_path
+    assert summary["available"] is False
+    assert summary["sample_count"] == 0
+    assert "capability probe failed" in summary["reason"]
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_stop_server_cleans_process_group() {
     let output = run_python_snippet(
         r#"
