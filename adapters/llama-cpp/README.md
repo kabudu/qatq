@@ -1009,14 +1009,17 @@ corrected full-family p05/p50 rerun. The strongest focused candidate is now
 passed with p05/p50/p95 throughput ratios 1.595x/1.075x/0.980x, p95
 iteration/follow-up ratios 0.773x/0.628x, backend K/V 288->280 MiB, projected
 device memory 2423->2415 MiB, and zero RSS tail gate growth. The checked-in
-family configs carry that candidate. The full-family two-repeat burn-in at
-`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`
-then passed 2/2 repeats, 12 real server cases total, with empty comparison and
+family configs carry that candidate. The full-family three-repeat burn-in at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626`
+then passed 3/3 repeats, 18 real server cases total, with empty comparison and
 aggregate gate failures. Backend K/V and projected-device jitter ratios were
-1.0 for every native and QATQ case. Qwen2.5 3B QATQ/native p05/p50 throughput
-ratios were 0.996x/0.982x in repeat one and 0.980x/0.981x in repeat two, with
-backend K/V 288->280 MiB and projected device memory 2423->2415 MiB. The
-superseded p128/q4 rerun at
+1.0 for every native and QATQ case. Qwen2.5 3B QATQ/native p05/p50/p95
+throughput ratios stayed inside policy in every repeat; the weakest repeat
+recorded 0.929x/0.945x/0.959x, while backend K/V stayed 288->280 MiB and
+projected device memory stayed 2423->2415 MiB. This supersedes the earlier
+two-repeat evidence at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`.
+The superseded p128/q4 rerun at
 `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p128q4-p05-tailgate-20260626`
 still failed because Qwen2.5 3B missed p05/p50 at 0.832x/0.775x.
 

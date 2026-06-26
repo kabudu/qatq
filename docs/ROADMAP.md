@@ -313,14 +313,15 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       1.003x; steady-state RSS ratios were 0.941x, 1.637x, and 1.372x.
       This is still not a substitute for overnight soak or hardware-counter
       peak-VRAM proof.
-- [ ] Restore full-family accepted-policy repeatability after the slower-host
+- [x] Restore full-family accepted-policy repeatability after the slower-host
       burn-in failures. q2 with 64-token pages passed focused Qwen2.5 3B but
       failed the full-family repeat, and 128-token pages with q4 also failed
       the corrected full-family p05/p50 rerun. The current checked-in
       candidate is 256-token pages with q4. It passed the same full-family
       burn-in gates at
-      `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-p256q4-p05-tailgate-20260626`
-      without relaxing memory or throughput limits.
+      `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626`
+      for 3/3 repeats, 18 real server cases total, without relaxing memory or
+      throughput limits.
 - [x] Add a steady-state RSS tail-growth gate to the accepted no-trace policy
       soak. The server probe can now enforce `--max-rss-tail-growth-kib`
       over a configurable `--rss-tail-window`, and

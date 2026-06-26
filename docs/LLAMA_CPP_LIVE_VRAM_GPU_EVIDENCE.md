@@ -74,21 +74,21 @@ and compression-positive storage for long-context exported KV pages.
 > breadth evidence. This is real patched-runtime process pressure evidence,
 > not a replacement for broader shared-server restore-race burn-in.
 
-> Accepted-policy burn-in update, 2026-06-25: the backend-memory-gated
-> llama-server policy now has bounded two-repeat full-family coverage across
+> Accepted-policy burn-in update, 2026-06-26: the backend-memory-gated
+> llama-server policy now has bounded three-repeat full-family coverage across
 > Qwen2.5 1.5B, Qwen2.5 3B, and Phi 3.5 mini. The full-family run at
-> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625`
-> passed two complete native/QATQ repeats, twelve real matrix cases total, with
-> empty comparison and aggregate gate failures. QATQ/native backend K/V ratios
-> were `0.964x`, `0.972x`, and `0.969x`; projected-device ratios were
-> `0.995x`, `0.997x`, and `0.982x`. QATQ/native p50 throughput ratios were
-> `0.967x`/`0.973x` for Qwen2.5 1.5B, `0.987x`/`0.986x` for Qwen2.5 3B, and
-> `0.977x`/`0.952x` for Phi across the two repeats. Two fail-closed precursor
-> runs hardened the proof: the non-soak family policy now uses the same
-> conservative Phi prompt pressure as the soak policy, and the accepted
-> comparison gate now caps positive QATQ RSS tail-growth delta over native at
-> `2048 KiB`, with the largest observed positive delta at `1712 KiB`. This is
-> the current strongest
+> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626`
+> passed three complete native/QATQ repeats, eighteen real matrix cases total,
+> with empty comparison and aggregate gate failures. QATQ/native backend K/V
+> ratios were `0.964x`, `0.972x`, and `0.969x`; projected-device ratios were
+> `0.995x`, `0.997x`, and `0.982x`. Qwen2.5 3B's weakest QATQ/native
+> p05/p50/p95 throughput ratios were `0.929x`/`0.945x`/`0.959x`, while
+> backend K/V stayed `288->280 MiB`. Fail-closed precursor runs hardened the
+> proof: the non-soak family policy now uses the same conservative Phi prompt
+> pressure as the soak policy, the accepted comparison gate caps positive QATQ
+> RSS tail-growth delta over native, and the Qwen2.5 3B policy now uses
+> 256-token pages with q4 after q8, q2, and p128/q4 candidates missed repeat
+> gates. This is the current strongest
 > accepted-policy repeatability evidence, but it is still bounded burn-in
 > rather than overnight soak or direct hardware peak-VRAM counter proof.
 
@@ -504,7 +504,9 @@ and compression-positive storage for long-context exported KV pages.
 > The first 10-cycle family-policy soak rejected the default Qwen2.5 3B q32
 > queue policy on a follow-up p95 outlier and steady-state RSS ratio. A targeted
 > q8 Qwen2.5 3B probe removed the tail spike, so the accepted family configs now
-> initially use q8 for Qwen2.5 3B QATQ. A later slow-host three-repeat run moved the current config to q2 after q8 and q4 missed accepted throughput gates. The corrected bootstrapped soak at
+> initially use q8 for Qwen2.5 3B QATQ. Later slower-host repeats rejected q8,
+> q2 with 64-token pages, and p128/q4 as full-family candidates; the current
+> checked-in Qwen2.5 3B policy uses 256-token pages with q4. The corrected bootstrapped soak at
 > `/private/tmp/qatq-live-vram-server-family-policy-soak-bootstrap-notrace-warmup-gated-20260625`
 > passed all six native/QATQ cases for 10 measured cycles each. Qwen2.5 1.5B
 > recorded throughput ratios `0.981x`/`0.984x`, latency ratios
@@ -561,11 +563,11 @@ and compression-positive storage for long-context exported KV pages.
 > QATQ/native p50 throughput ratios were `0.996x` and `0.988x`; backend K/V
 > ratio stayed `0.972x` and projected device ratio stayed `0.997x`.
 > The later full-family burn-in at
-> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625`
-> supersedes the separate Qwen-family burn-in as the current accepted-policy
-> repeatability proof. It passed two complete Qwen2.5 1.5B, Qwen2.5 3B, and
-> Phi 3.5 mini native/QATQ repeats with empty comparison and aggregate gate
-> failures.
+> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626`
+> supersedes the separate Qwen-family and earlier two-repeat burn-ins as the
+> current accepted-policy repeatability proof. It passed three complete
+> Qwen2.5 1.5B, Qwen2.5 3B, and Phi 3.5 mini native/QATQ repeats with empty
+> comparison and aggregate gate failures.
 > Direct hardware peak-VRAM counter availability is now checked explicitly with
 > `scripts/llama_cpp_live_vram_hardware_counters.py`. The report at
 > `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625/hardware-counters.json`
