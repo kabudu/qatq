@@ -29,6 +29,14 @@ on:
       max_cases:
         description: "Maximum matrix cases, or 0 for all"
         default: "0"
+      case_order:
+        description: "Per-repeat case ordering"
+        type: choice
+        options:
+          - config
+          - reverse
+          - rotate
+        default: config
       timeout_seconds:
         description: "Per-case matrix timeout"
         default: "1800"
@@ -97,6 +105,7 @@ jobs:
           WORK_DIR: ${{ inputs.work_dir }}
           RUNS: ${{ inputs.runs }}
           MAX_CASES: ${{ inputs.max_cases }}
+          CASE_ORDER: ${{ inputs.case_order }}
           TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
           RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
           MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
@@ -139,6 +148,7 @@ jobs:
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \
+            --case-order "${CASE_ORDER}" \
             --timeout "${TIMEOUT_SECONDS}" \
             --run-timeout "${RUN_TIMEOUT_SECONDS}" \
             --max-total-seconds "${MAX_TOTAL_SECONDS}" \
@@ -162,6 +172,7 @@ jobs:
           WORK_DIR: ${{ inputs.work_dir }}
           RUNS: ${{ inputs.runs }}
           MAX_CASES: ${{ inputs.max_cases }}
+          CASE_ORDER: ${{ inputs.case_order }}
           TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
           RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
           MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
@@ -204,6 +215,7 @@ jobs:
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \
+            --case-order "${CASE_ORDER}" \
             --timeout "${TIMEOUT_SECONDS}" \
             --run-timeout "${RUN_TIMEOUT_SECONDS}" \
             --max-total-seconds "${MAX_TOTAL_SECONDS}" \
@@ -229,4 +241,5 @@ jobs:
             ${{ inputs.work_dir }}/preflight.md
             ${{ inputs.work_dir }}/summary.json
             ${{ inputs.work_dir }}/summary.md
+            ${{ inputs.work_dir }}/run-*/server-burnin-run-config.json
           if-no-files-found: warn

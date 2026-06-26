@@ -2900,8 +2900,11 @@ Exit criteria:
       `.github/workflows/live-vram-burnin.yml` workflow runs the burn-in wrapper
       on a self-hosted runner labelled `live-vram`, supports `one-hour`,
       `overnight`, and `custom` modes, uploads the plan, preflight,
-      effective-config, and summary artifacts, and always forwards the
+      effective-config, per-run config snapshots, and summary artifacts, and always forwards the
       backend-memory, soak-memory, elapsed-duration, and repeated-jitter gates.
+      The workflow also exposes `case_order=config|reverse|rotate` so long
+      mixed-model soaks can prove stability across fixed and order-varied
+      model sequences without hand-editing the checked-in matrix.
       It runs `--preflight-only` before the expensive burn-in so missing
       patched binaries, model files, model-root mappings, or required
       production gates fail early. `job_timeout_minutes` must be set high enough
@@ -3019,6 +3022,26 @@ Exit criteria:
       but it shows the Phi tail spike was not reproduced in focused repeat
       evidence and should be investigated as a mixed-model sequencing or host
       allocator stability issue before relaxing the global overnight gate.
+- [x] Add rotated mixed-model burn-in evidence. The burn-in wrapper now supports
+      `--case-order config|reverse|rotate`, writes a
+      `server-burnin-run-config.json` snapshot for each repeat, records every
+      run's case order in `summary.json`, and the self-hosted workflow exposes
+      the same control plus uploads the per-run config snapshots. The local
+      rotated run at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate3-20260626`
+      passed `3/3` repeats and `9/9` real cancellation/follow-up cases,
+      banked `1672.27` passed seconds against the `1200` second gate, and
+      covered all three case positions for Phi: last after Qwen 1.5B/Qwen 3B,
+      middle after Qwen 3B, and first before both Qwen cases. Projected device
+      memory stayed exactly stable at `1426`, `2391`, and `5304` MiB. Max
+      steady-state RSS-tail growth was `528`, `416`, and `0` KiB for Qwen
+      1.5B, Qwen 3B, and Phi respectively under the unchanged `4096` KiB
+      ceiling. Max follow-up p95 latency was `1.98399s`, `3.35810s`, and
+      `6.63108s`, and average p50 predicted throughput was `75.844`,
+      `43.841`, and `32.2325` tok/s. This strengthens the sequence-sensitivity
+      evidence and shows the failed overnight Phi tail spike is not reproduced
+      by a compact all-orders burn-in, but it still does not close overnight
+      soak or direct hardware peak-VRAM proof.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests

@@ -137,8 +137,13 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > repeats and `1395.2` passed seconds with stable `5304` MiB projected device
 > memory, max `1104` KiB steady-state RSS-tail growth, max `6.59681s`
 > follow-up p95/p99 latency, and `35.4421` tok/s average p50 predicted
-> throughput. Overnight mixed-model burn-in and direct peak-VRAM
-> hardware-counter proof remain open.
+> throughput. The burn-in wrapper and self-hosted workflow now support
+> `case_order=config|reverse|rotate` and preserve per-run config snapshots.
+> A local rotated mixed-model proof passed `3/3` repeats and `9/9` cases with
+> Phi last, middle, and first, stable projected device memory, max `0` KiB Phi
+> steady-state RSS-tail growth, and max `6.63108s` Phi follow-up p95/p99
+> latency. Overnight mixed-model burn-in and direct peak-VRAM hardware-counter
+> proof remain open.
 
 ## Implemented Evidence
 
@@ -299,3 +304,11 @@ kept projected device memory stable at `5304` MiB, held max steady-state
 RSS-tail growth to `1104` KiB, and averaged `35.4421` tok/s p50 predicted
 throughput. That narrows but does not close the failed mixed-model overnight
 tail question.
+The rotated mixed-model run at
+`/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate3-20260626`
+then passed `3/3` repeats and `9/9` real cases, banked `1672.27` passed
+seconds, and covered all three Phi positions across the case order. Projected
+device memory stayed stable at `1426`, `2391`, and `5304` MiB, and max
+steady-state RSS-tail growth stayed at `528`, `416`, and `0` KiB for Qwen
+1.5B, Qwen 3B, and Phi. This strengthens the sequence-sensitivity evidence,
+but it is still a compact burn-in rather than an overnight production pass.

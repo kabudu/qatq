@@ -33,6 +33,7 @@ class BurnInRun:
     stderr_path: Path
     failure: str
     summary: dict[str, Any]
+    config_path: Path | None = None
     timed_out: bool = False
     timeout_seconds: int = 0
     cleanup_signal: str | None = None
@@ -126,6 +127,18 @@ def main() -> int:
     parser.add_argument("--max-backend-kv-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-direct-peak-vram-jitter-ratio", type=float, default=0.0)
+    parser.add_argument(
+        "--case-order",
+        choices=["config", "reverse", "rotate"],
+        default="config",
+        help=(
+            "Case order to use for each matrix repeat. 'config' preserves the "
+            "effective config order, 'reverse' runs every repeat in reverse "
+            "order, and 'rotate' deterministically rotates the case list by "
+            "run index so mixed-model burn-ins can expose order-sensitive "
+            "allocator or teardown effects."
+        ),
+    )
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument(
         "--summarise-existing",
@@ -188,12 +201,14 @@ def main() -> int:
                     stderr_path=work_dir / f"run-{index:03d}" / "matrix-stderr.log",
                     failure=f"burn-in exceeded max total seconds before run {index}",
                     summary={},
+                    config_path=None,
                     timed_out=False,
                     timeout_seconds=args.run_timeout or derived_run_timeout(args),
                 )
             )
             break
-        input_failures = runtime_input_failures(args, prepared_config)
+        run_config_path = prepare_run_config(args, prepared_config, work_dir, index)
+        input_failures = runtime_input_failures(args, prepared_config, run_config_path=run_config_path)
         if input_failures:
             runs.append(
                 build_runtime_input_failure_run(
@@ -201,11 +216,12 @@ def main() -> int:
                     index,
                     work_dir / f"run-{index:03d}",
                     input_failures,
+                    run_config_path,
                 )
             )
             break
         run_timeout = run_timeout_for_remaining_total(args, started)
-        run = run_matrix(args, index, work_dir / f"run-{index:03d}", run_timeout=run_timeout)
+        run = run_matrix(args, index, work_dir / f"run-{index:03d}", run_config_path, run_timeout=run_timeout)
         runs.append(run)
         if run.status == "fail":
             break
@@ -321,6 +337,8 @@ def build_plan(
         "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
         "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
+        "case_order": args.case_order,
+        "run_case_orders": build_run_case_orders(args, prepared_config.config),
         "dry_run": args.dry_run,
         "preflight_only": args.preflight_only,
         "run_work_dirs": [str(work_dir / f"run-{index:03d}") for index in range(1, args.runs + 1)],
@@ -507,6 +525,7 @@ def build_preflight_only_summary(
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
+            "case_order": args.case_order,
         },
         "boundary": (
             "Preflight-only burn-in summary. It proves the selected runner inputs "
@@ -517,7 +536,53 @@ def build_preflight_only_summary(
     }
 
 
-def runtime_input_failures(args: argparse.Namespace, prepared_config: BurnInPreparedConfig) -> list[str]:
+def prepare_run_config(
+    args: argparse.Namespace,
+    prepared_config: BurnInPreparedConfig,
+    work_dir: Path,
+    index: int,
+) -> Path:
+    run_config = build_run_config(args, prepared_config.config, index)
+    run_config_dir = work_dir / f"run-{index:03d}"
+    run_config_dir.mkdir(parents=True, exist_ok=True)
+    run_config_path = run_config_dir / "server-burnin-run-config.json"
+    write_json(run_config_path, run_config)
+    return run_config_path
+
+
+def build_run_config(args: argparse.Namespace, config: dict[str, Any], index: int) -> dict[str, Any]:
+    cases = config.get("cases", [])
+    if not isinstance(cases, list) or len(cases) <= 1 or args.case_order == "config":
+        return dict(config)
+    ordered_cases = list(cases)
+    if args.case_order == "reverse":
+        ordered_cases = list(reversed(ordered_cases))
+    elif args.case_order == "rotate":
+        offset = (index - 1) % len(ordered_cases)
+        ordered_cases = ordered_cases[offset:] + ordered_cases[:offset]
+    return {**config, "cases": ordered_cases}
+
+
+def build_run_case_orders(args: argparse.Namespace, config: dict[str, Any]) -> list[dict[str, Any]]:
+    orders: list[dict[str, Any]] = []
+    for index in range(1, args.runs + 1):
+        run_config = build_run_config(args, config, index)
+        cases = run_config.get("cases", [])
+        case_ids = [
+            str(case.get("id", f"case-{case_index}"))
+            for case_index, case in enumerate(cases, start=1)
+            if isinstance(case, dict)
+        ]
+        orders.append({"run": index, "case_ids": case_ids})
+    return orders
+
+
+def runtime_input_failures(
+    args: argparse.Namespace,
+    prepared_config: BurnInPreparedConfig,
+    *,
+    run_config_path: Path | None = None,
+) -> list[str]:
     if args.dry_run:
         return []
     failures: list[str] = []
@@ -527,7 +592,14 @@ def runtime_input_failures(args: argparse.Namespace, prepared_config: BurnInPrep
         failures.append(f"probe runner missing before run: {args.probe_runner}")
     if not os.access(args.llama_server, os.X_OK):
         failures.append(f"llama-server is not executable before run: {args.llama_server}")
-    cases = prepared_config.config.get("cases", [])
+    config = prepared_config.config
+    if run_config_path is not None:
+        loaded = read_json_object_if_exists(run_config_path)
+        if not loaded:
+            failures.append(f"run config missing or invalid before run: {run_config_path}")
+        else:
+            config = loaded
+    cases = config.get("cases", [])
     if isinstance(cases, list):
         for case in cases:
             if not isinstance(case, dict):
@@ -543,6 +615,7 @@ def build_runtime_input_failure_run(
     index: int,
     work_dir: Path,
     failures: list[str],
+    run_config_path: Path | None = None,
 ) -> BurnInRun:
     work_dir.mkdir(parents=True, exist_ok=True)
     stdout_path = work_dir / "matrix-stdout.log"
@@ -562,6 +635,7 @@ def build_runtime_input_failure_run(
         stderr_path=stderr_path,
         failure=f"runtime input changed before run {index}: {failure}",
         summary={},
+        config_path=run_config_path,
         timed_out=False,
         timeout_seconds=args.run_timeout or derived_run_timeout(args),
     )
@@ -579,6 +653,7 @@ def run_matrix(
     args: argparse.Namespace,
     index: int,
     work_dir: Path,
+    run_config_path: Path,
     *,
     run_timeout: float | None = None,
 ) -> BurnInRun:
@@ -590,7 +665,7 @@ def run_matrix(
         sys.executable,
         args.matrix_runner,
         "--config",
-        args.config,
+        str(run_config_path),
         "--probe-runner",
         args.probe_runner,
         "--llama-server",
@@ -664,6 +739,7 @@ def run_matrix(
         stderr_path=stderr_path,
         failure=failure,
         summary=summary,
+        config_path=run_config_path,
         timed_out=timed_out,
         timeout_seconds=run_timeout,
         cleanup_signal=cleanup_signal,
@@ -740,6 +816,7 @@ def build_summary(
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
+            "case_order": getattr(args, "case_order", "config"),
         },
         "boundary": (
             "Bounded burn-in repetition for the configured llama-server live-VRAM "
@@ -811,6 +888,12 @@ def load_existing_burnin_runs(
         summary_path = Path(str(entry.get("summary") or run_dir / "summary.json"))
         stdout_path = Path(str(entry.get("stdout") or run_dir / "matrix-stdout.log"))
         stderr_path = Path(str(entry.get("stderr") or run_dir / "matrix-stderr.log"))
+        config_entry = entry.get("config")
+        config_path = (
+            Path(str(config_entry))
+            if isinstance(config_entry, str) and config_entry
+            else run_dir / "server-burnin-run-config.json"
+        )
         matrix_summary, summary_failure = load_matrix_summary(summary_path)
         if summary_failure and not matrix_summary:
             continue
@@ -836,6 +919,7 @@ def load_existing_burnin_runs(
                 stderr_path=stderr_path,
                 failure=failure,
                 summary=matrix_summary,
+                config_path=config_path if config_path.is_file() else None,
                 timed_out=bool(entry.get("timed_out", False)),
                 timeout_seconds=int(entry.get("timeout_seconds") or 0),
                 cleanup_signal=entry.get("cleanup_signal") if isinstance(entry.get("cleanup_signal"), str) else None,
@@ -892,6 +976,8 @@ def summarise_run(run: BurnInRun) -> dict[str, Any]:
         "returncode": run.returncode,
         "elapsed_seconds": run.elapsed_seconds,
         "work_dir": str(run.work_dir),
+        "config": str(run.config_path) if run.config_path else "",
+        "case_order": case_ids_from_config(run.config_path),
         "summary": str(run.summary_path),
         "stdout": str(run.stdout_path),
         "stderr": str(run.stderr_path),
@@ -904,6 +990,20 @@ def summarise_run(run: BurnInRun) -> dict[str, Any]:
         "cleanup_signal": run.cleanup_signal,
         "cleanup_escalated": run.cleanup_escalated,
     }
+
+
+def case_ids_from_config(config_path: Path | None) -> list[str]:
+    if config_path is None or not config_path.is_file():
+        return []
+    config = read_json_object_if_exists(config_path)
+    cases = config.get("cases", [])
+    if not isinstance(cases, list):
+        return []
+    return [
+        str(case.get("id", f"case-{index}"))
+        for index, case in enumerate(cases, start=1)
+        if isinstance(case, dict)
+    ]
 
 
 def aggregate_sustained_runtime(args: argparse.Namespace, runs: list[BurnInRun]) -> dict[str, Any]:

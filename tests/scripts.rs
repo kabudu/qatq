@@ -1290,6 +1290,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "1.1",
             "--max-direct-peak-vram-jitter-ratio",
             "1.2",
+            "--case-order",
+            "rotate",
             "--dry-run",
         ],
         check=False,
@@ -1304,8 +1306,17 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["timeout_seconds"] == 30
     assert plan["run_timeout_seconds"] == 120
     assert plan["min_passed_elapsed_seconds"] == 0.0
+    assert plan["case_order"] == "rotate"
     assert plan["config"] == str(work_dir / "server-burnin-effective-config.json")
     assert plan["original_config"].endswith("live-vram-server-layer-policy-notrace.local.example.json")
+    assert plan["run_case_orders"][0]["case_ids"] == [
+        "qwen25-15b-native-layer-policy-baseline",
+        "qwen25-15b-qatq-l1-policy-notrace",
+    ]
+    assert plan["run_case_orders"][1]["case_ids"] == [
+        "qwen25-15b-qatq-l1-policy-notrace",
+        "qwen25-15b-native-layer-policy-baseline",
+    ]
     preflight = json.loads((work_dir / "preflight.json").read_text())
     assert preflight["status"] == "pass"
     assert preflight["dry_run"] is True
@@ -1328,9 +1339,20 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["gates"]["max_rss_growth_kib"] == 262144.0
     assert summary["gates"]["max_rss_tail_growth_kib"] == 4096.0
     assert summary["gates"]["max_direct_peak_vram_jitter_ratio"] == 1.2
+    assert summary["gates"]["case_order"] == "rotate"
+    assert summary["runs"][0]["case_order"] == [
+        "qwen25-15b-native-layer-policy-baseline",
+        "qwen25-15b-qatq-l1-policy-notrace",
+    ]
+    assert summary["runs"][1]["case_order"] == [
+        "qwen25-15b-qatq-l1-policy-notrace",
+        "qwen25-15b-native-layer-policy-baseline",
+    ]
     for index in (1, 2):
         run_summary = work_dir / f"run-{index:03d}" / "summary.json"
+        run_config = work_dir / f"run-{index:03d}" / "server-burnin-run-config.json"
         assert run_summary.exists(), run_summary
+        assert run_config.exists(), run_config
         data = json.loads(run_summary.read_text())
         assert data["status"] == "dry-run"
 "#,
@@ -2651,11 +2673,14 @@ assert "actions/checkout@v7" in workflow
 assert "actions/upload-artifact@v4" in workflow
 assert "model_root:" in workflow
 assert "MODEL_ROOT:" in workflow
+assert "case_order:" in workflow
+assert "CASE_ORDER:" in workflow
 assert "Preflight sustained live VRAM burn-in" in workflow
 assert "MIN_PASSED_SECONDS=3600" in workflow
 assert "MIN_PASSED_SECONDS=28800" in workflow
 assert "MODEL_ROOT_ARGS=()" in workflow
 assert "--model-root" in workflow
+assert "--case-order" in workflow
 assert "--preflight-only" in workflow
 assert "--min-passed-elapsed-seconds" in workflow
 assert "--require-backend-memory-diagnostics" in workflow
@@ -2665,6 +2690,7 @@ assert "--max-rss-growth-kib" in workflow
 assert "--max-rss-tail-growth-kib" in workflow
 assert "--max-direct-peak-vram-jitter-ratio" in workflow
 assert "server-burnin-effective-config.json" in workflow
+assert "run-*/server-burnin-run-config.json" in workflow
 assert "preflight.json" in workflow
 assert "preflight.md" in workflow
 assert "if-no-files-found: warn" in workflow

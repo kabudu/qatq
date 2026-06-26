@@ -473,8 +473,10 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       `self-hosted` and `live-vram`, offers one-hour, overnight, and custom
       profiles, verifies the patched `llama-server` path, invokes the burn-in
       wrapper with backend-memory, soak-memory, elapsed-duration, and jitter
-      gates, accepts a `job_timeout_minutes` ceiling for long runs, and uploads
-      the plan, preflight, effective-config, and summary artifacts. The workflow
+      gates, accepts a `job_timeout_minutes` ceiling for long runs, exposes
+      `case_order=config|reverse|rotate` for sequence-sensitive mixed-model
+      soaks, and uploads the plan, preflight, effective-config, per-run config
+      snapshots, and summary artifacts. The workflow
       runs `--preflight-only` before the expensive burn-in so missing patched
       binaries, model files, model-root mappings, or required production gates
       fail early. This is the reproducible launch path for the real long soaks;
@@ -550,6 +552,18 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       under the unchanged `4096` KiB ceiling. This narrows the remaining
       overnight question to mixed-model sequencing or host allocator stability
       rather than a repeatedly reproduced Phi-only tail leak.
+- [x] Add rotated mixed-model burn-in coverage. The burn-in wrapper now writes
+      per-run config snapshots, records the executed case order in summaries,
+      and supports `--case-order rotate`; the self-hosted workflow exposes the
+      same option. The local rotated proof at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-rotate3-20260626`
+      passed `3/3` repeats, `9/9` real cases, and `1672.27` passed seconds,
+      covering Phi last, middle, and first across the three repeats. Projected
+      device memory stayed stable at `1426`, `2391`, and `5304` MiB. Max
+      steady-state RSS-tail growth stayed under the unchanged `4096` KiB gate
+      at `528`, `416`, and `0` KiB for Qwen 1.5B, Qwen 3B, and Phi. This
+      narrows the failed overnight signal further, but overnight and direct
+      hardware peak-VRAM proof remain open.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5
