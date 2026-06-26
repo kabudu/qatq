@@ -712,6 +712,63 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_page_size_sweep_run_child_command_times_out_process_group() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, subprocess, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("sweep", "scripts/llama_cpp_live_vram_page_size_sweep.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    runner = tmp / "hung_sweep_child.py"
+    marker = tmp / "child-terminated.txt"
+    runner.write_text(
+        "import subprocess, signal, sys, time\n"
+        "from pathlib import Path\n"
+        "marker = Path(sys.argv[1])\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    str(marker),\n"
+        "])\n"
+        "print('started sweep child', child.pid, flush=True)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    try:
+        module.run_child_command([sys.executable, str(runner), str(marker)], cwd=Path.cwd(), timeout=1)
+        raise AssertionError("expected timeout")
+    except subprocess.TimeoutExpired as exc:
+        cleanup = getattr(exc, "cleanup")
+        assert cleanup["attempted"] is True
+        assert cleanup["signal"] == "SIGTERM"
+        assert cleanup["escalated"] is False
+        assert isinstance(cleanup["returncode"], int)
+        assert "started sweep child" in (exc.output or "")
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_matrix_augments_failures_with_latest_stage_status() {
     let output = run_python_snippet(
         r#"

@@ -2263,7 +2263,9 @@ VRAM savings by silently failing offloads.
       experiment. Initial evidence uses 1024-token pages after a 512-token run
       missed the all-pages compression gate by one tail page.
 - [x] Add a repeatable llama.cpp page-size sweep runner for real GPU evidence:
-      `scripts/llama_cpp_live_vram_page_size_sweep.py`.
+      `scripts/llama_cpp_live_vram_page_size_sweep.py`. Sweep child evidence
+      runs now execute in their own process group and report cleanup
+      signal/escalation details when a page-size case times out.
 - [ ] Decide minimum acceptable VRAM reduction and maximum acceptable latency
       regression.
 - [ ] Define benchmark prompt suite and task suite before running experiments.

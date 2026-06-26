@@ -1764,6 +1764,10 @@ python3 scripts/llama_cpp_live_vram_page_size_sweep.py \
   --work-dir /tmp/qatq-live-vram-page-size-sweep
 ```
 
+The sweep starts each evidence child in its own process group; if a page-size
+case exceeds its outer timeout, it tears down the full group and records cleanup
+signal/escalation details in the failure section.
+
 The 2026-06-24 Qwen2.5 1.5B sweep at
 `/private/tmp/qatq-live-vram-page-size-sweep-20260624` kept the 512-token
 failure visible, passed 1024 and 2048 tokens, and recommended 1024 tokens as
