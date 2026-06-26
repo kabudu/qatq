@@ -2370,6 +2370,54 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_probe_direct_peak_probe_timeout_cleans_process_group() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, subprocess, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    marker = tmp / "child-terminated.txt"
+    probe = tmp / "hung_nvidia_smi.py"
+    probe.write_text(
+        "import subprocess, sys, time\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    sys.argv[1],\n"
+        "])\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    result = module.run_direct_peak_probe_command([sys.executable, str(probe), str(marker)], timeout=1)
+    assert result.returncode == 124
+    assert "command timed out after 1s" in result.stderr
+    assert "cleanup=SIGTERM" in result.stderr
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_stop_server_cleans_process_group() {
     let output = run_python_snippet(
         r#"

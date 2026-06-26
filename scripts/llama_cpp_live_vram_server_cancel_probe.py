@@ -1020,16 +1020,12 @@ class DirectPeakVramSampler:
 
     def _nvidia_smi_supports_process_memory(self) -> bool:
         assert self.path is not None
-        try:
-            result = subprocess.run(
-                [self.path, "--help-query-compute-apps"],
-                check=False,
-                text=True,
-                capture_output=True,
-                timeout=5.0,
+        result = run_direct_peak_probe_command([self.path, "--help-query-compute-apps"], timeout=5.0)
+        if result.returncode == 124:
+            self._capability_reason = (
+                (result.stderr or result.stdout).strip()
+                or "nvidia-smi capability probe timed out"
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            self._capability_reason = f"nvidia-smi capability probe failed: {exc}"
             return False
         help_text = result.stdout + result.stderr
         supported = "pid" in help_text and "used_memory" in help_text
@@ -1043,22 +1039,14 @@ class DirectPeakVramSampler:
     def _run(self) -> None:
         assert self.path is not None
         while not self._stop.is_set():
-            try:
-                result = subprocess.run(
-                    [
-                        self.path,
-                        "--query-compute-apps=pid,used_memory",
-                        "--format=csv,noheader,nounits",
-                    ],
-                    check=False,
-                    text=True,
-                    capture_output=True,
-                    timeout=5.0,
-                )
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                self.errors.append(str(exc))
-                self._stop.wait(self.interval_seconds)
-                continue
+            result = run_direct_peak_probe_command(
+                [
+                    self.path,
+                    "--query-compute-apps=pid,used_memory",
+                    "--format=csv,noheader,nounits",
+                ],
+                timeout=5.0,
+            )
             if result.returncode == 0:
                 values = parse_nvidia_smi_process_memory(result.stdout, self.pid)
                 for value in values:
@@ -1076,6 +1064,32 @@ class DirectPeakVramSampler:
                 text = (result.stderr or result.stdout).strip()
                 self.errors.append(text.splitlines()[0] if text else f"return code {result.returncode}")
             self._stop.wait(self.interval_seconds)
+
+
+def run_direct_peak_probe_command(command: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+    try:
+        proc = subprocess.Popen(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(command, 127, "", str(exc))
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(command, proc.returncode or 0, stdout, stderr)
+    except subprocess.TimeoutExpired as error:
+        cleanup = stop_server(proc, max(1.0, min(5.0, timeout)))
+        stdout = error.stdout if isinstance(error.stdout, str) else ""
+        stderr = error.stderr if isinstance(error.stderr, str) else ""
+        detail = (
+            f"command timed out after {timeout:g}s; "
+            f"cleanup={cleanup.get('signal', 'unknown')}"
+        )
+        stderr = f"{stderr.rstrip()}\n{detail}".strip()
+        return subprocess.CompletedProcess(command, 124, stdout, stderr)
 
 
 def sample_memory(label: str, pid: int) -> dict[str, object]:
