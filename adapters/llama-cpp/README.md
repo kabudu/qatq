@@ -620,7 +620,10 @@ budget. The single evidence runner and the matrix runner both support
 `--max-deep-mixed-token-p99-regression-ratio` for the stricter long-context
 gate; that path runs a deep full-GPU baseline, compares deep full-GPU output to
 deep mixed-KV output, writes `deep-latency-gate.json`, and then enforces p95/p99
-against generated-token `deep-mixed-kv` rows. Use case-level
+latency ceilings against generated-token `deep-mixed-kv` rows. The single
+evidence runner also starts stage commands in a new process group; if a stage
+exceeds `--timeout`, it tears down the whole group with SIGTERM/SIGKILL and
+records cleanup metadata in `stage-status.json`. Use case-level
 `max_queued_pages` when tuning long-context profiles so the matrix can keep
 restore/staging pressure bounded while still measuring reclaim.
 Matrix configs may also include a top-level `matrix_gates` object. The runner

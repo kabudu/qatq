@@ -15,6 +15,7 @@ import csv
 import json
 import math
 import os
+import signal
 import secrets
 import shutil
 import subprocess
@@ -1682,12 +1683,14 @@ def run_llama(
         log_text = timeout_output_to_text(exc.stdout) + timeout_output_to_text(exc.stderr)
         if log_text:
             log_path.write_text(log_text, encoding="utf-8")
+        cleanup = getattr(exc, "cleanup", {})
         write_stage_status(
             work_dir,
             spec.name,
             "timeout",
             **stage_context,
             elapsed_seconds=time.time() - stage_started,
+            cleanup=cleanup if isinstance(cleanup, dict) else {},
             artifacts=run_spec_artifacts(spec, log_path),
         )
         raise SystemExit(f"{spec.name} timed out after {args.timeout}s; log: {log_path}") from exc
@@ -3787,18 +3790,71 @@ def run(
     allow_failure: bool = False,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    completed = subprocess.run(
+    stdout_pipe = subprocess.PIPE if capture else None
+    stderr_pipe = subprocess.PIPE if capture else None
+    proc = subprocess.Popen(
         command,
         cwd=cwd,
         env=env,
         text=True,
-        capture_output=capture,
-        timeout=timeout,
+        stdout=stdout_pipe,
+        stderr=stderr_pipe,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        cleanup = terminate_process_group(proc)
+        timeout_stdout, timeout_stderr = proc.communicate()
+        exc.output = timeout_output_to_text(exc.output) + timeout_output_to_text(timeout_stdout)
+        exc.stderr = timeout_output_to_text(exc.stderr) + timeout_output_to_text(timeout_stderr)
+        exc.cleanup = cleanup
+        raise
+    completed = subprocess.CompletedProcess(
+        command,
+        proc.returncode if proc.returncode is not None else -1,
+        stdout,
+        stderr,
     )
     if completed.returncode != 0 and not allow_failure:
         detail = (completed.stderr or completed.stdout or "").strip()
         raise SystemExit(f"command failed with exit code {completed.returncode}: {shell_join(command)}\n{detail}")
     return completed
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": proc.poll(),
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        cleanup["signal"] = "exited"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
+    except PermissionError:
+        cleanup["signal"] = "permission-denied"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            cleanup["signal"] = "exited"
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["returncode"] = None
+        return cleanup
 
 
 def parse_layer_sweep(value: str, fallback: int) -> list[int]:

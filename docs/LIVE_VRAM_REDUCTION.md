@@ -2289,7 +2289,9 @@ Exit criteria:
       page metadata, per-page baseline sizes, and verified restore status.
 - [x] Add a reproducible fail-closed Metal evidence runner for current
       whole-tensor/layer allocator evidence:
-      `scripts/llama_cpp_live_vram_evidence.py`.
+      `scripts/llama_cpp_live_vram_evidence.py`. Stage commands now execute in
+      their own process group; timeout handling sends SIGTERM/SIGKILL to the
+      full group and records cleanup metadata in `stage-status.json`.
 
 Exit criteria:
 
