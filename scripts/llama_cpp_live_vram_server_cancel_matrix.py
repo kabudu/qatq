@@ -83,6 +83,7 @@ SCALAR_FLAGS = {
     "request_timeout": "--request-timeout",
     "shutdown_timeout": "--shutdown-timeout",
     "direct_peak_vram_sample_interval_ms": "--direct-peak-vram-sample-interval-ms",
+    "direct_peak_vram_retain_samples": "--direct-peak-vram-retain-samples",
     "prompt": "--prompt",
     "prompt_repeat": "--prompt-repeat",
 }

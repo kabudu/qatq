@@ -40,6 +40,12 @@ def main() -> int:
         default=100,
         help="Sampling interval for --sample-pid.",
     )
+    parser.add_argument(
+        "--max-retained-samples",
+        type=int,
+        default=1024,
+        help="Maximum direct-counter sample values to retain in JSON evidence.",
+    )
     args = parser.parse_args()
 
     report = build_report(
@@ -47,6 +53,7 @@ def main() -> int:
         sample_pid=args.sample_pid,
         sample_seconds=args.sample_seconds,
         sample_interval_ms=args.sample_interval_ms,
+        max_retained_samples=args.max_retained_samples,
     )
     write_json(Path(args.output), report)
     if args.require_direct_peak_vram and not report["direct_peak_vram_counter"]["available"]:
@@ -62,13 +69,16 @@ def build_report(
     sample_pid: int | None = None,
     sample_seconds: float = 1.0,
     sample_interval_ms: int = 100,
+    max_retained_samples: int = 1024,
 ) -> dict[str, Any]:
+    max_retained_samples = max(0, max_retained_samples)
     powermetrics = inspect_powermetrics()
     vmmap = inspect_vmmap()
     nvidia_smi = inspect_nvidia_smi(
         sample_pid=sample_pid,
         sample_seconds=sample_seconds,
         sample_interval_ms=sample_interval_ms,
+        max_retained_samples=max_retained_samples,
     )
     backend = inspect_matrix_summary(matrix_summary) if matrix_summary else {}
     direct_sources: list[dict[str, Any]] = []
@@ -91,6 +101,7 @@ def build_report(
         "sample_pid": sample_pid,
         "sample_seconds": sample_seconds,
         "sample_interval_ms": sample_interval_ms,
+        "max_retained_samples": max_retained_samples,
         "nvidia_smi": nvidia_smi,
         "powermetrics": powermetrics,
         "vmmap": vmmap,
@@ -112,6 +123,7 @@ def inspect_nvidia_smi(
     sample_pid: int | None,
     sample_seconds: float,
     sample_interval_ms: int,
+    max_retained_samples: int,
 ) -> dict[str, Any]:
     path = shutil.which("nvidia-smi")
     info: dict[str, Any] = {
@@ -159,6 +171,7 @@ def inspect_nvidia_smi(
         sample_pid=sample_pid,
         sample_seconds=sample_seconds,
         sample_interval_ms=sample_interval_ms,
+        max_retained_samples=max_retained_samples,
     )
     info["peak_sample"] = sample
     if sample["peak_memory_mib"] is not None:
@@ -168,6 +181,9 @@ def inspect_nvidia_smi(
             "sample_pid": sample_pid,
             "peak_memory_mib": sample["peak_memory_mib"],
             "samples": sample["samples"],
+            "sample_count": sample["sample_count"],
+            "samples_retained": sample["samples_retained"],
+            "samples_truncated": sample["samples_truncated"],
             "reason": "sampled per-process GPU memory with nvidia-smi",
         }
     else:
@@ -181,11 +197,15 @@ def sample_nvidia_smi_process_memory(
     sample_pid: int,
     sample_seconds: float,
     sample_interval_ms: int,
+    max_retained_samples: int,
 ) -> dict[str, Any]:
     sample_seconds = max(0.0, sample_seconds)
     interval_seconds = max(0.01, sample_interval_ms / 1000.0)
+    max_retained_samples = max(0, max_retained_samples)
     deadline = time.monotonic() + sample_seconds
     samples: list[int] = []
+    sample_count = 0
+    peak: int | None = None
     errors: list[str] = []
 
     while True:
@@ -204,13 +224,17 @@ def sample_nvidia_smi_process_memory(
             text = (result.stderr or result.stdout).strip()
             errors.append(text.splitlines()[0] if text else f"return code {result.returncode}")
         else:
-            samples.extend(parse_nvidia_smi_process_memory(result.stdout, sample_pid))
+            values = parse_nvidia_smi_process_memory(result.stdout, sample_pid)
+            for value in values:
+                sample_count += 1
+                peak = value if peak is None else max(peak, value)
+                if len(samples) < max_retained_samples:
+                    samples.append(value)
 
         if time.monotonic() >= deadline:
             break
         time.sleep(interval_seconds)
 
-    peak = max(samples) if samples else None
     reason = (
         "sampled per-process GPU memory with nvidia-smi"
         if peak is not None
@@ -223,6 +247,9 @@ def sample_nvidia_smi_process_memory(
         "sample_seconds": sample_seconds,
         "sample_interval_ms": sample_interval_ms,
         "samples": samples,
+        "sample_count": sample_count,
+        "samples_retained": len(samples),
+        "samples_truncated": sample_count > len(samples),
         "peak_memory_mib": peak,
         "errors": errors[:5],
         "reason": reason,

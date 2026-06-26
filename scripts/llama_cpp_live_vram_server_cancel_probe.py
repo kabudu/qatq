@@ -191,6 +191,15 @@ def main() -> int:
         help="Sampling interval for --sample-direct-peak-vram. Default 100.",
     )
     parser.add_argument(
+        "--direct-peak-vram-retain-samples",
+        type=int,
+        default=1024,
+        help=(
+            "Maximum direct peak-VRAM sample values to retain in summary JSON. "
+            "Peak and sample_count remain complete. Default 1024."
+        ),
+    )
+    parser.add_argument(
         "--concurrent-followup-during-cancel",
         action="store_true",
         help=(
@@ -310,6 +319,7 @@ def main() -> int:
         "sample_direct_peak_vram": args.sample_direct_peak_vram,
         "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
         "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
+        "direct_peak_vram_retain_samples": args.direct_peak_vram_retain_samples,
         "dry_run": args.dry_run,
     }
     write_json(work_dir / "server-cancel-probe-plan.json", plan)
@@ -339,6 +349,7 @@ def main() -> int:
             "sample_direct_peak_vram": args.sample_direct_peak_vram,
             "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
             "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
+            "direct_peak_vram_retain_samples": args.direct_peak_vram_retain_samples,
             "artifacts": {key: str(value) for key, value in artifacts.items()},
             "boundary": "Dry-run plan only; no llama-server process was started.",
         }
@@ -387,6 +398,7 @@ def main() -> int:
                 direct_peak_sampler = DirectPeakVramSampler(
                     proc.pid,
                     interval_ms=args.direct_peak_vram_sample_interval_ms,
+                    max_retained_samples=args.direct_peak_vram_retain_samples,
                 )
                 direct_peak_sampler.start()
             for iteration in range(1, args.warmup_iterations + 1):
@@ -529,6 +541,7 @@ def main() -> int:
         "sample_direct_peak_vram": args.sample_direct_peak_vram,
         "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
         "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
+        "direct_peak_vram_retain_samples": args.direct_peak_vram_retain_samples,
         "direct_peak_vram_counter": direct_peak_vram_counter,
         "memory_samples": memory_samples,
         "memory_checks": memory_checks,
@@ -587,6 +600,10 @@ def validate_args(args: argparse.Namespace) -> None:
     require(
         args.direct_peak_vram_sample_interval_ms > 0,
         "--direct-peak-vram-sample-interval-ms must be positive",
+    )
+    require(
+        args.direct_peak_vram_retain_samples >= 0,
+        "--direct-peak-vram-retain-samples must be non-negative",
     )
     require(
         not args.require_direct_peak_vram_counter or args.sample_direct_peak_vram,
@@ -898,11 +915,14 @@ def allocate_host_memory_pressure(mib_count: int) -> bytearray | None:
 
 
 class DirectPeakVramSampler:
-    def __init__(self, pid: int, *, interval_ms: int) -> None:
+    def __init__(self, pid: int, *, interval_ms: int, max_retained_samples: int) -> None:
         self.pid = pid
         self.interval_seconds = max(0.01, interval_ms / 1000.0)
+        self.max_retained_samples = max(0, max_retained_samples)
         self.path = shutil.which("nvidia-smi")
         self.samples: list[int] = []
+        self.sample_count = 0
+        self.peak_memory_mib: int | None = None
         self.errors: list[str] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -925,14 +945,14 @@ class DirectPeakVramSampler:
         if self._thread is not None:
             self._thread.join(timeout=max(1.0, self.interval_seconds * 2.0))
         self._end_monotonic = time.monotonic()
-        peak = max(self.samples) if self.samples else None
-        available = peak is not None
+        available = self.peak_memory_mib is not None
         return {
             "enabled": True,
             "available": available,
             "backend": "nvidia-smi",
             "sample_pid": self.pid,
             "sample_interval_ms": int(self.interval_seconds * 1000),
+            "max_retained_samples": self.max_retained_samples,
             "started_at": self._start_monotonic,
             "completed_at": self._end_monotonic,
             "duration_seconds": (
@@ -941,8 +961,10 @@ class DirectPeakVramSampler:
                 else None
             ),
             "samples": self.samples,
-            "sample_count": len(self.samples),
-            "peak_memory_mib": peak,
+            "sample_count": self.sample_count,
+            "samples_retained": len(self.samples),
+            "samples_truncated": self.sample_count > len(self.samples),
+            "peak_memory_mib": self.peak_memory_mib,
             "errors": self.errors[:5],
             "reason": (
                 "sampled per-process GPU memory with nvidia-smi"
@@ -994,7 +1016,15 @@ class DirectPeakVramSampler:
                 continue
             if result.returncode == 0:
                 values = parse_nvidia_smi_process_memory(result.stdout, self.pid)
-                self.samples.extend(values)
+                for value in values:
+                    self.sample_count += 1
+                    self.peak_memory_mib = (
+                        value
+                        if self.peak_memory_mib is None
+                        else max(self.peak_memory_mib, value)
+                    )
+                    if len(self.samples) < self.max_retained_samples:
+                        self.samples.append(value)
                 if values:
                     self._capability_reason = "sampled per-process GPU memory with nvidia-smi"
             else:

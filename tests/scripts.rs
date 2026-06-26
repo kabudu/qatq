@@ -1036,6 +1036,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "4242",
             "--sample-seconds",
             "0",
+            "--max-retained-samples",
+            "1",
             "--require-direct-peak-vram",
         ],
         check=False,
@@ -1050,6 +1052,10 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert source["backend"] == "nvidia-smi"
     assert source["sample_pid"] == 4242
     assert source["peak_memory_mib"] == 256
+    assert source["sample_count"] == 2
+    assert source["samples_retained"] == 1
+    assert source["samples_truncated"] is True
+    assert source["samples"] == [128]
     assert report["nvidia_smi"]["supports_process_gpu_memory"] is True
 "#,
     );
@@ -1148,6 +1154,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "--require-direct-peak-vram-counter",
             "--direct-peak-vram-sample-interval-ms",
             "250",
+            "--direct-peak-vram-retain-samples",
+            "2",
             "--dry-run",
         ],
         check=False,
@@ -1199,6 +1207,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["sample_direct_peak_vram"] is True
     assert plan["require_direct_peak_vram_counter"] is True
     assert plan["direct_peak_vram_sample_interval_ms"] == 250
+    assert plan["direct_peak_vram_retain_samples"] == 2
     assert summary["iterations"] == 1
     assert summary["warmup_iterations"] == 0
     assert summary["host_memory_pressure_mib"] == 256
@@ -1214,6 +1223,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["sample_direct_peak_vram"] is True
     assert summary["require_direct_peak_vram_counter"] is True
     assert summary["direct_peak_vram_sample_interval_ms"] == 250
+    assert summary["direct_peak_vram_retain_samples"] == 2
     artifacts = plan["artifacts"]
     assert artifacts["event_trace"].endswith("event-trace.jsonl")
     assert artifacts["page_segments"].endswith("page-segments.jsonl")
@@ -2387,6 +2397,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "sample_direct_peak_vram": True,
             "require_direct_peak_vram_counter": True,
             "direct_peak_vram_sample_interval_ms": 250,
+            "direct_peak_vram_retain_samples": 2,
         },
         "cases": [
             {
@@ -2421,6 +2432,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert "--sample-direct-peak-vram" in command
     assert "--require-direct-peak-vram-counter" in command
     assert command[command.index("--direct-peak-vram-sample-interval-ms") + 1] == "250"
+    assert command[command.index("--direct-peak-vram-retain-samples") + 1] == "2"
     case = summary["cases"][0]
     assert case["sample_direct_peak_vram"] is True
     assert case["require_direct_peak_vram_counter"] is True

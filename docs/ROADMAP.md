@@ -424,7 +424,9 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       support so summaries can include `direct_peak_vram_counter` while the
       server is under warmup and measured cancellation/follow-up load, and the
       matrix runner forwards the same policy keys from JSON configs for
-      burn-in use on suitable hardware. Matrix `comparison_gates` can now
+      burn-in use on suitable hardware. Retained sample arrays are bounded with
+      `direct_peak_vram_retain_samples` while `sample_count` and
+      `peak_memory_mib` remain complete. Matrix `comparison_gates` can now
       require direct counters and cap QATQ/native direct peak-VRAM ratio with
       `require_direct_peak_vram_counters` and `max_direct_peak_vram_ratio`.
       The burn-in wrapper also supports `--max-direct-peak-vram-jitter-ratio`

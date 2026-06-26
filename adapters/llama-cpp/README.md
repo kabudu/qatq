@@ -1121,9 +1121,11 @@ when the required counter cannot be sampled.
 
 Matrix configs can carry the same policy keys:
 `sample_direct_peak_vram`, `require_direct_peak_vram_counter`, and
-`direct_peak_vram_sample_interval_ms`. Use those keys only for runs on hosts
-with suitable direct counters; the local Apple Metal policy examples leave them
-disabled because `nvidia-smi` is absent.
+`direct_peak_vram_sample_interval_ms`. Use
+`direct_peak_vram_retain_samples` to cap the retained JSON sample array for
+long burn-ins; `sample_count` and `peak_memory_mib` remain complete. Use these
+keys only for runs on hosts with suitable direct counters; the local Apple Metal
+policy examples leave them disabled because `nvidia-smi` is absent.
 When native and QATQ cases share a `comparison_group`, the matrix runner can
 also enforce `require_direct_peak_vram_counters: 1` and
 `max_direct_peak_vram_ratio` under `comparison_gates`, so a burn-in fails if

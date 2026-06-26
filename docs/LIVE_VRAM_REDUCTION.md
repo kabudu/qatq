@@ -828,6 +828,8 @@ probe also supports integrated sampling with `--sample-direct-peak-vram`,
 the same policy as `sample_direct_peak_vram`,
 `require_direct_peak_vram_counter`, and `direct_peak_vram_sample_interval_ms`,
 so burn-in runs on suitable hosts can fail closed on missing direct counters.
+`direct_peak_vram_retain_samples` bounds the retained JSON samples for long
+runs while preserving complete `sample_count` and `peak_memory_mib`.
 For native/QATQ comparison groups, `comparison_gates` can now require direct
 hardware counters with `require_direct_peak_vram_counters: 1` and cap QATQ's
 direct peak-VRAM ratio with `max_direct_peak_vram_ratio`.
