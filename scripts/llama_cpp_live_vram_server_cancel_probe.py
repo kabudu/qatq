@@ -959,11 +959,23 @@ def allocate_host_memory_pressure(mib_count: int) -> bytearray | None:
     return pressure
 
 
+DIRECT_PEAK_PROBE_TIMEOUT_SECONDS = 5.0
+DIRECT_PEAK_PROBE_CLEANUP_TIMEOUT_SECONDS = 5.0
+
+
 class DirectPeakVramSampler:
-    def __init__(self, pid: int, *, interval_ms: int, max_retained_samples: int) -> None:
+    def __init__(
+        self,
+        pid: int,
+        *,
+        interval_ms: int,
+        max_retained_samples: int,
+        probe_timeout_seconds: float = DIRECT_PEAK_PROBE_TIMEOUT_SECONDS,
+    ) -> None:
         self.pid = pid
         self.interval_seconds = max(0.01, interval_ms / 1000.0)
         self.max_retained_samples = max(0, max_retained_samples)
+        self.probe_timeout_seconds = max(0.001, probe_timeout_seconds)
         self.path = shutil.which("nvidia-smi")
         self.samples: list[int] = []
         self.sample_count = 0
@@ -988,9 +1000,22 @@ class DirectPeakVramSampler:
     def stop(self) -> dict[str, object]:
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=max(1.0, self.interval_seconds * 2.0))
+            self._thread.join(
+                timeout=max(
+                    self.interval_seconds * 2.0,
+                    self.probe_timeout_seconds + DIRECT_PEAK_PROBE_CLEANUP_TIMEOUT_SECONDS + 0.5,
+                )
+            )
         self._end_monotonic = time.monotonic()
         available = self.peak_memory_mib is not None
+        thread_alive = self._thread is not None and self._thread.is_alive()
+        reason = (
+            "sampled per-process GPU memory with nvidia-smi"
+            if available
+            else self._capability_reason
+        )
+        if thread_alive and not available:
+            reason = "direct peak-VRAM sampler did not stop cleanly"
         return {
             "enabled": True,
             "available": available,
@@ -998,6 +1023,8 @@ class DirectPeakVramSampler:
             "sample_pid": self.pid,
             "sample_interval_ms": int(self.interval_seconds * 1000),
             "max_retained_samples": self.max_retained_samples,
+            "probe_timeout_seconds": self.probe_timeout_seconds,
+            "sampler_thread_alive": thread_alive,
             "started_at": self._start_monotonic,
             "completed_at": self._end_monotonic,
             "duration_seconds": (
@@ -1011,16 +1038,15 @@ class DirectPeakVramSampler:
             "samples_truncated": self.sample_count > len(self.samples),
             "peak_memory_mib": self.peak_memory_mib,
             "errors": self.errors[:5],
-            "reason": (
-                "sampled per-process GPU memory with nvidia-smi"
-                if available
-                else self._capability_reason
-            ),
+            "reason": reason,
         }
 
     def _nvidia_smi_supports_process_memory(self) -> bool:
         assert self.path is not None
-        result = run_direct_peak_probe_command([self.path, "--help-query-compute-apps"], timeout=5.0)
+        result = run_direct_peak_probe_command(
+            [self.path, "--help-query-compute-apps"],
+            timeout=self.probe_timeout_seconds,
+        )
         if result.returncode == 124:
             self._capability_reason = (
                 (result.stderr or result.stdout).strip()
@@ -1052,7 +1078,7 @@ class DirectPeakVramSampler:
                     "--query-compute-apps=pid,used_memory",
                     "--format=csv,noheader,nounits",
                 ],
-                timeout=5.0,
+                timeout=self.probe_timeout_seconds,
             )
             if result.returncode == 0:
                 values = parse_nvidia_smi_process_memory(result.stdout, self.pid)
@@ -1088,7 +1114,10 @@ def run_direct_peak_probe_command(command: list[str], *, timeout: float) -> subp
         stdout, stderr = proc.communicate(timeout=timeout)
         return subprocess.CompletedProcess(command, proc.returncode or 0, stdout, stderr)
     except subprocess.TimeoutExpired as error:
-        cleanup = stop_server(proc, max(1.0, min(5.0, timeout)))
+        cleanup = stop_server(
+            proc,
+            max(1.0, min(DIRECT_PEAK_PROBE_CLEANUP_TIMEOUT_SECONDS, timeout)),
+        )
         stdout = error.stdout if isinstance(error.stdout, str) else ""
         stderr = error.stderr if isinstance(error.stderr, str) else ""
         detail = (

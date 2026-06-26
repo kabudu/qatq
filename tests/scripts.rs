@@ -2519,6 +2519,72 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_probe_direct_peak_sampler_stop_waits_for_probe_cleanup() {
+    let output = run_python_snippet(
+        r###"
+import importlib.util, os, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    fake = tmp / "nvidia-smi"
+    query_started = tmp / "query-started.txt"
+    fake.write_text("\n".join([
+        "#!/usr/bin/env python3",
+        "import sys, time",
+        "from pathlib import Path",
+        f"query_started = Path({str(query_started)!r})",
+        "if '--help-query-compute-apps' in sys.argv:",
+        "    print('pid\\nused_memory')",
+        "    raise SystemExit(0)",
+        "if any(arg.startswith('--query-compute-apps') for arg in sys.argv):",
+        "    query_started.write_text('started')",
+        "    time.sleep(30)",
+        "raise SystemExit(2)",
+    ]) + "\n", encoding="utf-8")
+    fake.chmod(0o755)
+    old_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = str(tmp) + os.pathsep + old_path
+    try:
+        sampler = module.DirectPeakVramSampler(
+            4242,
+            interval_ms=10,
+            max_retained_samples=4,
+            probe_timeout_seconds=1.0,
+        )
+        sampler.start()
+        deadline = time.time() + 5
+        while not query_started.exists() and time.time() < deadline:
+            time.sleep(0.01)
+        assert query_started.read_text() == "started"
+        started = time.monotonic()
+        summary = sampler.stop()
+        elapsed = time.monotonic() - started
+    finally:
+        os.environ["PATH"] = old_path
+    assert elapsed < 5.0
+    assert summary["available"] is False
+    assert summary["sampler_thread_alive"] is False
+    assert summary["probe_timeout_seconds"] == 1.0
+    assert summary["errors"], summary
+    assert "command timed out after" in summary["errors"][0]
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_stop_server_cleans_process_group() {
     let output = run_python_snippet(
         r#"
