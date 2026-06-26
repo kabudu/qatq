@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -158,6 +160,11 @@ class CaseResult:
     probe_summary: dict[str, Any]
     gates: dict[str, int | float]
     gate_failures: list[str]
+    timed_out: bool = False
+    timeout_seconds: int = 0
+    cleanup_signal: str | None = None
+    cleanup_escalated: bool = False
+    cleanup_returncode: int | None = None
 
 
 def main() -> int:
@@ -312,23 +319,33 @@ def run_case(case_plan: CasePlan, *, timeout: int) -> CaseResult:
     summary_path = case_plan.work_dir / "summary.json"
     started = time.monotonic()
     failure = ""
+    timed_out = False
+    timeout_seconds = timeout
+    cleanup_signal: str | None = None
+    cleanup_escalated = False
+    cleanup_returncode: int | None = None
     try:
         with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open(
             "w",
             encoding="utf-8",
         ) as stderr:
-            completed = subprocess.run(
+            completed = run_probe_command(
                 case_plan.command,
-                check=False,
-                text=True,
                 stdout=stdout,
                 stderr=stderr,
                 timeout=timeout,
             )
         returncode = completed.returncode
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        cleanup = getattr(exc, "cleanup", {})
+        if isinstance(cleanup, dict):
+            cleanup_signal = cleanup.get("signal") if isinstance(cleanup.get("signal"), str) else None
+            cleanup_escalated = bool(cleanup.get("escalated"))
+            raw_returncode = cleanup.get("returncode")
+            cleanup_returncode = raw_returncode if isinstance(raw_returncode, int) else None
+        timed_out = True
         returncode = 124
-        failure = f"case exceeded timeout of {timeout}s"
+        failure = f"case exceeded timeout of {timeout}s; cleanup={cleanup_signal or 'unknown'}"
     elapsed = time.monotonic() - started
     probe_summary = load_probe_summary(summary_path)
     status = str(probe_summary.get("status") or ("fail" if returncode else "pass"))
@@ -358,7 +375,74 @@ def run_case(case_plan: CasePlan, *, timeout: int) -> CaseResult:
         probe_summary=probe_summary,
         gates=case_plan.gates,
         gate_failures=gate_failures,
+        timed_out=timed_out,
+        timeout_seconds=timeout_seconds,
+        cleanup_signal=cleanup_signal,
+        cleanup_escalated=cleanup_escalated,
+        cleanup_returncode=cleanup_returncode,
     )
+
+
+def run_probe_command(
+    command: list[str],
+    *,
+    stdout,
+    stderr,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        command,
+        text=True,
+        stdout=stdout,
+        stderr=stderr,
+        start_new_session=True,
+    )
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        exc.cleanup = terminate_process_group(proc)
+        raise
+    return subprocess.CompletedProcess(
+        command,
+        proc.returncode if proc.returncode is not None else -1,
+        None,
+        None,
+    )
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": proc.poll(),
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        cleanup["signal"] = "exited"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
+    except PermissionError:
+        cleanup["signal"] = "permission-denied"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            cleanup["signal"] = "exited"
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["returncode"] = None
+        return cleanup
 
 
 def load_probe_summary(path: Path) -> dict[str, Any]:
@@ -449,6 +533,11 @@ def summarise_case(result: CaseResult) -> dict[str, Any]:
         "stdout": str(result.stdout_path),
         "stderr": str(result.stderr_path),
         "failure": result.failure,
+        "timed_out": result.timed_out,
+        "timeout_seconds": result.timeout_seconds,
+        "cleanup_signal": result.cleanup_signal,
+        "cleanup_escalated": result.cleanup_escalated,
+        "cleanup_returncode": result.cleanup_returncode,
         "gates": result.gates,
         "gate_failures": result.gate_failures,
         "iterations_completed": result.probe_summary.get("iterations_completed"),
@@ -821,6 +910,13 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     if failures:
         lines.extend(["", "## Failures", ""])
         for case in failures:
+            if case.get("timed_out"):
+                lines.append(
+                    f"- `{case['id']}` timed out after `{case.get('timeout_seconds')}`s; "
+                    f"cleanup `{case.get('cleanup_signal')}`; "
+                    f"escalated `{case.get('cleanup_escalated')}`: {case['failure']}"
+                )
+                continue
             lines.append(f"- `{case['id']}`: {case['failure']}")
     comparisons = summary.get("comparisons", [])
     if isinstance(comparisons, list) and comparisons:

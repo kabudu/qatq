@@ -737,8 +737,11 @@ python3 scripts/llama_cpp_live_vram_server_cancel_matrix.py \
 The matrix runs cases sequentially to avoid hidden GPU-memory fan-out, preserves
 each probe's artifacts under its own case directory, writes
 `server-cancel-matrix-plan.json`, `summary.json`, and `summary.md`, and fails
-closed on the first failing probe. Use `--dry-run` to verify the command shape
-without starting `llama-server`.
+closed on the first failing probe. Each probe runs in its own process group; if
+the matrix-level timeout fires, the wrapper tears down the full probe/server
+tree with SIGTERM/SIGKILL and records `timed_out`, `cleanup_signal`,
+`cleanup_escalated`, and `cleanup_returncode` in `summary.json`. Use
+`--dry-run` to verify the command shape without starting `llama-server`.
 
 The first strict matrix run at
 `/private/tmp/qatq-live-vram-server-cancel-strict-matrix-20260625` passed all

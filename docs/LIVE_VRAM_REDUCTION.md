@@ -460,7 +460,9 @@ captured by `scripts/llama_cpp_live_vram_server_cancel_matrix.py` with
 `adapters/llama-cpp/live-vram-server-strict.local.example.json`, so the
 Qwen2.5 1.5B, Qwen2.5 3B, and Phi 3.5 mini probes can be rerun as one
 sequential, fail-closed matrix that writes per-case artifacts plus aggregate
-JSON and Markdown summaries. The first real matrix run at
+JSON and Markdown summaries. Matrix-level probe timeouts now tear down the full
+probe/server process group and report cleanup signal/escalation metadata. The
+first real matrix run at
 `/private/tmp/qatq-live-vram-server-cancel-strict-matrix-20260625` passed all
 three cases: Qwen2.5 1.5B 10/10 with p95 iteration/follow-up latency
 6.45s/2.66s and 17,368 live-offloaded segments; Qwen2.5 3B 5/5 with

@@ -1098,6 +1098,72 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_matrix_times_out_probe_process_group() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, subprocess, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_matrix", "scripts/llama_cpp_live_vram_server_cancel_matrix.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    runner = tmp / "hung_probe.py"
+    marker = tmp / "child-terminated.txt"
+    case_dir = tmp / "case"
+    runner.write_text(
+        "import subprocess, signal, sys, time\n"
+        "from pathlib import Path\n"
+        "marker = Path(sys.argv[1])\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    str(marker),\n"
+        "])\n"
+        "print(f'started child {child.pid}', flush=True)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    plan = module.CasePlan(
+        case_id="hung-probe",
+        comparison_group=None,
+        work_dir=case_dir,
+        command=[sys.executable, str(runner), str(marker)],
+        gates={},
+    )
+    result = module.run_case(plan, timeout=1)
+    assert result.status == "fail"
+    assert result.returncode == 124
+    assert result.timed_out is True
+    assert result.timeout_seconds == 1
+    assert result.cleanup_signal == "SIGTERM"
+    assert result.cleanup_escalated is False
+    assert "cleanup=SIGTERM" in result.failure
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
+    summary = module.summarise_case(result)
+    assert summary["timed_out"] is True
+    assert summary["cleanup_signal"] == "SIGTERM"
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_aggregate_gates_fail_closed() {
     let output = run_python_snippet(
         r#"
