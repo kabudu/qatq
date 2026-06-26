@@ -129,7 +129,10 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > the burn-in plan, JSON/Markdown summaries, per-run config snapshots, and
 > hardware-counter capability report. It also supports `resume_existing` for
 > interrupted long soaks, but only over contiguous completed passing repeats.
-> `job_timeout_minutes` must be set high enough for the selected profile.
+> It now treats `runs` as a repeat ceiling by default and passes
+> `--stop-after-min-passed-elapsed`, so long soaks stop after the selected
+> one-hour or overnight elapsed-duration gate is satisfied. The default
+> `job_timeout_minutes` now covers the overnight profile with cleanup margin.
 > This re-closes bounded accepted-policy repeatability and makes future
 > one-hour/overnight claims machine-checkable. The first warmup-eight overnight
 > attempt failed closed after `9/55` repeats because Phi 3.5 mini hit `6000`

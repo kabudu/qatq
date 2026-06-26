@@ -2908,6 +2908,11 @@ Exit criteria:
       model sequences without hand-editing the checked-in matrix. It exposes
       `resume_existing` for interrupted long soaks; the wrapper only resumes
       contiguous completed passing repeats and refuses prior failures.
+      The workflow defaults `runs` to a high ceiling and passes
+      `--stop-after-min-passed-elapsed`, so one-hour and overnight profiles stop
+      cleanly after the elapsed-duration gate is satisfied instead of relying on
+      an exact repeat-count estimate. Its default `job_timeout_minutes` is now
+      long enough for the 28,800-second overnight profile plus cleanup margin.
       It runs `--preflight-only` before the expensive burn-in so missing
       patched binaries, model files, model-root mappings, or required
       production gates fail early. `job_timeout_minutes` must be set high enough

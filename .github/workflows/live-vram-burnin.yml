@@ -24,8 +24,8 @@ on:
         description: "Burn-in artifact directory on the self-hosted runner"
         default: /var/tmp/qatq-live-vram-server-burnin
       runs:
-        description: "Matrix repeats"
-        default: "3"
+        description: "Maximum matrix repeats; duration-stop can end earlier after the selected mode passes"
+        default: "64"
       max_cases:
         description: "Maximum matrix cases, or 0 for all"
         default: "0"
@@ -53,6 +53,10 @@ on:
       min_passed_elapsed_seconds:
         description: "Custom minimum passed elapsed seconds when mode=custom"
         default: "3600"
+      stop_after_min_passed_elapsed:
+        description: "Stop after a passing repeat once the selected elapsed-duration gate is satisfied"
+        type: boolean
+        default: true
       max_rss_growth_jitter_ratio:
         description: "Repeated-run RSS growth jitter ceiling, or 0 to disable"
         default: "2.0"
@@ -76,7 +80,7 @@ on:
         default: "0"
       job_timeout_minutes:
         description: "Workflow job timeout on the self-hosted runner"
-        default: "360"
+        default: "600"
 
 permissions:
   contents: read
@@ -115,6 +119,7 @@ jobs:
           RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
           MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
           CUSTOM_MIN_PASSED_SECONDS: ${{ inputs.min_passed_elapsed_seconds }}
+          STOP_AFTER_MIN_PASSED_ELAPSED: ${{ inputs.stop_after_min_passed_elapsed }}
           MAX_RSS_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_growth_jitter_ratio }}
           MAX_RSS_TAIL_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_tail_growth_jitter_ratio }}
           MAX_RSS_GROWTH_KIB: ${{ inputs.max_rss_growth_kib }}
@@ -149,12 +154,17 @@ jobs:
           if [ "${RESUME_EXISTING}" = "true" ]; then
             RESUME_ARGS=(--resume-existing)
           fi
+          STOP_AFTER_ARGS=()
+          if [ "${STOP_AFTER_MIN_PASSED_ELAPSED}" = "true" ]; then
+            STOP_AFTER_ARGS=(--stop-after-min-passed-elapsed)
+          fi
 
           python3 scripts/llama_cpp_live_vram_server_burnin.py \
             --config "${CONFIG}" \
             --llama-server "${LLAMA_SERVER}" \
             "${MODEL_ROOT_ARGS[@]}" \
             "${RESUME_ARGS[@]}" \
+            "${STOP_AFTER_ARGS[@]}" \
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \
@@ -188,6 +198,7 @@ jobs:
           RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
           MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
           CUSTOM_MIN_PASSED_SECONDS: ${{ inputs.min_passed_elapsed_seconds }}
+          STOP_AFTER_MIN_PASSED_ELAPSED: ${{ inputs.stop_after_min_passed_elapsed }}
           MAX_RSS_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_growth_jitter_ratio }}
           MAX_RSS_TAIL_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_tail_growth_jitter_ratio }}
           MAX_RSS_GROWTH_KIB: ${{ inputs.max_rss_growth_kib }}
@@ -222,12 +233,17 @@ jobs:
           if [ "${RESUME_EXISTING}" = "true" ]; then
             RESUME_ARGS=(--resume-existing)
           fi
+          STOP_AFTER_ARGS=()
+          if [ "${STOP_AFTER_MIN_PASSED_ELAPSED}" = "true" ]; then
+            STOP_AFTER_ARGS=(--stop-after-min-passed-elapsed)
+          fi
 
           python3 scripts/llama_cpp_live_vram_server_burnin.py \
             --config "${CONFIG}" \
             --llama-server "${LLAMA_SERVER}" \
             "${MODEL_ROOT_ARGS[@]}" \
             "${RESUME_ARGS[@]}" \
+            "${STOP_AFTER_ARGS[@]}" \
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \

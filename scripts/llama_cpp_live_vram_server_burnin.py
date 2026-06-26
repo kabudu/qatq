@@ -95,6 +95,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--stop-after-min-passed-elapsed",
+        action="store_true",
+        help=(
+            "Stop after a completed passing repeat once "
+            "--min-passed-elapsed-seconds has been satisfied. The repeat still "
+            "has to pass all configured aggregate gates; --runs remains a hard "
+            "upper bound."
+        ),
+    )
+    parser.add_argument(
         "--require-backend-memory-diagnostics",
         action="store_true",
         help=(
@@ -199,7 +209,11 @@ def main() -> int:
         runs = load_resume_runs(work_dir)
     early_stop_reason = ""
     started = time.monotonic()
+    if successful_duration_stop(args, runs):
+        early_stop_reason = duration_stop_reason(args, runs)
     for index in range(next_run_index(runs), args.runs + 1):
+        if early_stop_reason:
+            break
         if args.max_total_seconds > 0.0 and time.monotonic() - started >= args.max_total_seconds:
             runs.append(
                 BurnInRun(
@@ -245,6 +259,9 @@ def main() -> int:
                     + "; ".join(aggregate_gate_failures)
                 )
                 break
+        if successful_duration_stop(args, runs):
+            early_stop_reason = duration_stop_reason(args, runs)
+            break
 
     summary = build_summary(args, work_dir, runs, early_stop_reason=early_stop_reason)
     summary["preflight"] = preflight
@@ -263,6 +280,10 @@ def validate_args(args: argparse.Namespace) -> None:
     require(args.max_cases >= 0, "--max-cases must be non-negative")
     require(args.max_total_seconds >= 0.0, "--max-total-seconds must be non-negative")
     require(args.min_passed_elapsed_seconds >= 0.0, "--min-passed-elapsed-seconds must be non-negative")
+    require(
+        not args.stop_after_min_passed_elapsed or args.min_passed_elapsed_seconds > 0.0,
+        "--stop-after-min-passed-elapsed requires --min-passed-elapsed-seconds > 0",
+    )
     require(args.max_rss_growth_jitter_ratio >= 0.0, "--max-rss-growth-jitter-ratio must be non-negative")
     require(
         args.max_rss_tail_growth_jitter_ratio >= 0.0,
@@ -340,6 +361,7 @@ def build_plan(
         "max_cases": args.max_cases,
         "max_total_seconds": args.max_total_seconds,
         "min_passed_elapsed_seconds": args.min_passed_elapsed_seconds,
+        "stop_after_min_passed_elapsed": args.stop_after_min_passed_elapsed,
         "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
         "require_soak_memory_metrics": args.require_soak_memory_metrics,
         "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
@@ -788,14 +810,16 @@ def build_summary(
         else evaluate_soak_memory_metrics(soak_memory_metrics)
     )
     status = "dry-run" if runs and all(run.status == "dry-run" for run in runs) else "pass"
+    completed_requested_runs = len(runs) == args.runs
+    clean_duration_stop = successful_early_stop(args, runs, early_stop_reason)
     if (
         failures
         or aggregate_failures
         or sustained_runtime_failures
         or backend_memory_failures
         or soak_memory_failures
-        or len(runs) != args.runs
-        or early_stop_reason
+        or (not completed_requested_runs and not clean_duration_stop)
+        or (early_stop_reason and not clean_duration_stop)
     ):
         status = "fail"
     return {
@@ -832,6 +856,7 @@ def build_summary(
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
             "case_order": getattr(args, "case_order", "config"),
             "resume_existing": getattr(args, "resume_existing", False),
+            "stop_after_min_passed_elapsed": getattr(args, "stop_after_min_passed_elapsed", False),
         },
         "boundary": (
             "Bounded burn-in repetition for the configured llama-server live-VRAM "
@@ -1059,6 +1084,33 @@ def aggregate_sustained_runtime(args: argparse.Namespace, runs: list[BurnInRun])
         "passing_runs": sum(1 for run in runs if run.status == "pass"),
         "completed_runs": len(runs),
     }
+
+
+def successful_duration_stop(args: argparse.Namespace, runs: list[BurnInRun]) -> bool:
+    if not getattr(args, "stop_after_min_passed_elapsed", False):
+        return False
+    if args.dry_run:
+        return False
+    required = getattr(args, "min_passed_elapsed_seconds", 0.0)
+    if required <= 0.0:
+        return False
+    if any(run.status not in {"pass", "dry-run"} for run in runs):
+        return False
+    return aggregate_sustained_runtime(args, runs)["passed_elapsed_seconds"] >= required
+
+
+def duration_stop_reason(args: argparse.Namespace, runs: list[BurnInRun]) -> str:
+    sustained = aggregate_sustained_runtime(args, runs)
+    return (
+        "duration target satisfied after "
+        f"{sustained['passing_runs']} passing runs: "
+        f"{format_metric(sustained['passed_elapsed_seconds'])} >= "
+        f"{format_metric(sustained['required_passed_elapsed_seconds'])} seconds"
+    )
+
+
+def successful_early_stop(args: argparse.Namespace, runs: list[BurnInRun], early_stop_reason: str) -> bool:
+    return early_stop_reason.startswith("duration target satisfied") and successful_duration_stop(args, runs)
 
 
 def evaluate_sustained_runtime(args: argparse.Namespace, sustained_runtime: dict[str, Any]) -> list[str]:
