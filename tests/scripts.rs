@@ -1307,6 +1307,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["run_timeout_seconds"] == 120
     assert plan["min_passed_elapsed_seconds"] == 0.0
     assert plan["case_order"] == "rotate"
+    assert plan["resume_existing"] is False
     assert plan["config"] == str(work_dir / "server-burnin-effective-config.json")
     assert plan["original_config"].endswith("live-vram-server-layer-policy-notrace.local.example.json")
     assert plan["run_case_orders"][0]["case_ids"] == [
@@ -1340,6 +1341,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["gates"]["max_rss_tail_growth_kib"] == 4096.0
     assert summary["gates"]["max_direct_peak_vram_jitter_ratio"] == 1.2
     assert summary["gates"]["case_order"] == "rotate"
+    assert summary["gates"]["resume_existing"] is False
     assert summary["runs"][0]["case_order"] == [
         "qwen25-15b-native-layer-policy-baseline",
         "qwen25-15b-qatq-l1-policy-notrace",
@@ -1356,6 +1358,127 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         data = json.loads(run_summary.read_text())
         assert data["status"] == "dry-run"
 "#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_server_burnin_resume_existing_continues_after_completed_runs() {
+    let output = run_python_snippet(
+        r###"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    model = tmp / "model.gguf"
+    model.write_bytes(b"fake")
+    config = tmp / "config.json"
+    config.write_text(json.dumps({
+        "defaults": {},
+        "cases": [{"id": "resume-case", "model": str(model)}],
+    }), encoding="utf-8")
+    llama_server = tmp / "llama-server"
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
+    probe_runner = tmp / "probe.py"
+    probe_runner.write_text("pass\n", encoding="utf-8")
+    invocations = tmp / "invocations.txt"
+    matrix_runner = tmp / "matrix.py"
+    matrix_runner.write_text(
+        f"""
+import argparse, json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', required=True)
+parser.add_argument('--probe-runner')
+parser.add_argument('--llama-server')
+parser.add_argument('--work-dir', required=True)
+parser.add_argument('--timeout')
+parser.add_argument('--keep-work-dir', action='store_true')
+args, _ = parser.parse_known_args()
+work = Path(args.work_dir)
+work.mkdir(parents=True, exist_ok=True)
+with Path({str(invocations)!r}).open('a', encoding='utf-8') as fh:
+    fh.write(work.name + '\\n')
+(work / 'summary.json').write_text(json.dumps({{
+    'format': 'qatq-live-vram-server-cancel-matrix-summary-v1',
+    'status': 'pass',
+    'dry_run': False,
+    'work_dir': str(work),
+    'total_cases': 1,
+    'passed': 1,
+    'dry_run_cases': 0,
+    'failed': 0,
+    'cases': [{{
+        'id': 'resume-case',
+        'status': 'pass',
+        'elapsed_seconds': 1.0,
+        'projected_device_memory_mib': 10,
+        'backend_accelerator_context_mib': 1,
+        'rss_growth_kib': 0,
+        'rss_tail_growth_kib': 0,
+        'rss_tail_range_kib': 0,
+        'backend_memory': {{
+            'memory_breakdown_mib': {{
+                'GPU': {{'self': 10, 'context': 1}},
+                'Host': {{'self': 1}},
+            }},
+            'projected_device_memory_mib': 10,
+        }},
+    }}],
+    'comparisons': {{}},
+    'comparison_gates': {{}},
+    'comparison_gate_failures': [],
+    'boundary': 'fake matrix',
+}}), encoding='utf-8')
+""",
+        encoding="utf-8",
+    )
+
+    work_dir = tmp / "burnin"
+    base = [
+        sys.executable,
+        "scripts/llama_cpp_live_vram_server_burnin.py",
+        "--config", str(config),
+        "--matrix-runner", str(matrix_runner),
+        "--probe-runner", str(probe_runner),
+        "--llama-server", str(llama_server),
+        "--work-dir", str(work_dir),
+        "--timeout", "30",
+        "--run-timeout", "120",
+        "--require-backend-memory-diagnostics",
+        "--require-soak-memory-metrics",
+    ]
+    first = subprocess.run([*base, "--runs", "1"], check=False, text=True, capture_output=True)
+    assert first.returncode == 0, first.stderr
+    second = subprocess.run(
+        [*base, "--runs", "3", "--resume-existing"],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert second.returncode == 0, second.stderr
+    summary = json.loads((work_dir / "summary.json").read_text())
+    assert summary["status"] == "pass"
+    assert summary["runs_completed"] == 3
+    assert summary["passed"] == 3
+    assert summary["gates"]["resume_existing"] is True
+    assert [line for line in invocations.read_text().splitlines() if line] == [
+        "run-001",
+        "run-002",
+        "run-003",
+    ]
+    assert summary["runs"][0]["config"].endswith("run-001/server-burnin-run-config.json")
+    assert summary["runs"][1]["config"].endswith("run-002/server-burnin-run-config.json")
+    assert summary["runs"][2]["config"].endswith("run-003/server-burnin-run-config.json")
+"###,
     );
 
     assert!(
@@ -2675,12 +2798,16 @@ assert "model_root:" in workflow
 assert "MODEL_ROOT:" in workflow
 assert "case_order:" in workflow
 assert "CASE_ORDER:" in workflow
+assert "resume_existing:" in workflow
+assert "RESUME_EXISTING:" in workflow
 assert "Preflight sustained live VRAM burn-in" in workflow
 assert "MIN_PASSED_SECONDS=3600" in workflow
 assert "MIN_PASSED_SECONDS=28800" in workflow
 assert "MODEL_ROOT_ARGS=()" in workflow
+assert "RESUME_ARGS=()" in workflow
 assert "--model-root" in workflow
 assert "--case-order" in workflow
+assert "--resume-existing" in workflow
 assert "--preflight-only" in workflow
 assert "--min-passed-elapsed-seconds" in workflow
 assert "--require-backend-memory-diagnostics" in workflow
@@ -2691,6 +2818,9 @@ assert "--max-rss-tail-growth-kib" in workflow
 assert "--max-direct-peak-vram-jitter-ratio" in workflow
 assert "server-burnin-effective-config.json" in workflow
 assert "run-*/server-burnin-run-config.json" in workflow
+assert "Write hardware-counter capability report" in workflow
+assert "llama_cpp_live_vram_hardware_counters.py" in workflow
+assert "hardware-counters.json" in workflow
 assert "preflight.json" in workflow
 assert "preflight.md" in workflow
 assert "if-no-files-found: warn" in workflow

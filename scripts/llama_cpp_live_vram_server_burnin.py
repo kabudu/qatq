@@ -150,6 +150,16 @@ def main() -> int:
         ),
     )
     parser.add_argument("--keep-work-dir", action="store_true")
+    parser.add_argument(
+        "--resume-existing",
+        action="store_true",
+        help=(
+            "Reuse completed passing run-* summaries in --work-dir and continue "
+            "from the next run index. Refuses prior failures or non-contiguous "
+            "run indexes so interrupted overnight gates can resume without "
+            "overwriting earlier evidence."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -162,7 +172,7 @@ def main() -> int:
         print((work_dir / "summary.md").read_text(encoding="utf-8"))
         return 0 if summary["status"] in {"pass", "dry-run"} else 1
 
-    if work_dir.exists() and not args.keep_work_dir:
+    if work_dir.exists() and not args.keep_work_dir and not args.resume_existing:
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,9 +195,11 @@ def main() -> int:
         return 0
 
     runs: list[BurnInRun] = []
+    if args.resume_existing:
+        runs = load_resume_runs(work_dir)
     early_stop_reason = ""
     started = time.monotonic()
-    for index in range(1, args.runs + 1):
+    for index in range(next_run_index(runs), args.runs + 1):
         if args.max_total_seconds > 0.0 and time.monotonic() - started >= args.max_total_seconds:
             runs.append(
                 BurnInRun(
@@ -338,6 +350,7 @@ def build_plan(
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
         "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
         "case_order": args.case_order,
+        "resume_existing": args.resume_existing,
         "run_case_orders": build_run_case_orders(args, prepared_config.config),
         "dry_run": args.dry_run,
         "preflight_only": args.preflight_only,
@@ -526,6 +539,7 @@ def build_preflight_only_summary(
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
             "case_order": args.case_order,
+            "resume_existing": args.resume_existing,
         },
         "boundary": (
             "Preflight-only burn-in summary. It proves the selected runner inputs "
@@ -817,6 +831,7 @@ def build_summary(
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
             "case_order": getattr(args, "case_order", "config"),
+            "resume_existing": getattr(args, "resume_existing", False),
         },
         "boundary": (
             "Bounded burn-in repetition for the configured llama-server live-VRAM "
@@ -825,6 +840,36 @@ def build_summary(
             "jitter gates."
         ),
     }
+
+
+def load_resume_runs(work_dir: Path) -> list[BurnInRun]:
+    runs = load_existing_burnin_runs(work_dir, read_json_object_if_exists(work_dir / "summary.json"))
+    if not runs:
+        return []
+    indexes = [run.index for run in runs]
+    expected = list(range(1, max(indexes) + 1))
+    require(
+        indexes == expected,
+        (
+            "--resume-existing requires contiguous completed run indexes from 1; "
+            f"found {indexes}, expected {expected}"
+        ),
+    )
+    non_passing = [run for run in runs if run.status not in {"pass", "dry-run"}]
+    require(
+        not non_passing,
+        (
+            "--resume-existing refuses prior failed runs: "
+            + ", ".join(f"run-{run.index:03d}={run.status}" for run in non_passing)
+        ),
+    )
+    return runs
+
+
+def next_run_index(runs: list[BurnInRun]) -> int:
+    if not runs:
+        return 1
+    return max(run.index for run in runs) + 1
 
 
 def summarise_existing_work_dir(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:

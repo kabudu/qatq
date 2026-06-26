@@ -126,8 +126,10 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > `.github/workflows/live-vram-burnin.yml` is now the manual self-hosted launch
 > path for those gates: it targets runners labelled `live-vram`, verifies the
 > patched `llama-server`, runs one-hour/overnight/custom profiles, and uploads
-> the burn-in plan plus JSON/Markdown summaries. `job_timeout_minutes` must be
-> set high enough for the selected profile.
+> the burn-in plan, JSON/Markdown summaries, per-run config snapshots, and
+> hardware-counter capability report. It also supports `resume_existing` for
+> interrupted long soaks, but only over contiguous completed passing repeats.
+> `job_timeout_minutes` must be set high enough for the selected profile.
 > This re-closes bounded accepted-policy repeatability and makes future
 > one-hour/overnight claims machine-checkable. The first warmup-eight overnight
 > attempt failed closed after `9/55` repeats because Phi 3.5 mini hit `6000`

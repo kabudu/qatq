@@ -476,7 +476,9 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       gates, accepts a `job_timeout_minutes` ceiling for long runs, exposes
       `case_order=config|reverse|rotate` for sequence-sensitive mixed-model
       soaks, and uploads the plan, preflight, effective-config, per-run config
-      snapshots, and summary artifacts. The workflow
+      snapshots, hardware-counter capability report, and summary artifacts. It
+      also exposes `resume_existing`; the burn-in wrapper resumes only
+      contiguous completed passing repeats and refuses failed prior runs. The workflow
       runs `--preflight-only` before the expensive burn-in so missing patched
       binaries, model files, model-root mappings, or required production gates
       fail early. This is the reproducible launch path for the real long soaks;

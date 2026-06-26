@@ -37,6 +37,10 @@ on:
           - reverse
           - rotate
         default: config
+      resume_existing:
+        description: "Resume from completed passing run-* artifacts in work_dir"
+        type: boolean
+        default: false
       timeout_seconds:
         description: "Per-case matrix timeout"
         default: "1800"
@@ -106,6 +110,7 @@ jobs:
           RUNS: ${{ inputs.runs }}
           MAX_CASES: ${{ inputs.max_cases }}
           CASE_ORDER: ${{ inputs.case_order }}
+          RESUME_EXISTING: ${{ inputs.resume_existing }}
           TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
           RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
           MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
@@ -140,11 +145,16 @@ jobs:
           if [ -n "${MODEL_ROOT}" ]; then
             MODEL_ROOT_ARGS=(--model-root "${MODEL_ROOT}")
           fi
+          RESUME_ARGS=()
+          if [ "${RESUME_EXISTING}" = "true" ]; then
+            RESUME_ARGS=(--resume-existing)
+          fi
 
           python3 scripts/llama_cpp_live_vram_server_burnin.py \
             --config "${CONFIG}" \
             --llama-server "${LLAMA_SERVER}" \
             "${MODEL_ROOT_ARGS[@]}" \
+            "${RESUME_ARGS[@]}" \
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \
@@ -173,6 +183,7 @@ jobs:
           RUNS: ${{ inputs.runs }}
           MAX_CASES: ${{ inputs.max_cases }}
           CASE_ORDER: ${{ inputs.case_order }}
+          RESUME_EXISTING: ${{ inputs.resume_existing }}
           TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
           RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
           MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
@@ -207,11 +218,16 @@ jobs:
           if [ -n "${MODEL_ROOT}" ]; then
             MODEL_ROOT_ARGS=(--model-root "${MODEL_ROOT}")
           fi
+          RESUME_ARGS=()
+          if [ "${RESUME_EXISTING}" = "true" ]; then
+            RESUME_ARGS=(--resume-existing)
+          fi
 
           python3 scripts/llama_cpp_live_vram_server_burnin.py \
             --config "${CONFIG}" \
             --llama-server "${LLAMA_SERVER}" \
             "${MODEL_ROOT_ARGS[@]}" \
+            "${RESUME_ARGS[@]}" \
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \
@@ -229,6 +245,19 @@ jobs:
             --max-backend-kv-jitter-ratio "${MAX_BACKEND_KV_JITTER_RATIO}" \
             --max-projected-device-jitter-ratio "${MAX_PROJECTED_DEVICE_JITTER_RATIO}" \
             --max-direct-peak-vram-jitter-ratio "${MAX_DIRECT_PEAK_VRAM_JITTER_RATIO}"
+      - name: Write hardware-counter capability report
+        if: always()
+        env:
+          WORK_DIR: ${{ inputs.work_dir }}
+        run: |
+          set -euo pipefail
+
+          if [ -f "${WORK_DIR}/summary.json" ]; then
+            python3 scripts/llama_cpp_live_vram_hardware_counters.py \
+              --matrix-summary "${WORK_DIR}/summary.json" \
+              --output "${WORK_DIR}/hardware-counters.json" \
+              --require-backend-memory-diagnostics
+          fi
       - name: Upload burn-in summary
         uses: actions/upload-artifact@v4
         if: always()
@@ -241,5 +270,6 @@ jobs:
             ${{ inputs.work_dir }}/preflight.md
             ${{ inputs.work_dir }}/summary.json
             ${{ inputs.work_dir }}/summary.md
+            ${{ inputs.work_dir }}/hardware-counters.json
             ${{ inputs.work_dir }}/run-*/server-burnin-run-config.json
           if-no-files-found: warn

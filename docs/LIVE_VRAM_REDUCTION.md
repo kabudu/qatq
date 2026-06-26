@@ -2900,11 +2900,14 @@ Exit criteria:
       `.github/workflows/live-vram-burnin.yml` workflow runs the burn-in wrapper
       on a self-hosted runner labelled `live-vram`, supports `one-hour`,
       `overnight`, and `custom` modes, uploads the plan, preflight,
-      effective-config, per-run config snapshots, and summary artifacts, and always forwards the
-      backend-memory, soak-memory, elapsed-duration, and repeated-jitter gates.
+      effective-config, per-run config snapshots, hardware-counter capability
+      report, and summary artifacts, and always forwards the backend-memory,
+      soak-memory, elapsed-duration, and repeated-jitter gates.
       The workflow also exposes `case_order=config|reverse|rotate` so long
       mixed-model soaks can prove stability across fixed and order-varied
-      model sequences without hand-editing the checked-in matrix.
+      model sequences without hand-editing the checked-in matrix. It exposes
+      `resume_existing` for interrupted long soaks; the wrapper only resumes
+      contiguous completed passing repeats and refuses prior failures.
       It runs `--preflight-only` before the expensive burn-in so missing
       patched binaries, model files, model-root mappings, or required
       production gates fail early. `job_timeout_minutes` must be set high enough
