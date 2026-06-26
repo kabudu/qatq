@@ -1088,17 +1088,32 @@ python3 scripts/llama_cpp_live_vram_hardware_counters.py \
   --output /tmp/qatq-live-vram-server-family-policy/hardware-counters.json
 ```
 
+On NVIDIA hosts, run the same helper while the target `llama-server` process is
+alive to capture sampled per-process peak GPU memory:
+
+```sh
+python3 scripts/llama_cpp_live_vram_hardware_counters.py \
+  --matrix-summary /tmp/qatq-live-vram-server-family-policy/summary.json \
+  --output /tmp/qatq-live-vram-server-family-policy/hardware-counters.json \
+  --sample-pid "$LLAMA_SERVER_PID" \
+  --sample-seconds 30 \
+  --sample-interval-ms 100 \
+  --require-direct-peak-vram
+```
+
+This gate only passes when `nvidia-smi` reports `pid,used_memory` samples for
+the requested process. Detecting `nvidia-smi` on `PATH` is not enough.
+
 The report is deliberately fail-closed if `--require-direct-peak-vram` is set.
 On the current Apple Metal host, the report at
-`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625/hardware-counters.json`
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
 confirms that all six cases in the latest accepted burn-in repeat have
-llama.cpp backend
-projected-device and accelerator-breakdown diagnostics, but direct peak-VRAM
-counters are not available through non-root host tooling. `powermetrics`
-requires superuser and reports per-process GPU time rather than peak GPU
-memory; `vmmap` reports virtual memory maps. Do not treat backend projected
-memory, backend K/V ratio gates, or RSS gates as direct hardware peak-VRAM
-proof.
+llama.cpp backend projected-device and accelerator-breakdown diagnostics, but
+direct peak-VRAM counters are not available through non-root host tooling.
+`nvidia-smi` is not present on this host; `powermetrics` requires superuser and
+reports per-process GPU time rather than peak GPU memory; `vmmap` reports
+virtual memory maps. Do not treat backend projected memory, backend K/V ratio
+gates, or RSS gates as direct hardware peak-VRAM proof.
 
 For the current direct selected-layer memory-accounting proof, use:
 

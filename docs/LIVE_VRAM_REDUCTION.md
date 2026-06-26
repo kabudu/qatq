@@ -812,16 +812,20 @@ and projected-device jitter ratios stayed 1.0 for every native and QATQ case.
 Overnight burn-in remains open.
 Direct hardware peak-VRAM counter evidence is now a machine-checked blocker
 rather than a prose-only caveat. `scripts/llama_cpp_live_vram_hardware_counters.py`
-inspected the latest accepted burn-in matrix summary and local macOS counter tooling at
-`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625/hardware-counters.json`.
+inspected the latest accepted burn-in matrix summary and local counter tooling at
+`/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`.
 It confirmed that all six matrix cases had llama.cpp backend projected-device
-memory and accelerator-breakdown diagnostics, but direct peak-VRAM counters
-were unavailable through current non-root host tooling. `powermetrics` is
-present but requires superuser and documents per-process GPU time rather than
-per-process peak GPU memory; `vmmap` is present but reports virtual memory
-regions, not direct peak GPU memory. Backend projected memory, backend K/V
-ratio gates, and RSS gates therefore remain strong engineering evidence, but
-they are not presented as direct hardware peak-VRAM proof.
+memory and accelerator-breakdown diagnostics, but direct peak-VRAM counters were
+unavailable on this Apple Metal host. The helper now has an explicit NVIDIA
+sampling path: with `--sample-pid`, `--sample-seconds`, and
+`--require-direct-peak-vram`, it only passes when `nvidia-smi` returns
+per-process `pid,used_memory` samples for the target runtime. Detecting
+`nvidia-smi` on `PATH` is not enough. On this host, `nvidia-smi` is absent;
+`powermetrics` is present but requires superuser and documents per-process GPU
+time rather than per-process peak GPU memory; `vmmap` is present but reports
+virtual memory regions, not direct peak GPU memory. Backend projected memory,
+backend K/V ratio gates, and RSS gates therefore remain strong engineering
+evidence, but they are not presented as direct hardware peak-VRAM proof.
 
 The first repeated direct selected-layer memory-accounting follow-up is now
 green. The older broad 14-layer shape failed correctly under stricter

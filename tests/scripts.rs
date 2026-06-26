@@ -968,6 +968,93 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_hardware_counter_parses_nvidia_smi_process_memory() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, sys
+
+spec = importlib.util.spec_from_file_location("hardware", "scripts/llama_cpp_live_vram_hardware_counters.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+assert module.parse_nvidia_smi_process_memory("4242, 128\n7, 999\n4242, 256 MiB\nbad\n", 4242) == [128, 256]
+assert module.parse_nvidia_smi_process_memory("7, 999\n", 4242) == []
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_hardware_counter_report_accepts_sampled_nvidia_smi_peak_vram() {
+    let output = run_python_snippet(
+        r#"
+import json, os, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    fake = tmp / "nvidia-smi"
+    output = tmp / "hardware.json"
+    fake.write_text("\n".join([
+        '#!/usr/bin/env python3',
+        'import sys',
+        'if "--help-query-compute-apps" in sys.argv:',
+        '    print("pid\\\\nused_memory")',
+        '    raise SystemExit(0)',
+        'if any(arg.startswith("--query-compute-apps") for arg in sys.argv):',
+        '    print("4242, 128")',
+        '    print("7, 999")',
+        '    print("4242, 256")',
+        '    raise SystemExit(0)',
+        'raise SystemExit(2)',
+    ]) + "\n", encoding="utf-8")
+    fake.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = str(tmp) + os.pathsep + env.get("PATH", "")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_hardware_counters.py",
+            "--output",
+            str(output),
+            "--sample-pid",
+            "4242",
+            "--sample-seconds",
+            "0",
+            "--require-direct-peak-vram",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(output.read_text())
+    assert report["direct_peak_vram_counter"]["available"] is True
+    source = report["direct_peak_vram_counter"]["sources"][0]
+    assert source["backend"] == "nvidia-smi"
+    assert source["sample_pid"] == 4242
+    assert source["peak_memory_mib"] == 256
+    assert report["nvidia_smi"]["supports_process_gpu_memory"] is True
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_abort_probe_dry_run_records_fail_closed_artifacts() {
     let output = run_python_snippet(
         r#"

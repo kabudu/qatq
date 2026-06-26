@@ -570,14 +570,17 @@ and compression-positive storage for long-context exported KV pages.
 > comparison and aggregate gate failures.
 > Direct hardware peak-VRAM counter availability is now checked explicitly with
 > `scripts/llama_cpp_live_vram_hardware_counters.py`. The report at
-> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625/hardware-counters.json`
+> `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
 > confirms that the latest accepted burn-in repeat has backend projected
 > device memory and accelerator-breakdown diagnostics for every case, but does
-> not have direct peak-VRAM counter evidence. On this host, `powermetrics`
-> requires superuser and documents per-process GPU time rather than per-process
-> peak GPU memory, while `vmmap` reports virtual memory maps rather than direct
-> peak GPU memory. Backend memory and RSS gates remain valid engineering
-> evidence, but they are not claimed as hardware peak-VRAM proof.
+> not have direct peak-VRAM counter evidence. The helper can now satisfy
+> `--require-direct-peak-vram` on NVIDIA hosts only when `--sample-pid`
+> captures per-process `pid,used_memory` samples from `nvidia-smi`. On this
+> host, `nvidia-smi` is absent, `powermetrics` requires superuser and documents
+> per-process GPU time rather than per-process peak GPU memory, and `vmmap`
+> reports virtual memory maps rather than direct peak GPU memory. Backend
+> memory and RSS gates remain valid engineering evidence, but they are not
+> claimed as hardware peak-VRAM proof.
 > A direct memory-accounting follow-up then separated a useful selected-layer
 > proof from an over-aggressive one. Reusing the old 14-layer breadth shape
 > failed correctly because strict accounting reported `44,040,192` staged bytes

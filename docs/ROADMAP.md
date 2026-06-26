@@ -413,16 +413,19 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       peak-VRAM proof.
 - [x] Make the direct peak-VRAM counter blocker machine-checkable. The new
       `scripts/llama_cpp_live_vram_hardware_counters.py` inspects a matrix
-      summary and local macOS counter capabilities, then fails closed when
-      direct peak-VRAM evidence is required but unavailable. The report at
-      `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin2-taildelta-security-gated-20260625/hardware-counters.json`
+      summary and local counter capabilities, then fails closed when direct
+      peak-VRAM evidence is required but unavailable. It now supports explicit
+      NVIDIA `nvidia-smi` process sampling with `--sample-pid`,
+      `--sample-seconds`, `--sample-interval-ms`, and
+      `--require-direct-peak-vram`; the direct gate only passes after captured
+      `pid,used_memory` samples for the target runtime. The report at
+      `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
       confirms that all six cases in the latest accepted burn-in repeat had
-      llama.cpp backend
-      projected-device and accelerator-breakdown diagnostics, while direct
-      peak-VRAM counters were unavailable through current non-root host tools:
-      `powermetrics` requires superuser and exposes per-process GPU time, not
-      per-process peak GPU memory; `vmmap` reports virtual memory maps, not a
-      peak GPU memory counter.
+      llama.cpp backend projected-device and accelerator-breakdown diagnostics,
+      while direct peak-VRAM counters were unavailable through current host
+      tools: `nvidia-smi` is absent, `powermetrics` requires superuser and
+      exposes per-process GPU time, not per-process peak GPU memory, and
+      `vmmap` reports virtual memory maps, not a peak GPU memory counter.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5
