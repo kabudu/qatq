@@ -2842,7 +2842,14 @@ Exit criteria:
       restore attempts across neighbouring runtime, model, sequence, layer,
       K/V kind, token-start, and token-end keys. Legitimate keys still restored
       exactly after the forged attempts.
-- [ ] Scheduler thrash cases where attention repeatedly approaches cold pages.
+- [x] Scheduler thrash cases where attention repeatedly approaches cold pages.
+      The ignored deterministic stress test
+      `cargo test --locked --test kv_stress live_vram_scheduler_thrash_stress -- --ignored --nocapture`
+      repeatedly drives 2,048 live-VRAM pages through cold offload,
+      prefetch restore, and hot-window keep phases over three waves per page.
+      The scheduled `kv-stress` workflow runs the same gate and asserts exact
+      restore, no duplicate offload while inside prefetch or hot windows, bounded
+      restore-stall accounting, and an empty CPU offload store at the end.
 - [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 

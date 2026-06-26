@@ -8,17 +8,17 @@ use std::{
 use qatq::{
     FixedWindowLiveVramScheduler, KvPageDescriptor, KvPageKey, KvPageKind, KvPageLayout,
     KvPageSnapshot, LIVE_VRAM_ADAPTER_CONTRACT_VERSION, LiveVramAdapterError,
-    LiveVramAdapterIdentity, LiveVramAdapterMetrics, LiveVramCancellationStage, LiveVramLimits,
-    LiveVramOffloadOutcome, LiveVramOffloadStore, LiveVramPageEncodeResult, LiveVramPageSealPolicy,
-    LiveVramRestoreLatencyBudget, LiveVramRestoreStatus, LiveVramRuntimeAdapter,
-    LiveVramSchedulerPolicy, LiveVramSchedulerState, Phase1Config, QatcDecodeLimits,
-    QatqExactStrategy, TensorDType, cancel_live_vram_offload, decode, decode_qatq_exact,
-    decode_qatq_exact_container, decode_qatq_exact_container_with_limits,
-    encode_qatq_exact_container_with_config, live_vram_page_checksum, qatq_exact_strategy,
-    restore_live_vram_page, restore_production_chunk, try_encode_live_vram_page,
-    try_encode_production_chunk_with_config, try_encode_qatq_exact_exhaustive_with_config,
-    try_encode_qatq_exact_with_config, try_offload_live_vram_page,
-    try_restore_live_vram_page_from_store_with_observed_latency,
+    LiveVramAdapterIdentity, LiveVramAdapterMetrics, LiveVramCancellationStage, LiveVramKeepReason,
+    LiveVramLimits, LiveVramOffloadOutcome, LiveVramOffloadStore, LiveVramPageEncodeResult,
+    LiveVramPageSealPolicy, LiveVramRestoreLatencyBudget, LiveVramRestoreStatus,
+    LiveVramRuntimeAdapter, LiveVramScheduleDecision, LiveVramSchedulerPolicy,
+    LiveVramSchedulerState, Phase1Config, QatcDecodeLimits, QatqExactStrategy, TensorDType,
+    cancel_live_vram_offload, decode, decode_qatq_exact, decode_qatq_exact_container,
+    decode_qatq_exact_container_with_limits, encode_qatq_exact_container_with_config,
+    live_vram_page_checksum, qatq_exact_strategy, restore_live_vram_page, restore_production_chunk,
+    schedule_live_vram_page, try_encode_live_vram_page, try_encode_production_chunk_with_config,
+    try_encode_qatq_exact_exhaustive_with_config, try_encode_qatq_exact_with_config,
+    try_offload_live_vram_page, try_restore_live_vram_page_from_store_with_observed_latency,
 };
 
 const DEFAULT_CASES: usize = 4_096;
@@ -28,6 +28,7 @@ const DEFAULT_LIVE_VRAM_CORRUPTION_CASES: usize = 2_048;
 const DEFAULT_LIVE_VRAM_ISOLATION_CASES: usize = 2_048;
 const DEFAULT_LIVE_VRAM_MULTI_SEQUENCE_CASES: usize = 2_048;
 const DEFAULT_LIVE_VRAM_CPU_BUDGET_CASES: usize = 2_048;
+const DEFAULT_LIVE_VRAM_SCHEDULER_THRASH_CASES: usize = 2_048;
 const DEFAULT_LIVE_VRAM_RUNTIME_CONCURRENCY_CASES: usize = 2_048;
 const DEFAULT_LIVE_VRAM_RUNTIME_RACE_CASES: usize = 1_024;
 const DEBUG_DECODE_NS_PER_VALUE_CEILING: f64 = 2_500.0;
@@ -621,6 +622,199 @@ fn live_vram_sealed_cpu_tier_budget_pressure_stress() {
 }
 
 #[test]
+#[ignore = "runs deterministic scheduler-thrash transitions across thousands of live-VRAM pages"]
+fn live_vram_scheduler_thrash_stress() {
+    let case_count = std::env::var("QATQ_LIVE_VRAM_SCHEDULER_THRASH_CASES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_LIVE_VRAM_SCHEDULER_THRASH_CASES);
+    assert!(
+        case_count >= 1_000,
+        "scheduler-thrash proof must cover at least 1000 live-VRAM pages"
+    );
+
+    let limits = LiveVramLimits::default();
+    let snapshots: Vec<_> = (0..case_count)
+        .map(multi_sequence_live_vram_stress_snapshot)
+        .collect();
+    let mut harness = RuntimeConcurrencyHarness {
+        adapter: RuntimeConcurrencyAdapter::new(snapshots.clone()),
+        store: LiveVramOffloadStore::new_with_shadow_validation(
+            limits,
+            case_count,
+            usize::MAX / 4,
+            usize::MAX / 4,
+        )
+        .with_page_seal_policy(live_vram_stress_seal_policy()),
+    };
+    let policy = LiveVramSchedulerPolicy {
+        hot_window_tokens: 128,
+        prefetch_window_tokens: 512,
+        max_queued_pages: case_count,
+        max_cpu_stored_bytes: usize::MAX / 4,
+        require_qatq_beats_best_general_codec: false,
+    };
+    let scheduler = FixedWindowLiveVramScheduler { policy };
+    let mut summary = LiveVramSchedulerThrashSummary::default();
+
+    for (case_index, snapshot) in snapshots.iter().enumerate() {
+        let key = KvPageKey::from_descriptor(&snapshot.descriptor);
+        let base_next_required = snapshot
+            .descriptor
+            .token_end
+            .saturating_add(32_768)
+            .saturating_add((case_index % 17) as u64);
+
+        for wave in 0..3_u64 {
+            let next_required_token = base_next_required.saturating_add(wave * 8_192);
+            harness.set_next_required_token(&key, next_required_token);
+            let descriptor = harness.descriptor(&key);
+
+            let cold_current = next_required_token
+                .saturating_sub(policy.hot_window_tokens)
+                .saturating_sub(policy.prefetch_window_tokens)
+                .saturating_sub(1);
+            let cold_state = LiveVramSchedulerState {
+                current_token: cold_current,
+                queued_pages: harness.store.len(),
+                cpu_stored_bytes: harness.store.metrics().cpu_stored_bytes,
+            };
+            assert_eq!(
+                schedule_live_vram_page(&descriptor, cold_state, policy),
+                LiveVramScheduleDecision::Offload,
+                "case {case_index} wave {wave} cold page was not eligible for offload"
+            );
+            let offloaded = try_offload_live_vram_page(
+                &mut harness.adapter,
+                &mut harness.store,
+                &scheduler,
+                &descriptor,
+                cold_state,
+                limits,
+            )
+            .expect("scheduler-thrash cold offload should succeed");
+            let LiveVramOffloadOutcome::Offloaded {
+                key: offloaded_key,
+                stored_len,
+                ..
+            } = offloaded
+            else {
+                panic!(
+                    "case {case_index} wave {wave} cold scheduler unexpectedly kept page resident"
+                )
+            };
+            assert_eq!(offloaded_key, key);
+            assert!(harness.store.contains_key(&key));
+            assert!(!harness.adapter.is_page_resident(&descriptor).unwrap());
+            summary.offloaded += 1;
+            summary.stored_bytes += stored_len;
+
+            let prefetch_state = LiveVramSchedulerState {
+                current_token: next_required_token
+                    .saturating_sub(policy.hot_window_tokens)
+                    .saturating_sub(policy.prefetch_window_tokens),
+                queued_pages: harness.store.len(),
+                cpu_stored_bytes: harness.store.metrics().cpu_stored_bytes,
+            };
+            assert_eq!(
+                schedule_live_vram_page(&descriptor, prefetch_state, policy),
+                LiveVramScheduleDecision::KeepResident(LiveVramKeepReason::InsidePrefetchWindow),
+                "case {case_index} wave {wave} should enter the prefetch window"
+            );
+            summary.prefetch_kept += 1;
+
+            let expect_stall = (case_index + wave as usize).is_multiple_of(4);
+            let restored = harness.restore_with_latency(
+                &key,
+                limits,
+                if expect_stall { 2_000 } else { 500 },
+                1_000,
+                expect_stall,
+            );
+            assert_eq!(restored, snapshot.bytes_le.len());
+            assert!(harness.adapter.is_page_resident(&descriptor).unwrap());
+            assert!(!harness.store.contains_key(&key));
+            summary.restored += 1;
+            if expect_stall {
+                summary.restore_stalls += 1;
+            }
+
+            let kept_prefetch = try_offload_live_vram_page(
+                &mut harness.adapter,
+                &mut harness.store,
+                &scheduler,
+                &descriptor,
+                prefetch_state,
+                limits,
+            )
+            .expect("prefetch scheduler keep should not fail");
+            assert_eq!(
+                kept_prefetch,
+                LiveVramOffloadOutcome::KeptResident(LiveVramKeepReason::InsidePrefetchWindow),
+                "case {case_index} wave {wave} prefetch page was offloaded again"
+            );
+
+            let hot_state = LiveVramSchedulerState {
+                current_token: next_required_token.saturating_sub(policy.hot_window_tokens),
+                queued_pages: harness.store.len(),
+                cpu_stored_bytes: harness.store.metrics().cpu_stored_bytes,
+            };
+            let kept_hot = try_offload_live_vram_page(
+                &mut harness.adapter,
+                &mut harness.store,
+                &scheduler,
+                &descriptor,
+                hot_state,
+                limits,
+            )
+            .expect("hot scheduler keep should not fail");
+            assert_eq!(
+                kept_hot,
+                LiveVramOffloadOutcome::KeptResident(LiveVramKeepReason::InsideHotWindow),
+                "case {case_index} wave {wave} hot page was offloaded"
+            );
+            summary.hot_kept += 1;
+            summary.waves += 1;
+        }
+
+        harness.assert_page_consistent(&key);
+        summary.pages += 1;
+        summary.raw_bytes += snapshot.bytes_le.len() * 3;
+    }
+
+    assert_eq!(summary.pages, case_count);
+    assert_eq!(summary.waves, case_count * 3);
+    assert_eq!(summary.offloaded, summary.waves);
+    assert_eq!(summary.restored, summary.waves);
+    assert_eq!(summary.prefetch_kept, summary.waves);
+    assert_eq!(summary.hot_kept, summary.waves);
+    assert!(summary.restore_stalls > 0);
+    assert_eq!(harness.store.len(), 0);
+    assert_eq!(harness.store.metrics().pending_pages, 0);
+    assert_eq!(harness.store.metrics().cpu_stored_bytes, 0);
+    assert_eq!(
+        harness.store.metrics().restore_stalls,
+        summary.restore_stalls
+    );
+    let metrics = harness.adapter.metrics().unwrap();
+    assert_eq!(metrics.resident_pages, case_count);
+    assert_eq!(metrics.offloaded_pages, 0);
+
+    eprintln!(
+        "qatq live-vram scheduler-thrash stress: pages={} waves={} offloaded={} restored={} prefetch_kept={} hot_kept={} restore_stalls={} raw_bytes={} stored_bytes={}",
+        summary.pages,
+        summary.waves,
+        summary.offloaded,
+        summary.restored,
+        summary.prefetch_kept,
+        summary.hot_kept,
+        summary.restore_stalls,
+        summary.raw_bytes,
+        summary.stored_bytes
+    );
+}
+
+#[test]
 #[ignore = "runs deterministic runtime-adapter controller concurrency across thousands of live-VRAM pages"]
 fn live_vram_runtime_adapter_concurrency_stress() {
     let case_count = std::env::var("QATQ_LIVE_VRAM_RUNTIME_CONCURRENCY_CASES")
@@ -1124,6 +1318,19 @@ struct LiveVramBudgetPressureSummary {
 }
 
 #[derive(Clone, Debug, Default)]
+struct LiveVramSchedulerThrashSummary {
+    pages: usize,
+    waves: usize,
+    raw_bytes: usize,
+    stored_bytes: usize,
+    offloaded: usize,
+    restored: usize,
+    prefetch_kept: usize,
+    hot_kept: usize,
+    restore_stalls: usize,
+}
+
+#[derive(Clone, Debug, Default)]
 struct LiveVramRuntimeConcurrencySummary {
     pages: usize,
     raw_bytes: usize,
@@ -1212,6 +1419,26 @@ struct RuntimeConcurrencyHarness {
 }
 
 impl RuntimeConcurrencyHarness {
+    fn descriptor(&self, key: &KvPageKey) -> KvPageDescriptor {
+        self.adapter
+            .pages
+            .get(key)
+            .expect("known runtime page")
+            .snapshot
+            .descriptor
+            .clone()
+    }
+
+    fn set_next_required_token(&mut self, key: &KvPageKey, next_required_token: u64) {
+        self.adapter
+            .pages
+            .get_mut(key)
+            .expect("known runtime page")
+            .snapshot
+            .descriptor
+            .next_required_token = Some(next_required_token);
+    }
+
     fn offload(
         &mut self,
         snapshot: &KvPageSnapshot,

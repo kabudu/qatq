@@ -52,6 +52,11 @@ jobs:
             cargo_flags: ""
             timeout_minutes: 25
             live_vram_cpu_budget_cases: "2048"
+          - name: live VRAM scheduler thrash stress
+            filter: live_vram_scheduler_thrash_stress
+            cargo_flags: ""
+            timeout_minutes: 25
+            live_vram_scheduler_thrash_cases: "2048"
           - name: live VRAM runtime adapter concurrency stress
             filter: live_vram_runtime_adapter_concurrency_stress
             cargo_flags: ""
@@ -72,6 +77,7 @@ jobs:
       QATQ_LIVE_VRAM_MULTI_SEQUENCE_CASES: ${{ matrix.live_vram_multi_sequence_cases }}
       QATQ_LIVE_VRAM_MULTI_SEQUENCE_WORKERS: ${{ matrix.live_vram_multi_sequence_workers }}
       QATQ_LIVE_VRAM_CPU_BUDGET_CASES: ${{ matrix.live_vram_cpu_budget_cases }}
+      QATQ_LIVE_VRAM_SCHEDULER_THRASH_CASES: ${{ matrix.live_vram_scheduler_thrash_cases }}
       QATQ_LIVE_VRAM_RUNTIME_CONCURRENCY_CASES: ${{ matrix.live_vram_runtime_concurrency_cases }}
       QATQ_LIVE_VRAM_RUNTIME_CONCURRENCY_WORKERS: ${{ matrix.live_vram_runtime_concurrency_workers }}
       QATQ_LIVE_VRAM_RUNTIME_RACE_CASES: ${{ matrix.live_vram_runtime_race_cases }}
