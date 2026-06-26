@@ -49,6 +49,7 @@ def main() -> int:
         help="Maximum direct-counter sample values to retain in JSON evidence.",
     )
     args = parser.parse_args()
+    validate_args(parser, args)
 
     report = build_report(
         Path(args.matrix_summary) if args.matrix_summary else None,
@@ -63,6 +64,15 @@ def main() -> int:
         return 1
     print(json.dumps(report, indent=2))
     return 0
+
+
+def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.sample_seconds < 0.0:
+        parser.error("--sample-seconds must be non-negative")
+    if args.sample_interval_ms <= 0:
+        parser.error("--sample-interval-ms must be positive")
+    if args.max_retained_samples < 0:
+        parser.error("--max-retained-samples must be non-negative")
 
 
 def build_report(

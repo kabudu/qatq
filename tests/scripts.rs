@@ -1401,6 +1401,49 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_hardware_counter_report_rejects_invalid_sampling_args() {
+    let output = run_python_snippet(
+        r#"
+import subprocess, sys, tempfile
+from pathlib import Path
+
+invalid_cases = [
+    (["--sample-seconds", "-0.1"], "--sample-seconds must be non-negative"),
+    (["--sample-interval-ms", "0"], "--sample-interval-ms must be positive"),
+    (["--max-retained-samples", "-1"], "--max-retained-samples must be non-negative"),
+]
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    for index, (extra_args, expected) in enumerate(invalid_cases):
+        output = tmp / f"hardware-{index}.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/llama_cpp_live_vram_hardware_counters.py",
+                "--output",
+                str(output),
+                *extra_args,
+            ],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 2
+        assert expected in result.stderr
+        assert not output.exists()
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_hardware_counter_parses_nvidia_smi_process_memory() {
     let output = run_python_snippet(
         r#"
