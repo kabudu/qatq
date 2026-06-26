@@ -652,9 +652,12 @@ The wrapper shards the matrix into one-case jobs, runs those jobs concurrently,
 captures stdout/stderr per job, and fails the aggregate if any child matrix
 fails or exceeds its outer wall-clock timeout. `--job-timeout 0` derives
 `--timeout + 120`, so the wrapper has its own fail-closed bound even if a child
-matrix process stalls before its internal timeout handling reports. Treat this
-as real patched-runtime process-level pressure evidence. It does not replace
-broader multi-request burn-in inside one shared server runtime.
+matrix process stalls before its internal timeout handling reports. Timed-out
+child matrices run in their own process group; the wrapper sends group
+`SIGTERM`, escalates to group `SIGKILL` if needed, and records the cleanup
+signal in JSON and Markdown summaries. Treat this as real patched-runtime
+process-level pressure evidence. It does not replace broader multi-request
+burn-in inside one shared server runtime.
 
 For fail-closed process-abort evidence on the currently wired `llama-simple`
 adapter path, use the abort probe:

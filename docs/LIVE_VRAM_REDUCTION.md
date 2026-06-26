@@ -3366,8 +3366,11 @@ log isolation for the current native route; it still does not prove in-process
 multi-request cancellation inside one llama.cpp server.
 The wrapper now also records `timed_out` and `job_timeout_seconds` in
 `summary.json`, writes partial child stdout/stderr on timeout, and marks the
-aggregate failed, preventing unattended process-level stress jobs from stalling
-without evidence.
+aggregate failed. Timed-out child matrices run in their own process group; the
+wrapper sends group `SIGTERM`, escalates to group `SIGKILL` if needed, and
+records the cleanup signal in JSON and Markdown summaries. This prevents
+unattended process-level stress jobs from stalling or leaving live child
+processes behind without evidence.
 
 A fresh installed-runtime verification on 2026-06-24 reran that proof from
 `/private/tmp/qatq-llama.cpp/build/bin/llama-simple` and widened it across the

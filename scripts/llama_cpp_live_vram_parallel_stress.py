@@ -14,7 +14,9 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -45,6 +47,8 @@ class StressResult:
     stderr_path: Path
     timed_out: bool = False
     timeout_seconds: int = 0
+    cleanup_signal: str | None = None
+    cleanup_escalated: bool = False
 
 
 def main() -> int:
@@ -191,6 +195,8 @@ def main() -> int:
                         "returncode": result.returncode,
                         "timed_out": result.timed_out,
                         "timeout_seconds": result.timeout_seconds,
+                        "cleanup_signal": result.cleanup_signal,
+                        "cleanup_escalated": result.cleanup_escalated,
                         "stdout": str(result.stdout_path),
                         "stderr": str(result.stderr_path),
                     }
@@ -293,19 +299,23 @@ def run_job(job: StressJob, *, timeout: int) -> StressResult:
     stdout_path = job.work_dir / "stdout.log"
     stderr_path = job.work_dir / "stderr.log"
     start = time.monotonic()
+    proc = subprocess.Popen(
+        job.command,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
     try:
-        completed = subprocess.run(
-            job.command,
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        cleanup_signal, cleanup_escalated = terminate_process_group(proc)
+        stdout, stderr = proc.communicate()
         elapsed = time.monotonic() - start
-        stdout_path.write_text(timeout_output_to_text(exc.stdout), encoding="utf-8")
+        stdout_path.write_text(timeout_output_to_text(stdout), encoding="utf-8")
         stderr_path.write_text(
-            timeout_output_to_text(exc.stderr)
-            + f"\nparallel stress job exceeded timeout of {timeout}s\n",
+            timeout_output_to_text(stderr)
+            + f"\nparallel stress job exceeded timeout of {timeout}s; cleanup={cleanup_signal}\n",
             encoding="utf-8",
         )
         return StressResult(
@@ -320,23 +330,39 @@ def run_job(job: StressJob, *, timeout: int) -> StressResult:
             stderr_path=stderr_path,
             timed_out=True,
             timeout_seconds=timeout,
+            cleanup_signal=cleanup_signal,
+            cleanup_escalated=cleanup_escalated,
         )
     elapsed = time.monotonic() - start
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
+    stdout_path.write_text(stdout, encoding="utf-8")
+    stderr_path.write_text(stderr, encoding="utf-8")
     return StressResult(
         index=job.index,
         case_id=job.case_id,
         iteration=job.iteration,
-        status="pass" if completed.returncode == 0 else "fail",
+        status="pass" if proc.returncode == 0 else "fail",
         work_dir=job.work_dir,
         elapsed_seconds=elapsed,
-        returncode=completed.returncode,
+        returncode=proc.returncode if proc.returncode is not None else -1,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
         timed_out=False,
         timeout_seconds=timeout,
     )
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> tuple[str, bool]:
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            proc.wait(timeout=5.0)
+            return "SIGTERM", False
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=5.0)
+            return "SIGKILL", True
+    except ProcessLookupError:
+        return "exited", False
 
 
 def build_summary(results: list[StressResult], jobs: int, dry_run: bool) -> str:
@@ -353,13 +379,14 @@ def build_summary(results: list[StressResult], jobs: int, dry_run: bool) -> str:
         f"- failed: {failed}",
         f"- timed out: {timed_out}",
         "",
-        "| job | case | iteration | status | timed out | elapsed s | return code | work dir |",
-        "| ---: | --- | ---: | --- | --- | ---: | ---: | --- |",
+        "| job | case | iteration | status | timed out | cleanup | elapsed s | return code | work dir |",
+        "| ---: | --- | ---: | --- | --- | --- | ---: | ---: | --- |",
     ]
     for result in results:
         lines.append(
             f"| {result.index} | `{result.case_id}` | {result.iteration} | {result.status} | "
-            f"{str(result.timed_out).lower()} | {result.elapsed_seconds:.2f} | "
+            f"{str(result.timed_out).lower()} | {result.cleanup_signal or ''} | "
+            f"{result.elapsed_seconds:.2f} | "
             f"{result.returncode} | `{result.work_dir}` |"
         )
     lines.append("")
