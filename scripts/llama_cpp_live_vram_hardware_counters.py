@@ -67,6 +67,8 @@ def main() -> int:
 
 
 def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.sample_pid is not None and args.sample_pid <= 0:
+        parser.error("--sample-pid must be positive")
     if args.sample_seconds < 0.0:
         parser.error("--sample-seconds must be non-negative")
     if args.sample_interval_ms <= 0:

@@ -1408,6 +1408,7 @@ import subprocess, sys, tempfile
 from pathlib import Path
 
 invalid_cases = [
+    (["--sample-pid", "0"], "--sample-pid must be positive"),
     (["--sample-seconds", "-0.1"], "--sample-seconds must be non-negative"),
     (["--sample-interval-ms", "0"], "--sample-interval-ms must be positive"),
     (["--max-retained-samples", "-1"], "--max-retained-samples must be non-negative"),

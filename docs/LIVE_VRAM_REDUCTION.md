@@ -840,8 +840,9 @@ so burn-in runs on suitable hosts can fail closed on missing direct counters.
 `direct_peak_vram_retain_samples` bounds the retained JSON samples for long
 runs while preserving complete `sample_count` and `peak_memory_mib`.
 Invalid sampling policy is rejected before evidence is written:
-`--sample-seconds` must be non-negative, `--sample-interval-ms` must be
-positive, and `--max-retained-samples` must be non-negative.
+`--sample-pid` must be positive, `--sample-seconds` must be non-negative,
+`--sample-interval-ms` must be positive, and `--max-retained-samples` must be
+non-negative.
 The server probe now also bounds JSONL evidence ingestion with
 `--max-trace-bytes` and `--max-trace-line-bytes`. Trace files are parsed
 streamingly, and oversized files, malformed JSONL rows, or pathological
