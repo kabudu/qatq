@@ -347,10 +347,13 @@ def run_case(case_plan: CasePlan, *, timeout: int) -> CaseResult:
         returncode = 124
         failure = f"case exceeded timeout of {timeout}s; cleanup={cleanup_signal or 'unknown'}"
     elapsed = time.monotonic() - started
-    probe_summary = load_probe_summary(summary_path)
+    probe_summary, summary_failure = load_probe_summary(summary_path)
     status = str(probe_summary.get("status") or ("fail" if returncode else "pass"))
     if returncode != 0:
         status = "fail"
+    if summary_failure:
+        status = "fail"
+        failure = summary_failure if not failure else f"{failure}; {summary_failure}"
     if status not in {"pass", "dry-run"} and not failure:
         failure = "; ".join(str(item) for item in probe_summary_failures(probe_summary))
     gate_failures = (
@@ -445,14 +448,25 @@ def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
         return cleanup
 
 
-def load_probe_summary(path: Path) -> dict[str, Any]:
+def load_probe_summary(path: Path) -> tuple[dict[str, Any], str]:
     if not path.is_file():
-        return {}
+        return {}, f"probe summary missing: {path}"
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    return value if isinstance(value, dict) else {}
+    except json.JSONDecodeError as exc:
+        return {}, f"probe summary is invalid JSON: {path}: {exc}"
+    if not isinstance(value, dict):
+        return {}, f"probe summary is not a JSON object: {path}"
+    expected_format = "qatq-live-vram-server-cancel-probe-summary-v1"
+    if value.get("format") != expected_format:
+        return value, (
+            "probe summary has unexpected format: "
+            f"{value.get('format')!r}; expected {expected_format}"
+        )
+    status = value.get("status")
+    if status not in {"pass", "dry-run", "fail"}:
+        return value, f"probe summary has invalid status: {status!r}"
+    return value, ""
 
 
 def probe_summary_failures(summary: dict[str, Any]) -> list[Any]:

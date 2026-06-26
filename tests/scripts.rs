@@ -4309,6 +4309,109 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_matrix_rejects_missing_or_malformed_probe_summary() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    config = tmp / "config.json"
+    config.write_text(json.dumps({
+        "cases": [
+            {
+                "id": "summary-integrity",
+                "model": "/tmp/model.gguf",
+                "model_id": "summary-integrity"
+            }
+        ]
+    }), encoding="utf-8")
+
+    missing_probe = tmp / "missing_probe_summary.py"
+    missing_probe.write_text(
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "Path(args.work_dir).mkdir(parents=True, exist_ok=True)\n"
+        "print('probe exited without summary')\n",
+        encoding="utf-8",
+    )
+    missing_work = tmp / "missing"
+    missing = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_cancel_matrix.py",
+            "--config",
+            str(config),
+            "--probe-runner",
+            str(missing_probe),
+            "--llama-server",
+            "/tmp/nonexistent-llama-server",
+            "--work-dir",
+            str(missing_work),
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert missing.returncode == 1, missing.stdout
+    missing_summary = json.loads((missing_work / "summary.json").read_text())
+    assert missing_summary["status"] == "fail"
+    assert missing_summary["cases"][0]["returncode"] == 0
+    assert "probe summary missing" in missing_summary["cases"][0]["failure"]
+
+    malformed_probe = tmp / "malformed_probe_summary.py"
+    malformed_probe.write_text(
+        "import argparse, json\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "work = Path(args.work_dir)\n"
+        "work.mkdir(parents=True, exist_ok=True)\n"
+        "(work / 'summary.json').write_text(json.dumps({\n"
+        "    'format': 'wrong-format',\n"
+        "    'status': 'pass'\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+    malformed_work = tmp / "malformed"
+    malformed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_cancel_matrix.py",
+            "--config",
+            str(config),
+            "--probe-runner",
+            str(malformed_probe),
+            "--llama-server",
+            "/tmp/nonexistent-llama-server",
+            "--work-dir",
+            str(malformed_work),
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert malformed.returncode == 1, malformed.stdout
+    malformed_summary = json.loads((malformed_work / "summary.json").read_text())
+    assert malformed_summary["status"] == "fail"
+    assert "unexpected format" in malformed_summary["cases"][0]["failure"]
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_dry_run_records_soak_iterations() {
     let output = run_python_snippet(
         r#"
