@@ -24,6 +24,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--matrix-summary", help="Optional server matrix summary.json to inspect")
     parser.add_argument("--output", default="/tmp/qatq-live-vram-hardware-counters.json")
+    parser.add_argument(
+        "--require-backend-memory-diagnostics",
+        action="store_true",
+        help=(
+            "Fail unless the matrix summary passed and every case contains "
+            "projected device memory plus non-host accelerator breakdown."
+        ),
+    )
     parser.add_argument("--require-direct-peak-vram", action="store_true")
     parser.add_argument(
         "--sample-pid",
@@ -59,6 +67,12 @@ def main() -> int:
         max_retained_samples=args.max_retained_samples,
     )
     write_json(Path(args.output), report)
+    if (
+        args.require_backend_memory_diagnostics
+        and not report["backend_memory_diagnostics"]["available"]
+    ):
+        print(report["backend_memory_diagnostics"]["reason"])
+        return 1
     if args.require_direct_peak_vram and not report["direct_peak_vram_counter"]["available"]:
         print(report["direct_peak_vram_counter"]["reason"])
         return 1
@@ -94,7 +108,7 @@ def build_report(
         sample_interval_ms=sample_interval_ms,
         max_retained_samples=max_retained_samples,
     )
-    backend = inspect_matrix_summary(matrix_summary) if matrix_summary else {}
+    backend = inspect_matrix_summary(matrix_summary)
     direct_sources: list[dict[str, Any]] = []
     if nvidia_smi["direct_peak_vram_counter"]["available"]:
         direct_sources.append(nvidia_smi["direct_peak_vram_counter"])
@@ -403,11 +417,21 @@ def inspect_vmmap() -> dict[str, Any]:
 
 
 def inspect_matrix_summary(path: Path | None) -> dict[str, Any]:
-    if path is None or not path.is_file():
+    if path is None:
         return {
             "present": False,
+            "available": False,
             "cases_with_projected_device_memory": 0,
             "cases_with_accelerator_breakdown": 0,
+            "reason": "no --matrix-summary was provided",
+        }
+    if not path.is_file():
+        return {
+            "present": False,
+            "available": False,
+            "cases_with_projected_device_memory": 0,
+            "cases_with_accelerator_breakdown": 0,
+            "reason": "matrix summary does not exist",
         }
     summary = load_json(path)
     cases = summary.get("cases")
@@ -427,13 +451,37 @@ def inspect_matrix_summary(path: Path | None) -> dict[str, Any]:
         )
         if isinstance(memory_breakdown, dict) and any(key != "Host" for key in memory_breakdown):
             breakdown += 1
+    status = summary.get("status")
+    available = (
+        status == "pass"
+        and len(cases) > 0
+        and projected == len(cases)
+        and breakdown == len(cases)
+    )
+    reason = "all matrix cases include backend memory diagnostics"
+    if status != "pass":
+        reason = "matrix summary status is not pass"
+    elif not cases:
+        reason = "matrix summary contains no cases"
+    elif projected != len(cases):
+        reason = (
+            "not every matrix case has projected_device_memory_mib "
+            f"({projected}/{len(cases)})"
+        )
+    elif breakdown != len(cases):
+        reason = (
+            "not every matrix case has non-host accelerator memory breakdown "
+            f"({breakdown}/{len(cases)})"
+        )
     return {
         "present": True,
+        "available": available,
         "summary_status": summary.get("status"),
         "total_cases": len(cases),
         "cases_with_projected_device_memory": projected,
         "cases_with_accelerator_breakdown": breakdown,
         "direct_peak_vram_counter": False,
+        "reason": reason,
     }
 
 

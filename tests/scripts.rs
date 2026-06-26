@@ -1340,6 +1340,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             str(matrix_summary),
             "--output",
             str(output),
+            "--require-backend-memory-diagnostics",
         ],
         check=False,
         text=True,
@@ -1349,11 +1350,79 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     report = json.loads(output.read_text())
     assert report["format"] == "qatq-live-vram-hardware-counter-capability-v1"
     assert report["backend_memory_diagnostics"]["present"] is True
+    assert report["backend_memory_diagnostics"]["available"] is True
     assert report["backend_memory_diagnostics"]["cases_with_projected_device_memory"] == 1
     assert report["backend_memory_diagnostics"]["cases_with_accelerator_breakdown"] == 1
     assert report["backend_memory_diagnostics"]["direct_peak_vram_counter"] is False
     assert report["direct_peak_vram_counter"]["available"] is False
     assert "Backend projected memory and RSS gates are not treated as direct peak-VRAM proof" in report["boundary"]
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_hardware_counter_report_requires_backend_memory_diagnostics() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    matrix_summary = tmp / "summary.json"
+    output = tmp / "hardware.json"
+    matrix_summary.write_text(json.dumps({
+        "status": "pass",
+        "cases": [
+            {
+                "id": "native",
+                "projected_device_memory_mib": 1458,
+                "backend_memory": {
+                    "memory_breakdown_mib": {
+                        "MTL0 (Apple M4)": {"self": 1458},
+                        "Host": {"self": 196},
+                    },
+                },
+            },
+            {
+                "id": "qatq",
+                "backend_memory": {
+                    "memory_breakdown_mib": {
+                        "Host": {"self": 192},
+                    },
+                },
+            },
+        ],
+    }), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_hardware_counters.py",
+            "--matrix-summary",
+            str(matrix_summary),
+            "--output",
+            str(output),
+            "--require-backend-memory-diagnostics",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1
+    assert output.exists()
+    report = json.loads(output.read_text())
+    backend = report["backend_memory_diagnostics"]
+    assert backend["available"] is False
+    assert backend["cases_with_projected_device_memory"] == 1
+    assert backend["cases_with_accelerator_breakdown"] == 1
+    assert "not every matrix case has projected_device_memory_mib (1/2)" in result.stdout
 "#,
     );
 

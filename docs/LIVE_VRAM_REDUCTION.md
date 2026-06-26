@@ -837,6 +837,10 @@ probe also supports integrated sampling with `--sample-direct-peak-vram`,
 the same policy as `sample_direct_peak_vram`,
 `require_direct_peak_vram_counter`, and `direct_peak_vram_sample_interval_ms`,
 so burn-in runs on suitable hosts can fail closed on missing direct counters.
+The standalone counter helper also supports
+`--require-backend-memory-diagnostics`; this gate only passes when the matrix
+summary status is `pass` and every case has both `projected_device_memory_mib`
+and a non-host accelerator memory breakdown.
 `direct_peak_vram_retain_samples` bounds the retained JSON samples for long
 runs while preserving complete `sample_count` and `peak_memory_mib`.
 Invalid sampling policy is rejected before evidence is written:
