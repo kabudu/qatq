@@ -108,6 +108,7 @@ GATE_KEYS = {
 }
 COMPARISON_GATE_KEYS = {
     "max_backend_accelerator_context_ratio",
+    "max_direct_peak_vram_ratio",
     "max_followup_p95_ratio",
     "max_iteration_p95_ratio",
     "max_projected_device_memory_ratio",
@@ -117,6 +118,7 @@ COMPARISON_GATE_KEYS = {
     "min_predicted_per_second_p05_ratio",
     "min_predicted_per_second_p50_ratio",
     "min_predicted_per_second_p95_ratio",
+    "require_direct_peak_vram_counters",
 }
 
 KNOWN_CONFIG_KEYS = {
@@ -573,6 +575,10 @@ def evaluate_comparison_gates(
             failures.append(f"{label}: comparison status is {comparison.get('status')}")
             continue
         for key, gate_value in sorted(gates.items()):
+            if key == "require_direct_peak_vram_counters":
+                if gate_value > 0 and not bool(comparison.get("direct_peak_vram_counters_available")):
+                    failures.append(f"{label}: require_direct_peak_vram_counters violated")
+                continue
             ratio_key = comparison_gate_ratio_key(key)
             ratio_value = comparison.get(ratio_key)
             if not isinstance(ratio_value, (int, float)):
@@ -588,6 +594,7 @@ def evaluate_comparison_gates(
 def comparison_gate_ratio_key(gate_key: str) -> str:
     mapping = {
         "max_backend_accelerator_context_ratio": "backend_accelerator_context_ratio",
+        "max_direct_peak_vram_ratio": "direct_peak_vram_ratio",
         "max_followup_p95_ratio": "followup_p95_ratio",
         "max_iteration_p95_ratio": "iteration_p95_ratio",
         "max_projected_device_memory_ratio": "projected_device_memory_ratio",
@@ -707,6 +714,14 @@ def build_comparisons(results: list[CaseResult]) -> list[dict[str, Any]]:
                         qatq.get("projected_device_memory_mib"),
                         native.get("projected_device_memory_mib"),
                     ),
+                    "direct_peak_vram_ratio": ratio(
+                        qatq.get("direct_peak_vram_mib"),
+                        native.get("direct_peak_vram_mib"),
+                    ),
+                    "direct_peak_vram_counters_available": bool(
+                        qatq.get("direct_peak_vram_counter_available")
+                    )
+                    and bool(native.get("direct_peak_vram_counter_available")),
                     "qatq_live_offloaded_segments": qatq.get("live_offloaded_segments"),
                     "qatq_flattened_flash_consumers": qatq.get("flattened_flash_consumers"),
                 }
@@ -811,8 +826,8 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
                 "",
                 "## Native Comparisons",
                 "",
-                "| group | QATQ case | status | iteration p95 ratio | follow-up p95 ratio | predicted tok/s p05 ratio | predicted tok/s p50 ratio | predicted tok/s p95 ratio | backend KV ratio | projected device ratio | RSS growth ratio | RSS tail growth ratio | RSS tail delta KiB | QATQ live offloaded segments |",
-                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| group | QATQ case | status | iteration p95 ratio | follow-up p95 ratio | predicted tok/s p05 ratio | predicted tok/s p50 ratio | predicted tok/s p95 ratio | backend KV ratio | projected device ratio | direct peak VRAM ratio | RSS growth ratio | RSS tail growth ratio | RSS tail delta KiB | QATQ live offloaded segments |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for comparison in comparisons:
@@ -832,6 +847,7 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
                         format_ratio(comparison.get("predicted_per_second_p95_ratio")),
                         format_ratio(comparison.get("backend_accelerator_context_ratio")),
                         format_ratio(comparison.get("projected_device_memory_ratio")),
+                        format_ratio(comparison.get("direct_peak_vram_ratio")),
                         format_ratio(comparison.get("rss_growth_ratio")),
                         format_ratio(comparison.get("rss_tail_growth_ratio")),
                         format_optional(comparison.get("rss_tail_growth_delta_kib")),

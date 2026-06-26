@@ -424,7 +424,10 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       support so summaries can include `direct_peak_vram_counter` while the
       server is under warmup and measured cancellation/follow-up load, and the
       matrix runner forwards the same policy keys from JSON configs for
-      burn-in use on suitable hardware. The report at
+      burn-in use on suitable hardware. Matrix `comparison_gates` can now
+      require direct counters and cap QATQ/native direct peak-VRAM ratio with
+      `require_direct_peak_vram_counters` and `max_direct_peak_vram_ratio`.
+      The report at
       `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
       confirms that all six cases in the latest accepted burn-in repeat had
       llama.cpp backend projected-device and accelerator-breakdown diagnostics,

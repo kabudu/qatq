@@ -1902,6 +1902,11 @@ native = module.CaseResult(
             "predicted_per_second": {"p05": 70.0, "p50": 80.0, "p95": 90.0},
         },
         "checks": {"page_segment_counts": {}},
+        "direct_peak_vram_counter": {
+            "available": True,
+            "backend": "nvidia-smi",
+            "peak_memory_mib": 640,
+        },
         "backend_memory": {
             "projected_device_memory_mib": 640,
             "memory_breakdown_mib": {
@@ -1955,6 +1960,11 @@ qatq = module.CaseResult(
                 "max_retained_bytes": 1048576,
             },
         },
+        "direct_peak_vram_counter": {
+            "available": True,
+            "backend": "nvidia-smi",
+            "peak_memory_mib": 512,
+        },
         "backend_memory": {
             "projected_device_memory_mib": 512,
             "memory_breakdown_mib": {
@@ -1986,6 +1996,9 @@ assert case_summary["backend_accelerator_self_mib"] == 512
 assert case_summary["backend_accelerator_context_mib"] == 256
 assert case_summary["backend_accelerator_compute_mib"] == 56
 assert case_summary["projected_device_memory_mib"] == 512
+assert case_summary["direct_peak_vram_counter_available"] is True
+assert case_summary["direct_peak_vram_mib"] == 512
+assert case_summary["direct_peak_vram_backend"] == "nvidia-smi"
 assert case_summary["rss_tail_growth_kib"] == 32
 assert case_summary["rss_tail_gate_growth_kib"] == 32
 assert case_summary["rss_tail_range_kib"] == 512
@@ -2002,6 +2015,8 @@ assert comparisons[0]["rss_tail_growth_ratio"] == 1.28
 assert comparisons[0]["rss_tail_growth_delta_kib"] == 7
 assert comparisons[0]["backend_accelerator_context_ratio"] == 0.8
 assert comparisons[0]["projected_device_memory_ratio"] == 0.8
+assert comparisons[0]["direct_peak_vram_ratio"] == 0.8
+assert comparisons[0]["direct_peak_vram_counters_available"] is True
 assert comparisons[0]["qatq_live_offloaded_segments"] == 8
 passing_gates = module.evaluate_comparison_gates(
     comparisons,
@@ -2015,6 +2030,8 @@ passing_gates = module.evaluate_comparison_gates(
         "max_rss_tail_growth_ratio": 1.3,
         "max_backend_accelerator_context_ratio": 0.9,
         "max_projected_device_memory_ratio": 0.9,
+        "max_direct_peak_vram_ratio": 0.9,
+        "require_direct_peak_vram_counters": 1,
     },
 )
 assert passing_gates == [], passing_gates
@@ -2031,6 +2048,7 @@ failing_gates = "\n".join(
             "max_rss_tail_growth_ratio": 1.1,
             "max_backend_accelerator_context_ratio": 0.7,
             "max_projected_device_memory_ratio": 0.7,
+            "max_direct_peak_vram_ratio": 0.7,
         },
     )
 )
@@ -2043,6 +2061,16 @@ assert "max_rss_tail_growth_delta_kib violated: 7.0 > 6" in failing_gates
 assert "max_rss_tail_growth_ratio violated: 1.28 > 1.1" in failing_gates
 assert "max_backend_accelerator_context_ratio violated: 0.8 > 0.7" in failing_gates
 assert "max_projected_device_memory_ratio violated: 0.8 > 0.7" in failing_gates
+assert "max_direct_peak_vram_ratio violated: 0.8 > 0.7" in failing_gates
+missing_counter = dict(comparisons[0])
+missing_counter["direct_peak_vram_counters_available"] = False
+missing_counter_failures = "\n".join(
+    module.evaluate_comparison_gates(
+        [missing_counter],
+        {"require_direct_peak_vram_counters": 1},
+    )
+)
+assert "require_direct_peak_vram_counters violated" in missing_counter_failures
 "#,
     );
 
