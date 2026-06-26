@@ -820,7 +820,12 @@ unavailable on this Apple Metal host. The helper now has an explicit NVIDIA
 sampling path: with `--sample-pid`, `--sample-seconds`, and
 `--require-direct-peak-vram`, it only passes when `nvidia-smi` returns
 per-process `pid,used_memory` samples for the target runtime. Detecting
-`nvidia-smi` on `PATH` is not enough. On this host, `nvidia-smi` is absent;
+`nvidia-smi` on `PATH` is not enough. The live `llama-server` cancellation
+probe also supports integrated sampling with `--sample-direct-peak-vram`,
+`--require-direct-peak-vram-counter`, and
+`--direct-peak-vram-sample-interval-ms`, storing the resulting
+`direct_peak_vram_counter` object in `summary.json`. On this host,
+`nvidia-smi` is absent;
 `powermetrics` is present but requires superuser and documents per-process GPU
 time rather than per-process peak GPU memory; `vmmap` is present but reports
 virtual memory regions, not direct peak GPU memory. Backend projected memory,

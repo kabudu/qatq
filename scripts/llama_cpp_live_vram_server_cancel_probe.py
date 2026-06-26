@@ -20,9 +20,16 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from llama_cpp_live_vram_hardware_counters import parse_nvidia_smi_process_memory
 
 
 READY_PATH = "/health"
@@ -162,6 +169,28 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--sample-direct-peak-vram",
+        action="store_true",
+        help=(
+            "Sample direct per-process GPU memory while llama-server runs. "
+            "Currently supports NVIDIA nvidia-smi pid,used_memory sampling."
+        ),
+    )
+    parser.add_argument(
+        "--require-direct-peak-vram-counter",
+        action="store_true",
+        help=(
+            "Fail unless --sample-direct-peak-vram captures at least one "
+            "direct per-process GPU memory sample."
+        ),
+    )
+    parser.add_argument(
+        "--direct-peak-vram-sample-interval-ms",
+        type=int,
+        default=100,
+        help="Sampling interval for --sample-direct-peak-vram. Default 100.",
+    )
+    parser.add_argument(
         "--concurrent-followup-during-cancel",
         action="store_true",
         help=(
@@ -278,6 +307,9 @@ def main() -> int:
         "require_flattened_flash_consumer": args.require_flattened_flash_consumer,
         "require_live_offloaded_stream_count": args.require_live_offloaded_stream_count,
         "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+        "sample_direct_peak_vram": args.sample_direct_peak_vram,
+        "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
+        "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
         "dry_run": args.dry_run,
     }
     write_json(work_dir / "server-cancel-probe-plan.json", plan)
@@ -304,6 +336,9 @@ def main() -> int:
             "require_flattened_flash_consumer": args.require_flattened_flash_consumer,
             "require_live_offloaded_stream_count": args.require_live_offloaded_stream_count,
             "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+            "sample_direct_peak_vram": args.sample_direct_peak_vram,
+            "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
+            "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
             "artifacts": {key: str(value) for key, value in artifacts.items()},
             "boundary": "Dry-run plan only; no llama-server process was started.",
         }
@@ -329,6 +364,13 @@ def main() -> int:
     memory_samples: list[dict[str, object]] = []
     failures: list[str] = []
     host_pressure = allocate_host_memory_pressure(args.host_memory_pressure_mib)
+    direct_peak_sampler: DirectPeakVramSampler | None = None
+    direct_peak_vram_counter: dict[str, object] = {
+        "enabled": args.sample_direct_peak_vram or args.require_direct_peak_vram_counter,
+        "available": False,
+        "backend": None,
+        "reason": "direct peak-VRAM sampling was not requested",
+    }
 
     try:
         with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
@@ -341,6 +383,12 @@ def main() -> int:
             )
             wait_for_server(args.host, port, proc, args.startup_timeout)
             memory_samples.append(sample_memory("post-readiness", proc.pid))
+            if args.sample_direct_peak_vram or args.require_direct_peak_vram_counter:
+                direct_peak_sampler = DirectPeakVramSampler(
+                    proc.pid,
+                    interval_ms=args.direct_peak_vram_sample_interval_ms,
+                )
+                direct_peak_sampler.start()
             for iteration in range(1, args.warmup_iterations + 1):
                 result = run_cancel_iteration(args, port, iteration, proc.pid)
                 result["phase"] = "warmup"
@@ -377,8 +425,15 @@ def main() -> int:
     finally:
         if host_pressure is not None:
             host_pressure[0] ^= 0xA5
+        if direct_peak_sampler is not None:
+            direct_peak_vram_counter = direct_peak_sampler.stop()
         returncode = stop_server(proc, args.shutdown_timeout)
 
+    if args.require_direct_peak_vram_counter and not bool(direct_peak_vram_counter["available"]):
+        failures.append(
+            "direct peak-VRAM counter was required but unavailable: "
+            f"{direct_peak_vram_counter.get('reason', 'unknown')}"
+        )
     if len(iterations) != args.iterations:
         failures.append(
             f"completed {len(iterations)} cancellation iterations; expected {args.iterations}"
@@ -471,6 +526,10 @@ def main() -> int:
         "require_flattened_flash_consumer": args.require_flattened_flash_consumer,
         "require_live_offloaded_stream_count": args.require_live_offloaded_stream_count,
         "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+        "sample_direct_peak_vram": args.sample_direct_peak_vram,
+        "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
+        "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
+        "direct_peak_vram_counter": direct_peak_vram_counter,
         "memory_samples": memory_samples,
         "memory_checks": memory_checks,
         "warmup_memory_checks": warmup_memory_checks,
@@ -525,6 +584,14 @@ def validate_args(args: argparse.Namespace) -> None:
     require(args.max_queued_pages >= 0, "--max-queued-pages must be non-negative")
     require(args.max_page_segments >= 0, "--max-page-segments must be non-negative")
     require(args.graph_extra_nodes >= 0, "--graph-extra-nodes must be non-negative")
+    require(
+        args.direct_peak_vram_sample_interval_ms > 0,
+        "--direct-peak-vram-sample-interval-ms must be positive",
+    )
+    require(
+        not args.require_direct_peak_vram_counter or args.sample_direct_peak_vram,
+        "--require-direct-peak-vram-counter requires --sample-direct-peak-vram",
+    )
     require(args.n_predict > 0, "--n-predict must be positive")
     require(args.cancel_after_bytes > 0, "--cancel-after-bytes must be positive")
     require(args.iterations > 0, "--iterations must be positive")
@@ -828,6 +895,112 @@ def allocate_host_memory_pressure(mib_count: int) -> bytearray | None:
         pressure[index] = (index // page_size) & 0xFF
     pressure[-1] ^= 0x5A
     return pressure
+
+
+class DirectPeakVramSampler:
+    def __init__(self, pid: int, *, interval_ms: int) -> None:
+        self.pid = pid
+        self.interval_seconds = max(0.01, interval_ms / 1000.0)
+        self.path = shutil.which("nvidia-smi")
+        self.samples: list[int] = []
+        self.errors: list[str] = []
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._start_monotonic: float | None = None
+        self._end_monotonic: float | None = None
+        self._capability_reason = "direct peak-VRAM sampling has not started"
+
+    def start(self) -> None:
+        self._start_monotonic = time.monotonic()
+        if not self.path:
+            self._capability_reason = "nvidia-smi is not available on PATH"
+            return
+        if not self._nvidia_smi_supports_process_memory():
+            return
+        self._thread = threading.Thread(target=self._run, name="qatq-direct-peak-vram", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> dict[str, object]:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=max(1.0, self.interval_seconds * 2.0))
+        self._end_monotonic = time.monotonic()
+        peak = max(self.samples) if self.samples else None
+        available = peak is not None
+        return {
+            "enabled": True,
+            "available": available,
+            "backend": "nvidia-smi",
+            "sample_pid": self.pid,
+            "sample_interval_ms": int(self.interval_seconds * 1000),
+            "started_at": self._start_monotonic,
+            "completed_at": self._end_monotonic,
+            "duration_seconds": (
+                self._end_monotonic - self._start_monotonic
+                if self._start_monotonic is not None and self._end_monotonic is not None
+                else None
+            ),
+            "samples": self.samples,
+            "sample_count": len(self.samples),
+            "peak_memory_mib": peak,
+            "errors": self.errors[:5],
+            "reason": (
+                "sampled per-process GPU memory with nvidia-smi"
+                if available
+                else self._capability_reason
+            ),
+        }
+
+    def _nvidia_smi_supports_process_memory(self) -> bool:
+        assert self.path is not None
+        try:
+            result = subprocess.run(
+                [self.path, "--help-query-compute-apps"],
+                check=False,
+                text=True,
+                capture_output=True,
+                timeout=5.0,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self._capability_reason = f"nvidia-smi capability probe failed: {exc}"
+            return False
+        help_text = result.stdout + result.stderr
+        supported = "pid" in help_text and "used_memory" in help_text
+        if not supported:
+            self._capability_reason = (
+                "nvidia-smi is present but does not advertise pid,used_memory "
+                "compute-app queries"
+            )
+        return supported
+
+    def _run(self) -> None:
+        assert self.path is not None
+        while not self._stop.is_set():
+            try:
+                result = subprocess.run(
+                    [
+                        self.path,
+                        "--query-compute-apps=pid,used_memory",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    check=False,
+                    text=True,
+                    capture_output=True,
+                    timeout=5.0,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                self.errors.append(str(exc))
+                self._stop.wait(self.interval_seconds)
+                continue
+            if result.returncode == 0:
+                values = parse_nvidia_smi_process_memory(result.stdout, self.pid)
+                self.samples.extend(values)
+                if values:
+                    self._capability_reason = "sampled per-process GPU memory with nvidia-smi"
+            else:
+                text = (result.stderr or result.stdout).strip()
+                self.errors.append(text.splitlines()[0] if text else f"return code {result.returncode}")
+            self._stop.wait(self.interval_seconds)
 
 
 def sample_memory(label: str, pid: int) -> dict[str, object]:
@@ -1683,6 +1856,13 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     out += f"- host memory pressure: `{summary.get('host_memory_pressure_mib', 0)} MiB`\n"
     out += f"- QATQ traces enabled: `{summary.get('qatq_traces_enabled', False)}`\n"
     out += f"- require backend memory diagnostics: `{summary.get('require_backend_memory_diagnostics', False)}`\n"
+    direct_peak = summary.get("direct_peak_vram_counter", {})
+    if isinstance(direct_peak, dict) and direct_peak.get("enabled"):
+        out += f"- direct peak-VRAM counter: `{direct_peak.get('available', False)}`\n"
+        if direct_peak.get("peak_memory_mib") is not None:
+            out += f"- direct peak-VRAM MiB: `{direct_peak.get('peak_memory_mib')}`\n"
+        else:
+            out += f"- direct peak-VRAM reason: `{direct_peak.get('reason', 'unknown')}`\n"
     memory_checks = summary.get("memory_checks", {})
     if isinstance(memory_checks, dict) and memory_checks:
         growth_kib = memory_checks.get("growth_kib")

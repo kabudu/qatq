@@ -1136,6 +1136,10 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "--require-live-offloaded-stream-count",
             "2",
             "--require-backend-memory-diagnostics",
+            "--sample-direct-peak-vram",
+            "--require-direct-peak-vram-counter",
+            "--direct-peak-vram-sample-interval-ms",
+            "250",
             "--dry-run",
         ],
         check=False,
@@ -1184,6 +1188,9 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["require_flattened_flash_consumer"] is True
     assert plan["require_live_offloaded_stream_count"] == 2
     assert plan["require_backend_memory_diagnostics"] is True
+    assert plan["sample_direct_peak_vram"] is True
+    assert plan["require_direct_peak_vram_counter"] is True
+    assert plan["direct_peak_vram_sample_interval_ms"] == 250
     assert summary["iterations"] == 1
     assert summary["warmup_iterations"] == 0
     assert summary["host_memory_pressure_mib"] == 256
@@ -1196,9 +1203,51 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["require_flattened_flash_consumer"] is True
     assert summary["require_live_offloaded_stream_count"] == 2
     assert summary["require_backend_memory_diagnostics"] is True
+    assert summary["sample_direct_peak_vram"] is True
+    assert summary["require_direct_peak_vram_counter"] is True
+    assert summary["direct_peak_vram_sample_interval_ms"] == 250
     artifacts = plan["artifacts"]
     assert artifacts["event_trace"].endswith("event-trace.jsonl")
     assert artifacts["page_segments"].endswith("page-segments.jsonl")
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_server_cancel_probe_rejects_required_direct_peak_vram_without_sampling() {
+    let output = run_python_snippet(
+        r#"
+import subprocess, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp) / "server-cancel-probe"
+    result = subprocess.run(
+        [
+            "python3",
+            "scripts/llama_cpp_live_vram_server_cancel_probe.py",
+            "--model",
+            "/tmp/nonexistent-model.gguf",
+            "--llama-server",
+            "/tmp/nonexistent-llama-server",
+            "--work-dir",
+            str(work_dir),
+            "--require-direct-peak-vram-counter",
+            "--dry-run",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1
+    assert "--require-direct-peak-vram-counter requires --sample-direct-peak-vram" in result.stderr
 "#,
     );
 

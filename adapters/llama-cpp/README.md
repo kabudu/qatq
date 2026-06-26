@@ -1104,6 +1104,21 @@ python3 scripts/llama_cpp_live_vram_hardware_counters.py \
 This gate only passes when `nvidia-smi` reports `pid,used_memory` samples for
 the requested process. Detecting `nvidia-smi` on `PATH` is not enough.
 
+For live `llama-server` cancellation probes, prefer the integrated sampler so
+the counter spans warmup and measured cancellation/follow-up iterations:
+
+```sh
+python3 scripts/llama_cpp_live_vram_server_cancel_probe.py \
+  --llama-server /path/to/patched/llama-server \
+  --model /path/to/model.gguf \
+  --sample-direct-peak-vram \
+  --require-direct-peak-vram-counter \
+  --direct-peak-vram-sample-interval-ms 100
+```
+
+The probe stores `direct_peak_vram_counter` in `summary.json` and fails closed
+when the required counter cannot be sampled.
+
 The report is deliberately fail-closed if `--require-direct-peak-vram` is set.
 On the current Apple Metal host, the report at
 `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
