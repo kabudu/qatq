@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import shutil
 import subprocess
 import time
@@ -117,7 +118,15 @@ def main() -> int:
             str(export_dir),
             prompt.text,
         ]
-        run = subprocess.run(command, text=True, capture_output=True, timeout=args.timeout)
+        try:
+            run = run_command(command, cwd=None, timeout=args.timeout)
+        except subprocess.TimeoutExpired as error:
+            cleanup = getattr(error, "cleanup", {})
+            rows.append(
+                f"| {case_label} | timeout | - | - | - | - | - | - | "
+                f"`cleanup={md(str(cleanup.get('signal', 'unknown')))}; {md(trim(text_or_empty(error.stderr), 120))}` |"
+            )
+            continue
         if run.returncode != 0:
             rows.append(f"| {case_label} | failed | - | - | - | - | - | - | `{md(trim(run.stderr, 160))}` |")
             continue
@@ -131,7 +140,15 @@ def main() -> int:
             "--output",
             str(report_path),
         ]
-        bench = subprocess.run(bench_command, cwd=root, text=True, capture_output=True, timeout=args.timeout)
+        try:
+            bench = run_command(bench_command, cwd=root, timeout=args.timeout)
+        except subprocess.TimeoutExpired as error:
+            cleanup = getattr(error, "cleanup", {})
+            rows.append(
+                f"| {case_label} | bench timeout | - | - | - | - | - | - | "
+                f"`cleanup={md(str(cleanup.get('signal', 'unknown')))}; {md(trim(text_or_empty(error.stderr), 120))}` |"
+            )
+            continue
         if bench.returncode != 0:
             rows.append(f"| {case_label} | bench failed | - | - | - | - | - | - | `{md(trim(bench.stderr, 160))}` |")
             continue
@@ -197,7 +214,66 @@ def parse_prompts(values: list[str]) -> list[PromptSpec]:
 def ensure_kv_bench(path: Path) -> None:
     if path.exists():
         return
-    subprocess.run(["cargo", "build", "--release", "--bin", "qatq-kv-bench"], check=True)
+    completed = run_command(["cargo", "build", "--release", "--bin", "qatq-kv-bench"], cwd=Path.cwd(), timeout=240)
+    if completed.returncode != 0:
+        raise RuntimeError(f"failed to build qatq-kv-bench: {trim(completed.stderr, 2000)}")
+
+
+def run_command(command: list[str], *, cwd: Path | None, timeout: float) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired as error:
+        cleanup = terminate_process_group(proc)
+        timeout_error = subprocess.TimeoutExpired(
+            command,
+            timeout,
+            output=text_or_empty(error.stdout),
+            stderr=text_or_empty(error.stderr),
+        )
+        timeout_error.cleanup = cleanup  # type: ignore[attr-defined]
+        raise timeout_error from error
+
+
+def terminate_process_group(proc: subprocess.Popen[str]) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "returncode": None,
+    }
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        cleanup["error"] = str(error)
+    try:
+        cleanup["returncode"] = proc.wait(timeout=5.0)
+        return cleanup
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
+        except ProcessLookupError:
+            pass
+        except PermissionError as error:
+            cleanup["error"] = str(error)
+        try:
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            cleanup["error"] = "process group did not exit after SIGKILL"
+        return cleanup
 
 
 def pack_exports(export_dir: Path, packed_dir: Path, dtype: str) -> None:
@@ -289,6 +365,14 @@ def trim(text: str, length: int) -> str:
 
 def md(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
+
+
+def text_or_empty(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
 
 
 if __name__ == "__main__":
