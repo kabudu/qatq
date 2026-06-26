@@ -757,6 +757,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "1.1",
             "--max-projected-device-jitter-ratio",
             "1.1",
+            "--max-direct-peak-vram-jitter-ratio",
+            "1.2",
             "--dry-run",
         ],
         check=False,
@@ -776,6 +778,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["dry_run_runs"] == 2
     assert summary["aggregate_gate_failures"] == []
     assert summary["gates"]["max_rss_growth_jitter_ratio"] == 1.5
+    assert summary["gates"]["max_direct_peak_vram_jitter_ratio"] == 1.2
     for index in (1, 2):
         run_summary = work_dir / f"run-{index:03d}" / "summary.json"
         assert run_summary.exists(), run_summary
@@ -808,6 +811,7 @@ class Args:
     max_rss_growth_jitter_ratio = 1.1
     max_backend_kv_jitter_ratio = 1.05
     max_projected_device_jitter_ratio = 1.05
+    max_direct_peak_vram_jitter_ratio = 1.1
 
 runs = [
     module.BurnInRun(
@@ -828,6 +832,7 @@ runs = [
                     "rss_tail_growth_kib": 10,
                     "backend_accelerator_context_mib": 200,
                     "projected_device_memory_mib": 1000,
+                    "direct_peak_vram_mib": 800,
                 }
             ]
         },
@@ -850,6 +855,7 @@ runs = [
                     "rss_tail_growth_kib": 12,
                     "backend_accelerator_context_mib": 220,
                     "projected_device_memory_mib": 1001,
+                    "direct_peak_vram_mib": 960,
                 }
             ]
         },
@@ -858,9 +864,11 @@ runs = [
 aggregate = module.aggregate_case_metrics(runs)
 assert aggregate["case-a"]["rss_growth_kib"]["jitter_ratio"] == 1.5
 assert aggregate["case-a"]["rss_tail_growth_kib"]["jitter_ratio"] == 1.2
+assert aggregate["case-a"]["direct_peak_vram_mib"]["jitter_ratio"] == 1.2
 failures = "\n".join(module.evaluate_aggregate_gates(Args(), aggregate))
 assert "case-a: rss_growth_kib jitter ratio exceeded: 1.5 > 1.1" in failures
 assert "case-a: backend_accelerator_context_mib jitter ratio exceeded: 1.1 > 1.05" in failures
+assert "case-a: direct_peak_vram_mib jitter ratio exceeded: 1.2 > 1.1" in failures
 assert "projected_device_memory_mib" not in failures
 "#,
     );

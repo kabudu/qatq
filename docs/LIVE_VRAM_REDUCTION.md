@@ -831,6 +831,8 @@ so burn-in runs on suitable hosts can fail closed on missing direct counters.
 For native/QATQ comparison groups, `comparison_gates` can now require direct
 hardware counters with `require_direct_peak_vram_counters: 1` and cap QATQ's
 direct peak-VRAM ratio with `max_direct_peak_vram_ratio`.
+Repeated burn-ins can also reject unstable direct counter measurements with
+`--max-direct-peak-vram-jitter-ratio`.
 On this host, `nvidia-smi` is absent;
 `powermetrics` is present but requires superuser and documents per-process GPU
 time rather than per-process peak GPU memory; `vmmap` is present but reports

@@ -65,6 +65,7 @@ def main() -> int:
     parser.add_argument("--max-rss-growth-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-backend-kv-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
+    parser.add_argument("--max-direct-peak-vram-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--keep-work-dir", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -121,6 +122,10 @@ def validate_args(args: argparse.Namespace) -> None:
         args.max_projected_device_jitter_ratio >= 0.0,
         "--max-projected-device-jitter-ratio must be non-negative",
     )
+    require(
+        args.max_direct_peak_vram_jitter_ratio >= 0.0,
+        "--max-direct-peak-vram-jitter-ratio must be non-negative",
+    )
 
 
 def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
@@ -139,6 +144,7 @@ def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
         "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
         "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
+        "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
         "dry_run": args.dry_run,
         "run_work_dirs": [str(work_dir / f"run-{index:03d}") for index in range(1, args.runs + 1)],
     }
@@ -234,6 +240,7 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
             "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
+            "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
         },
         "boundary": (
             "Bounded burn-in repetition for the configured llama-server live-VRAM "
@@ -285,6 +292,7 @@ def aggregate_case_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
             add_metric(case_values, "rss_tail_range_kib", case.get("rss_tail_range_kib"))
             add_metric(case_values, "backend_accelerator_context_mib", case.get("backend_accelerator_context_mib"))
             add_metric(case_values, "projected_device_memory_mib", case.get("projected_device_memory_mib"))
+            add_metric(case_values, "direct_peak_vram_mib", case.get("direct_peak_vram_mib"))
     return {
         case_id: {
             metric: metric_stats(samples)
@@ -319,6 +327,7 @@ def evaluate_aggregate_gates(args: argparse.Namespace, aggregate: dict[str, Any]
         "rss_growth_kib": args.max_rss_growth_jitter_ratio,
         "backend_accelerator_context_mib": args.max_backend_kv_jitter_ratio,
         "projected_device_memory_mib": args.max_projected_device_jitter_ratio,
+        "direct_peak_vram_mib": args.max_direct_peak_vram_jitter_ratio,
     }
     for case_id, metrics in aggregate.items():
         if not isinstance(metrics, dict):

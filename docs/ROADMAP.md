@@ -427,6 +427,9 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       burn-in use on suitable hardware. Matrix `comparison_gates` can now
       require direct counters and cap QATQ/native direct peak-VRAM ratio with
       `require_direct_peak_vram_counters` and `max_direct_peak_vram_ratio`.
+      The burn-in wrapper also supports `--max-direct-peak-vram-jitter-ratio`
+      so repeated hardware-counter runs can fail on unstable direct peak-VRAM
+      measurements.
       The report at
       `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
       confirms that all six cases in the latest accepted burn-in repeat had

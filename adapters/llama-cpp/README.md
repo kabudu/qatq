@@ -1128,7 +1128,8 @@ When native and QATQ cases share a `comparison_group`, the matrix runner can
 also enforce `require_direct_peak_vram_counters: 1` and
 `max_direct_peak_vram_ratio` under `comparison_gates`, so a burn-in fails if
 direct hardware counters are missing or QATQ does not meet the configured
-native peak-VRAM ratio.
+native peak-VRAM ratio. The burn-in wrapper can then enforce repeated-run
+stability with `--max-direct-peak-vram-jitter-ratio`.
 
 The report is deliberately fail-closed if `--require-direct-peak-vram` is set.
 On the current Apple Metal host, the report at
