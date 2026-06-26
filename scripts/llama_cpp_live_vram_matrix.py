@@ -495,6 +495,45 @@ def main() -> int:
         (work_dir / "stability-failures.txt").write_text(failure_text + "\n", encoding="utf-8")
         print("\n## Stability Gate Failures\n", file=sys.stderr)
         print(failure_text, file=sys.stderr)
+    status = "fail" if failed or stability_failures else "pass"
+    write_json(
+        work_dir / "summary.json",
+        build_matrix_summary_json(
+            results,
+            work_dir,
+            status=status,
+            require_live_paging=args.require_live_paging,
+            require_native_page_streaming=args.require_native_page_streaming,
+            native_page_streaming_contract_probe=args.native_page_streaming_contract_probe,
+            gpu_page_staging=args.gpu_page_staging,
+            native_page_streaming_attention=args.native_page_streaming_attention
+            or args.native_page_streaming_attention_ggml
+            or args.native_page_streaming_attention_backend_op
+            or args.require_native_page_streaming,
+            native_page_streaming_attention_ggml=args.native_page_streaming_attention_ggml
+            or args.native_page_streaming_attention_backend_op
+            or args.require_native_page_streaming,
+            native_page_streaming_attention_backend_op=args.native_page_streaming_attention_backend_op
+            or args.require_native_page_streaming,
+            native_page_streaming_flatten_flash=args.native_page_streaming_flatten_flash,
+            attention_page_segments_live_offloaded_only=args.attention_page_segments_live_offloaded_only,
+            aggregate_codec_gate=args.aggregate_codec_gate,
+            require_stable_reclaim=args.require_stable_reclaim,
+            require_stable_qc_bytes=args.require_stable_qc_bytes,
+            max_elapsed_jitter_ratio=args.max_elapsed_jitter_ratio,
+            min_token_latency_samples=args.min_token_latency_samples,
+            max_mixed_token_p95_regression_ratio=args.max_mixed_token_p95_regression_ratio,
+            max_mixed_token_p99_regression_ratio=args.max_mixed_token_p99_regression_ratio,
+            deep_latency_baseline=args.deep_latency_baseline,
+            min_deep_token_latency_samples=args.min_deep_token_latency_samples,
+            max_deep_mixed_token_p95_regression_ratio=args.max_deep_mixed_token_p95_regression_ratio,
+            max_deep_mixed_token_p99_regression_ratio=args.max_deep_mixed_token_p99_regression_ratio,
+            host_memory_pressure_mib=args.host_memory_pressure_mib,
+            prune_bulk_artifacts=args.prune_bulk_artifacts,
+            stability_failures=stability_failures,
+            allow_failures=args.allow_failures,
+        ),
+    )
     if (failed or stability_failures) and not args.allow_failures:
         return 1
     if host_pressure is not None:
@@ -1356,6 +1395,133 @@ def build_matrix_summary(
     return out
 
 
+def build_matrix_summary_json(
+    results: list[CaseResult],
+    work_dir: Path,
+    *,
+    status: str,
+    require_live_paging: bool,
+    require_native_page_streaming: bool,
+    native_page_streaming_contract_probe: bool,
+    gpu_page_staging: bool,
+    native_page_streaming_attention: bool,
+    native_page_streaming_attention_ggml: bool,
+    native_page_streaming_attention_backend_op: bool,
+    native_page_streaming_flatten_flash: bool,
+    attention_page_segments_live_offloaded_only: bool,
+    aggregate_codec_gate: bool,
+    require_stable_reclaim: bool,
+    require_stable_qc_bytes: bool,
+    max_elapsed_jitter_ratio: float,
+    min_token_latency_samples: int,
+    max_mixed_token_p95_regression_ratio: float,
+    max_mixed_token_p99_regression_ratio: float,
+    deep_latency_baseline: bool,
+    min_deep_token_latency_samples: int,
+    max_deep_mixed_token_p95_regression_ratio: float,
+    max_deep_mixed_token_p99_regression_ratio: float,
+    host_memory_pressure_mib: int,
+    prune_bulk_artifacts: bool,
+    stability_failures: list[str],
+    allow_failures: bool,
+) -> dict[str, object]:
+    passed = sum(1 for result in results if result.status == "pass")
+    failed = len(results) - passed
+    return {
+        "format": "qatq-live-vram-matrix-summary-v1",
+        "status": status,
+        "work_dir": str(work_dir),
+        "total_cases": len(results),
+        "unique_case_ids": len({result.case_id for result in results}),
+        "passed": passed,
+        "failed": failed,
+        "allow_failures": allow_failures,
+        "stability_failures": stability_failures,
+        "gates": {
+            "require_live_paging": require_live_paging,
+            "require_native_page_streaming": require_native_page_streaming,
+            "native_page_streaming_contract_probe": native_page_streaming_contract_probe,
+            "gpu_page_staging": gpu_page_staging,
+            "native_page_streaming_attention": native_page_streaming_attention,
+            "native_page_streaming_attention_ggml": native_page_streaming_attention_ggml,
+            "native_page_streaming_attention_backend_op": native_page_streaming_attention_backend_op,
+            "native_page_streaming_flatten_flash": native_page_streaming_flatten_flash,
+            "attention_page_segments_live_offloaded_only": attention_page_segments_live_offloaded_only,
+            "aggregate_codec_gate": aggregate_codec_gate,
+            "require_stable_reclaim": require_stable_reclaim,
+            "require_stable_qc_bytes": require_stable_qc_bytes,
+            "max_elapsed_jitter_ratio": max_elapsed_jitter_ratio,
+            "min_token_latency_samples": min_token_latency_samples,
+            "max_mixed_token_p95_regression_ratio": max_mixed_token_p95_regression_ratio,
+            "max_mixed_token_p99_regression_ratio": max_mixed_token_p99_regression_ratio,
+            "deep_latency_baseline": deep_latency_baseline,
+            "min_deep_token_latency_samples": min_deep_token_latency_samples,
+            "max_deep_mixed_token_p95_regression_ratio": max_deep_mixed_token_p95_regression_ratio,
+            "max_deep_mixed_token_p99_regression_ratio": max_deep_mixed_token_p99_regression_ratio,
+            "host_memory_pressure_mib": host_memory_pressure_mib,
+            "prune_bulk_artifacts": prune_bulk_artifacts,
+        },
+        "cases": [case_result_json(result) for result in results],
+        "boundary": (
+            "Machine-readable summary for the configured live-VRAM matrix. "
+            "A passing status proves only the selected cases and gates in this "
+            "run, and does not by itself prove production-complete live VRAM "
+            "reduction."
+        ),
+    }
+
+
+def case_result_json(result: CaseResult) -> dict[str, object]:
+    return {
+        "id": result.case_id,
+        "iteration": result.iteration,
+        "model_id": result.model_id,
+        "status": result.status,
+        "work_dir": str(result.work_dir),
+        "summary": str(result.summary_path),
+        "selected_layers": result.selected_layers,
+        "total_pages": result.total_pages,
+        "offloaded_pages": result.offloaded_pages,
+        "compressed_pages": result.compressed_pages,
+        "resident_pages": result.resident_pages,
+        "pass_through_pages": result.pass_through_pages,
+        "verified_restores": result.verified_restores,
+        "raw_bytes": result.raw_bytes,
+        "qatq_bytes": result.qatq_bytes,
+        "zstd_bytes": result.zstd_bytes,
+        "lz4_bytes": result.lz4_bytes,
+        "reclaimable_gpu_bytes": result.reclaimable_gpu_bytes,
+        "event_trace_events": result.event_trace_events,
+        "event_trace_passed": result.event_trace_passed,
+        "attention_trace_events": result.attention_trace_events,
+        "attention_trace_layers": result.attention_trace_layers,
+        "mlx_layers_checked": result.mlx_layers_checked,
+        "mlx_heads_checked": result.mlx_heads_checked,
+        "mlx_qatq_store_ratio": result.mlx_qatq_store_ratio,
+        "mlx_streaming_time_ratio": result.mlx_streaming_time_ratio,
+        "latency_samples": result.latency_samples,
+        "full_p95_decode_us": result.full_p95_decode_us,
+        "mixed_p95_decode_us": result.mixed_p95_decode_us,
+        "full_p99_decode_us": result.full_p99_decode_us,
+        "mixed_p99_decode_us": result.mixed_p99_decode_us,
+        "mixed_p95_regression": result.mixed_p95_regression,
+        "mixed_p99_regression": result.mixed_p99_regression,
+        "deep_latency_samples": result.deep_latency_samples,
+        "deep_full_p95_decode_us": result.deep_full_p95_decode_us,
+        "deep_mixed_p95_decode_us": result.deep_mixed_p95_decode_us,
+        "deep_full_p99_decode_us": result.deep_full_p99_decode_us,
+        "deep_mixed_p99_decode_us": result.deep_mixed_p99_decode_us,
+        "deep_mixed_p95_regression": result.deep_mixed_p95_regression,
+        "deep_mixed_p99_regression": result.deep_mixed_p99_regression,
+        "elapsed_seconds": result.elapsed_seconds,
+        "failure": result.failure,
+        "timed_out": result.timed_out,
+        "timeout_seconds": result.timeout_seconds,
+        "cleanup_signal": result.cleanup_signal,
+        "cleanup_escalated": result.cleanup_escalated,
+    }
+
+
 def allocate_host_memory_pressure(mib_count: int) -> bytearray | None:
     if mib_count == 0:
         return None
@@ -1500,6 +1666,10 @@ def require_file(path: Path, label: str) -> Path:
 def load_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def load_optional_json(path: Path) -> dict:

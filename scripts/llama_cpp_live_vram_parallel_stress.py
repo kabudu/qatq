@@ -45,6 +45,8 @@ class StressResult:
     returncode: int
     stdout_path: Path
     stderr_path: Path
+    summary_path: Path
+    failure: str
     timed_out: bool = False
     timeout_seconds: int = 0
     cleanup_signal: str | None = None
@@ -160,6 +162,8 @@ def main() -> int:
                 returncode=0,
                 stdout_path=job.work_dir / "stdout.log",
                 stderr_path=job.work_dir / "stderr.log",
+                summary_path=job.work_dir / "matrix" / "summary.json",
+                failure="",
                 timed_out=False,
                 timeout_seconds=job_timeout,
             )
@@ -199,6 +203,8 @@ def main() -> int:
                         "cleanup_escalated": result.cleanup_escalated,
                         "stdout": str(result.stdout_path),
                         "stderr": str(result.stderr_path),
+                        "summary": str(result.summary_path),
+                        "failure": result.failure,
                     }
                     for result in results
                 ],
@@ -298,6 +304,7 @@ def build_matrix_command(args: argparse.Namespace, matrix_runner: Path, config_p
 def run_job(job: StressJob, *, timeout: int) -> StressResult:
     stdout_path = job.work_dir / "stdout.log"
     stderr_path = job.work_dir / "stderr.log"
+    summary_path = job.work_dir / "matrix" / "summary.json"
     start = time.monotonic()
     proc = subprocess.Popen(
         job.command,
@@ -328,6 +335,8 @@ def run_job(job: StressJob, *, timeout: int) -> StressResult:
             returncode=-1,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
+            summary_path=summary_path,
+            failure=f"parallel stress job exceeded timeout of {timeout}s; cleanup={cleanup_signal}",
             timed_out=True,
             timeout_seconds=timeout,
             cleanup_signal=cleanup_signal,
@@ -336,19 +345,61 @@ def run_job(job: StressJob, *, timeout: int) -> StressResult:
     elapsed = time.monotonic() - start
     stdout_path.write_text(stdout, encoding="utf-8")
     stderr_path.write_text(stderr, encoding="utf-8")
+    matrix_summary, summary_failure = load_matrix_summary(summary_path)
+    status = "pass" if proc.returncode == 0 else "fail"
+    failure = ""
+    if summary_failure:
+        status = "fail"
+        failure = summary_failure
+    elif matrix_summary.get("status") != "pass":
+        status = "fail"
+        failures = matrix_summary.get("stability_failures")
+        failure = (
+            "; ".join(str(item) for item in failures)
+            if isinstance(failures, list) and failures
+            else f"matrix summary status was {matrix_summary.get('status')!r}"
+        )
+    elif proc.returncode != 0:
+        failure = f"matrix runner exited with return code {proc.returncode}"
     return StressResult(
         index=job.index,
         case_id=job.case_id,
         iteration=job.iteration,
-        status="pass" if proc.returncode == 0 else "fail",
+        status=status,
         work_dir=job.work_dir,
         elapsed_seconds=elapsed,
         returncode=proc.returncode if proc.returncode is not None else -1,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
+        summary_path=summary_path,
+        failure=failure,
         timed_out=False,
         timeout_seconds=timeout,
     )
+
+
+def load_matrix_summary(path: Path) -> tuple[dict, str]:
+    if not path.is_file():
+        return {}, f"matrix summary missing: {path}"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {}, f"matrix summary is invalid JSON: {path}: {exc}"
+    if not isinstance(value, dict):
+        return {}, f"matrix summary is not a JSON object: {path}"
+    expected_format = "qatq-live-vram-matrix-summary-v1"
+    if value.get("format") != expected_format:
+        return value, (
+            "matrix summary has unexpected format: "
+            f"{value.get('format')!r}; expected {expected_format}"
+        )
+    status = value.get("status")
+    if status not in {"pass", "fail"}:
+        return value, f"matrix summary has invalid status: {status!r}"
+    cases = value.get("cases")
+    if not isinstance(cases, list):
+        return value, "matrix summary missing cases array"
+    return value, ""
 
 
 def terminate_process_group(proc: subprocess.Popen[str]) -> tuple[str, bool]:
@@ -383,12 +434,15 @@ def build_summary(results: list[StressResult], jobs: int, dry_run: bool) -> str:
         "| ---: | --- | ---: | --- | --- | --- | ---: | ---: | --- |",
     ]
     for result in results:
+        failure = result.failure[-200:].replace("|", "\\|") if result.failure else ""
         lines.append(
             f"| {result.index} | `{result.case_id}` | {result.iteration} | {result.status} | "
             f"{str(result.timed_out).lower()} | {result.cleanup_signal or ''} | "
             f"{result.elapsed_seconds:.2f} | "
             f"{result.returncode} | `{result.work_dir}` |"
         )
+        if failure:
+            lines.append(f"|  |  |  | failure |  |  |  |  | {failure} |")
     lines.append("")
     return "\n".join(lines)
 

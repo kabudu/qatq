@@ -479,6 +479,77 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_matrix_builds_machine_readable_summary() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("matrix", "scripts/llama_cpp_live_vram_matrix.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+result = module.empty_result(
+    case_id="case-a",
+    iteration=1,
+    model_id="model-a",
+    status="pass",
+    work_dir=Path("/tmp/case-a"),
+    elapsed_seconds=1.5,
+    failure="",
+)
+summary = module.build_matrix_summary_json(
+    [result],
+    Path("/tmp/matrix"),
+    status="pass",
+    require_live_paging=True,
+    require_native_page_streaming=True,
+    native_page_streaming_contract_probe=False,
+    gpu_page_staging=True,
+    native_page_streaming_attention=True,
+    native_page_streaming_attention_ggml=True,
+    native_page_streaming_attention_backend_op=True,
+    native_page_streaming_flatten_flash=True,
+    attention_page_segments_live_offloaded_only=True,
+    aggregate_codec_gate=True,
+    require_stable_reclaim=True,
+    require_stable_qc_bytes=True,
+    max_elapsed_jitter_ratio=0.2,
+    min_token_latency_samples=16,
+    max_mixed_token_p95_regression_ratio=0.3,
+    max_mixed_token_p99_regression_ratio=0.4,
+    deep_latency_baseline=True,
+    min_deep_token_latency_samples=32,
+    max_deep_mixed_token_p95_regression_ratio=0.5,
+    max_deep_mixed_token_p99_regression_ratio=0.6,
+    host_memory_pressure_mib=512,
+    prune_bulk_artifacts=True,
+    stability_failures=[],
+    allow_failures=False,
+)
+assert summary["format"] == "qatq-live-vram-matrix-summary-v1"
+assert summary["status"] == "pass"
+assert summary["total_cases"] == 1
+assert summary["passed"] == 1
+assert summary["failed"] == 0
+assert summary["gates"]["require_live_paging"] is True
+assert summary["gates"]["host_memory_pressure_mib"] == 512
+assert summary["cases"][0]["id"] == "case-a"
+assert summary["cases"][0]["status"] == "pass"
+assert "production-complete" in summary["boundary"]
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_adapter_audit_accepts_retained_page_table_backend_path() {
     let output = run_python_snippet(
         r#"
@@ -975,6 +1046,105 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert marker.read_text() == "sigterm"
     stderr = Path(result["stderr"]).read_text()
     assert "parallel stress job exceeded timeout of 1s; cleanup=SIGTERM" in stderr
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_parallel_stress_rejects_missing_or_malformed_matrix_summary() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    config = tmp / "config.json"
+    llama_simple = tmp / "llama-simple"
+    config.write_text(json.dumps({
+        "cases": [
+            {
+                "id": "summary-integrity",
+                "model": "/tmp/model-a.gguf",
+                "model_id": "summary-integrity",
+                "sweep_kv_gpu_layers": [1],
+                "short_prompt": "a",
+                "deep_prompt_seed": "aa"
+            }
+        ]
+    }), encoding="utf-8")
+    llama_simple.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+
+    missing_runner = tmp / "missing_matrix_summary.py"
+    missing_runner.write_text(
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "Path(args.work_dir).mkdir(parents=True, exist_ok=True)\n"
+        "print('matrix exited without summary')\n",
+        encoding="utf-8",
+    )
+    missing_work = tmp / "missing"
+    missing = subprocess.run([
+        sys.executable,
+        "scripts/llama_cpp_live_vram_parallel_stress.py",
+        "--config", str(config),
+        "--matrix-runner", str(missing_runner),
+        "--llama-simple", str(llama_simple),
+        "--work-dir", str(missing_work),
+        "--jobs", "1",
+        "--iterations", "1",
+        "--timeout", "10",
+        "--job-timeout", "10"
+    ], text=True, capture_output=True)
+    assert missing.returncode == 1, missing.stdout
+    missing_summary = json.loads((missing_work / "summary.json").read_text())
+    assert missing_summary["status"] == "fail"
+    assert missing_summary["results"][0]["returncode"] == 0
+    assert "matrix summary missing" in missing_summary["results"][0]["failure"]
+
+    malformed_runner = tmp / "malformed_matrix_summary.py"
+    malformed_runner.write_text(
+        "import argparse, json\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "work = Path(args.work_dir)\n"
+        "work.mkdir(parents=True, exist_ok=True)\n"
+        "(work / 'summary.json').write_text(json.dumps({\n"
+        "    'format': 'wrong-format',\n"
+        "    'status': 'pass',\n"
+        "    'cases': []\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+    malformed_work = tmp / "malformed"
+    malformed = subprocess.run([
+        sys.executable,
+        "scripts/llama_cpp_live_vram_parallel_stress.py",
+        "--config", str(config),
+        "--matrix-runner", str(malformed_runner),
+        "--llama-simple", str(llama_simple),
+        "--work-dir", str(malformed_work),
+        "--jobs", "1",
+        "--iterations", "1",
+        "--timeout", "10",
+        "--job-timeout", "10"
+    ], text=True, capture_output=True)
+    assert malformed.returncode == 1, malformed.stdout
+    malformed_summary = json.loads((malformed_work / "summary.json").read_text())
+    assert malformed_summary["status"] == "fail"
+    assert "unexpected format" in malformed_summary["results"][0]["failure"]
 "#,
     );
 
