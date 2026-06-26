@@ -1307,6 +1307,65 @@ assert "projected_device_memory_mib" not in failures
 }
 
 #[test]
+fn live_vram_server_burnin_jitter_gates_require_repeat_samples() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_burnin", "scripts/llama_cpp_live_vram_server_burnin.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+class Args:
+    max_rss_growth_jitter_ratio = 1.1
+    max_backend_kv_jitter_ratio = 1.05
+    max_projected_device_jitter_ratio = 1.05
+    max_direct_peak_vram_jitter_ratio = 1.1
+
+runs = [
+    module.BurnInRun(
+        index=1,
+        status="pass",
+        returncode=0,
+        elapsed_seconds=1.0,
+        work_dir=Path("/tmp/run1"),
+        summary_path=Path("/tmp/run1/summary.json"),
+        stdout_path=Path("/tmp/run1/stdout"),
+        stderr_path=Path("/tmp/run1/stderr"),
+        failure="",
+        summary={
+            "cases": [
+                {
+                    "id": "case-a",
+                    "rss_growth_kib": 100,
+                    "backend_accelerator_context_mib": 200,
+                    "projected_device_memory_mib": 1000,
+                    "direct_peak_vram_mib": 800,
+                }
+            ]
+        },
+    ),
+]
+aggregate = module.aggregate_case_metrics(runs)
+failures = "\n".join(module.evaluate_aggregate_gates(Args(), aggregate))
+assert "case-a: rss_growth_kib jitter gate requires at least two non-zero samples" in failures
+assert "case-a: backend_accelerator_context_mib jitter gate requires at least two non-zero samples" in failures
+assert "case-a: projected_device_memory_mib jitter gate requires at least two non-zero samples" in failures
+assert "case-a: direct_peak_vram_mib jitter gate requires at least two non-zero samples" in failures
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_backend_memory_diagnostics_gate_fails_closed() {
     let output = run_python_snippet(
         r###"

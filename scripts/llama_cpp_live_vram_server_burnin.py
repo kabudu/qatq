@@ -449,7 +449,11 @@ def evaluate_aggregate_gates(args: argparse.Namespace, aggregate: dict[str, Any]
             if gate <= 0.0:
                 continue
             stats = metrics.get(metric)
-            if not isinstance(stats, dict) or not isinstance(stats.get("jitter_ratio"), (int, float)):
+            if (
+                not isinstance(stats, dict)
+                or stats.get("count", 0) < 2
+                or not isinstance(stats.get("jitter_ratio"), (int, float))
+            ):
                 failures.append(f"{case_id}: {metric} jitter gate requires at least two non-zero samples")
                 continue
             if stats["jitter_ratio"] > gate:
