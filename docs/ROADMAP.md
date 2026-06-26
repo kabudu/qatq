@@ -356,7 +356,14 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       server-cancellation matrix, fails on the first failed run, and can enforce
       aggregate jitter gates for RSS growth, backend K/V memory, and projected
       device memory across repeated runs. Enabled jitter gates fail closed unless
-      each gated metric has at least two non-zero samples. A first two-run
+      each gated metric has at least two non-zero samples. The burn-in summary
+      now also exports an `impact_summary` and markdown table that aggregate
+      repeated-run projected device memory stability, RSS/RSS-tail growth,
+      follow-up p95/p99 latency, p50 predicted-token throughput, and
+      live-offloaded segment totals per case. `--summarise-existing` can
+      rebuild the JSON/markdown summary from completed `run-*` artifacts
+      without relaunching llama.cpp, so detached soak evidence can be refreshed
+      after runner-side summary improvements. A first two-run
       layer-policy attempt
       at
       `/private/tmp/qatq-live-vram-server-layer-policy-burnin2-device-jitter-20260625`

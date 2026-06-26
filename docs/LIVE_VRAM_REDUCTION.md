@@ -805,17 +805,25 @@ runs whose steady-state RSS tail growth is unstable. The wrapper also supports
 absolute repeated-run leak ceilings with `--max-rss-growth-kib` and
 `--max-rss-tail-growth-kib`; those are the preferred sustained-soak gates when
 healthy samples can legitimately be zero or much lower than other repeats. This
-makes the future
-one-hour and overnight burn-in claims machine-checkable instead of relying on
-operator convention. `--preflight-only` validates the selected config before a
-long run starts, writes `preflight.json`, `preflight.md`, and
+makes the future one-hour and overnight burn-in claims machine-checkable
+instead of relying on operator convention. The burn-in summary now also writes
+an `impact_summary` object and matching `summary.md` table with repeated-run
+projected device memory stability, maximum RSS/RSS-tail growth, follow-up
+p95/p99 latency, p50 predicted-token throughput, and total live-offloaded
+segments per case. That keeps the latency/resource-impact judgement tied to the
+same evidence bundle as the soak gates. `--preflight-only` validates the
+selected config before a long run starts, writes `preflight.json`,
+`preflight.md`, and
 `server-burnin-effective-config.json`, and fails closed when the patched
 `llama-server`, selected model files, or required production gate flags are
 missing. `--model-root` makes self-hosted runners portable by resolving each
 selected case model to `<model-root>/<original model filename>` in the effective
-config. The manual `live-vram-burnin` workflow runs that preflight step before
-the sustained burn-in and uploads the preflight artifacts with the final
-summary. The first
+config. `--summarise-existing` can rebuild `summary.json` and `summary.md`
+from completed `run-*` artifacts without launching llama.cpp, which lets an
+operator refresh long-running or detached soak evidence after runner-side
+summary improvements. The manual `live-vram-burnin` workflow runs that
+preflight step before the sustained burn-in and uploads the preflight artifacts
+with the final summary. The first
 layer-policy burn-in
 at `/private/tmp/qatq-live-vram-server-layer-policy-burnin2-device-jitter-20260625`
 failed correctly on the existing QATQ/native RSS-growth ratio gate

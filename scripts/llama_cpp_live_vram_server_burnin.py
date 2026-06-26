@@ -127,12 +127,28 @@ def main() -> int:
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-direct-peak-vram-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--preflight-only", action="store_true")
+    parser.add_argument(
+        "--summarise-existing",
+        action="store_true",
+        help=(
+            "Rebuild summary.json and summary.md from an existing burn-in work "
+            "directory without launching llama.cpp. This is useful when a long "
+            "detached soak was started by an older script version."
+        ),
+    )
     parser.add_argument("--keep-work-dir", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     validate_args(args)
     work_dir = Path(args.work_dir)
+    if args.summarise_existing:
+        summary = summarise_existing_work_dir(args, work_dir)
+        write_json(work_dir / "summary.json", summary)
+        write_markdown(work_dir / "summary.md", summary)
+        print((work_dir / "summary.md").read_text(encoding="utf-8"))
+        return 0 if summary["status"] in {"pass", "dry-run"} else 1
+
     if work_dir.exists() and not args.keep_work_dir:
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -432,6 +448,7 @@ def build_preflight_only_summary(
         },
         "sustained_runtime_failures": [],
         "aggregate_case_metrics": {},
+        "impact_summary": {},
         "aggregate_gate_failures": [],
         "backend_memory_diagnostics": {},
         "backend_memory_diagnostic_failures": [],
@@ -622,6 +639,7 @@ def build_summary(
     run_summaries = [summarise_run(run) for run in runs]
     failures = [run for run in runs if run.status not in {"pass", "dry-run"}]
     aggregate = aggregate_case_metrics(runs)
+    impact_summary = aggregate_impact_summary(runs)
     aggregate_failures = [] if args.dry_run else evaluate_aggregate_gates(args, aggregate)
     sustained_runtime = aggregate_sustained_runtime(args, runs)
     sustained_runtime_failures = [] if args.dry_run else evaluate_sustained_runtime(args, sustained_runtime)
@@ -663,6 +681,7 @@ def build_summary(
         "sustained_runtime": sustained_runtime,
         "sustained_runtime_failures": sustained_runtime_failures,
         "aggregate_case_metrics": aggregate,
+        "impact_summary": impact_summary,
         "aggregate_gate_failures": aggregate_failures,
         "backend_memory_diagnostics": backend_memory_diagnostics,
         "backend_memory_diagnostic_failures": backend_memory_failures,
@@ -687,6 +706,136 @@ def build_summary(
             "jitter gates."
         ),
     }
+
+
+def summarise_existing_work_dir(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
+    require(work_dir.is_dir(), f"--summarise-existing work dir is not a directory: {work_dir}")
+    existing_summary = read_json_object_if_exists(work_dir / "summary.json")
+    runs = load_existing_burnin_runs(work_dir, existing_summary)
+    if existing_summary:
+        summary = dict(existing_summary)
+        summary["work_dir"] = str(work_dir)
+        summary["runs"] = [summarise_run(run) for run in runs] or summary.get("runs", [])
+        summary["runs_completed"] = len(runs) or summary.get("runs_completed", 0)
+        summary["passed"] = sum(1 for run in runs if run.status == "pass") or summary.get("passed", 0)
+        summary["dry_run_runs"] = sum(1 for run in runs if run.status == "dry-run") or summary.get("dry_run_runs", 0)
+        summary["failed"] = sum(1 for run in runs if run.status not in {"pass", "dry-run"}) or summary.get("failed", 0)
+        summary["aggregate_case_metrics"] = aggregate_case_metrics(runs)
+        summary["impact_summary"] = aggregate_impact_summary(runs)
+        summary.setdefault("refreshed_from_existing_work_dir", True)
+        summary["refreshed_from_existing_work_dir"] = True
+        summary.setdefault(
+            "boundary",
+            (
+                "Refreshed existing burn-in summary. It reuses completed run "
+                "artifacts and does not launch llama.cpp."
+            ),
+        )
+        preflight = summary.get("preflight")
+        if not isinstance(preflight, dict):
+            preflight = read_json_object_if_exists(work_dir / "preflight.json")
+            if preflight:
+                summary["preflight"] = preflight
+        return summary
+
+    summary = build_summary(args, work_dir, runs)
+    summary["refreshed_from_existing_work_dir"] = True
+    preflight = read_json_object_if_exists(work_dir / "preflight.json")
+    if preflight:
+        summary["preflight"] = preflight
+    return summary
+
+
+def load_existing_burnin_runs(
+    work_dir: Path,
+    existing_summary: dict[str, Any],
+) -> list[BurnInRun]:
+    run_entries = existing_summary.get("runs") if isinstance(existing_summary.get("runs"), list) else []
+    indexed_entries: dict[int, dict[str, Any]] = {}
+    for entry in run_entries:
+        if not isinstance(entry, dict):
+            continue
+        index = entry.get("index")
+        if isinstance(index, int):
+            indexed_entries[index] = entry
+
+    run_dirs = sorted(path for path in work_dir.glob("run-*") if path.is_dir())
+    runs: list[BurnInRun] = []
+    for run_dir in run_dirs:
+        index = parse_run_index(run_dir)
+        if index is None:
+            continue
+        entry = indexed_entries.get(index, {})
+        summary_path = Path(str(entry.get("summary") or run_dir / "summary.json"))
+        stdout_path = Path(str(entry.get("stdout") or run_dir / "matrix-stdout.log"))
+        stderr_path = Path(str(entry.get("stderr") or run_dir / "matrix-stderr.log"))
+        matrix_summary, summary_failure = load_matrix_summary(summary_path)
+        if summary_failure and not matrix_summary:
+            continue
+        status = str(entry.get("status") or matrix_summary.get("status") or "fail")
+        if status not in {"pass", "dry-run", "fail"}:
+            status = "fail"
+        returncode = entry.get("returncode")
+        if not isinstance(returncode, int):
+            returncode = 0 if status in {"pass", "dry-run"} and not summary_failure else 1
+        elapsed = entry.get("elapsed_seconds")
+        if not isinstance(elapsed, (int, float)):
+            elapsed = sum_case_elapsed_seconds(matrix_summary)
+        failure = str(entry.get("failure") or summary_failure or summarise_matrix_failure(matrix_summary))
+        runs.append(
+            BurnInRun(
+                index=index,
+                status=status,
+                returncode=returncode,
+                elapsed_seconds=float(elapsed),
+                work_dir=run_dir,
+                summary_path=summary_path,
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+                failure=failure,
+                summary=matrix_summary,
+                timed_out=bool(entry.get("timed_out", False)),
+                timeout_seconds=int(entry.get("timeout_seconds") or 0),
+                cleanup_signal=entry.get("cleanup_signal") if isinstance(entry.get("cleanup_signal"), str) else None,
+                cleanup_escalated=bool(entry.get("cleanup_escalated", False)),
+            )
+        )
+    return runs
+
+
+def read_json_object_if_exists(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid JSON file {path}: {exc}") from exc
+    require(isinstance(value, dict), f"JSON file is not an object: {path}")
+    return value
+
+
+def parse_run_index(path: Path) -> int | None:
+    prefix = "run-"
+    if not path.name.startswith(prefix):
+        return None
+    try:
+        return int(path.name[len(prefix) :])
+    except ValueError:
+        return None
+
+
+def sum_case_elapsed_seconds(summary: dict[str, Any]) -> float:
+    cases = summary.get("cases")
+    if not isinstance(cases, list):
+        return 0.0
+    total = 0.0
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        elapsed = case.get("elapsed_seconds")
+        if isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool):
+            total += float(elapsed)
+    return total
 
 
 def derived_run_timeout(args: argparse.Namespace) -> int:
@@ -759,6 +908,25 @@ def aggregate_case_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
             add_metric(case_values, "backend_accelerator_context_mib", case.get("backend_accelerator_context_mib"))
             add_metric(case_values, "projected_device_memory_mib", case.get("projected_device_memory_mib"))
             add_metric(case_values, "direct_peak_vram_mib", case.get("direct_peak_vram_mib"))
+            add_metric(case_values, "iteration_latency_p95_seconds", nested_number(case, ["iteration_latency", "p95"]))
+            add_metric(case_values, "followup_latency_p95_seconds", nested_number(case, ["followup_latency", "p95"]))
+            add_metric(case_values, "followup_latency_p99_seconds", nested_number(case, ["followup_latency", "p99"]))
+            add_metric(
+                case_values,
+                "predicted_tokens_per_second_p05",
+                nested_number(case, ["followup_completion_metrics", "predicted_per_second", "p05"]),
+            )
+            add_metric(
+                case_values,
+                "predicted_tokens_per_second_p50",
+                nested_number(case, ["followup_completion_metrics", "predicted_per_second", "p50"]),
+            )
+            add_metric(
+                case_values,
+                "predicted_tokens_per_second_p95",
+                nested_number(case, ["followup_completion_metrics", "predicted_per_second", "p95"]),
+            )
+            add_metric(case_values, "live_offloaded_segments", case.get("live_offloaded_segments"))
     return {
         case_id: {
             metric: metric_stats(samples)
@@ -766,6 +934,64 @@ def aggregate_case_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
         }
         for case_id, case_values in sorted(values.items())
     }
+
+
+def aggregate_impact_summary(runs: list[BurnInRun]) -> dict[str, Any]:
+    values: dict[str, dict[str, list[float]]] = {}
+    for run in runs:
+        if run.status != "pass":
+            continue
+        cases = run.summary.get("cases")
+        if not isinstance(cases, list):
+            continue
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            case_id = case.get("id")
+            if not isinstance(case_id, str):
+                continue
+            case_values = values.setdefault(case_id, {})
+            add_metric(case_values, "projected_device_memory_mib", case.get("projected_device_memory_mib"))
+            add_metric(case_values, "rss_growth_kib", case.get("rss_growth_kib"))
+            add_metric(case_values, "rss_tail_growth_kib", case.get("rss_tail_growth_kib"))
+            add_metric(case_values, "followup_latency_p95_seconds", nested_number(case, ["followup_latency", "p95"]))
+            add_metric(case_values, "followup_latency_p99_seconds", nested_number(case, ["followup_latency", "p99"]))
+            add_metric(
+                case_values,
+                "predicted_tokens_per_second_p50",
+                nested_number(case, ["followup_completion_metrics", "predicted_per_second", "p50"]),
+            )
+            add_metric(case_values, "live_offloaded_segments", case.get("live_offloaded_segments"))
+
+    summary: dict[str, Any] = {}
+    for case_id, case_values in sorted(values.items()):
+        projected = case_values.get("projected_device_memory_mib", [])
+        rss_growth = case_values.get("rss_growth_kib", [])
+        rss_tail = case_values.get("rss_tail_growth_kib", [])
+        followup_p95 = case_values.get("followup_latency_p95_seconds", [])
+        followup_p99 = case_values.get("followup_latency_p99_seconds", [])
+        tok_p50 = case_values.get("predicted_tokens_per_second_p50", [])
+        offloaded = case_values.get("live_offloaded_segments", [])
+        summary[case_id] = {
+            "completed_repeats": max(
+                len(projected),
+                len(rss_growth),
+                len(rss_tail),
+                len(followup_p95),
+                len(tok_p50),
+            ),
+            "projected_device_memory_mib_min": min(projected) if projected else None,
+            "projected_device_memory_mib_max": max(projected) if projected else None,
+            "projected_device_memory_stable": bool(projected) and min(projected) == max(projected),
+            "rss_growth_kib_max": max(rss_growth) if rss_growth else None,
+            "rss_tail_growth_kib_max": max(rss_tail) if rss_tail else None,
+            "followup_latency_p95_seconds_max": max(followup_p95) if followup_p95 else None,
+            "followup_latency_p99_seconds_max": max(followup_p99) if followup_p99 else None,
+            "predicted_tokens_per_second_p50_min": min(tok_p50) if tok_p50 else None,
+            "predicted_tokens_per_second_p50_average": average(tok_p50),
+            "live_offloaded_segments_total": sum(offloaded) if offloaded else None,
+        }
+    return summary
 
 
 def aggregate_soak_memory_metrics(runs: list[BurnInRun]) -> dict[str, Any]:
@@ -907,6 +1133,23 @@ def evaluate_backend_memory_diagnostics(diagnostics: dict[str, Any]) -> list[str
 def add_metric(case_values: dict[str, list[float]], key: str, value: Any) -> None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         case_values.setdefault(key, []).append(float(value))
+
+
+def nested_number(value: Any, path: list[str]) -> float | None:
+    current = value
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    if isinstance(current, (int, float)) and not isinstance(current, bool):
+        return float(current)
+    return None
+
+
+def average(samples: list[float]) -> float | None:
+    if not samples:
+        return None
+    return sum(samples) / len(samples)
 
 
 def metric_stats(samples: list[float]) -> dict[str, Any]:
@@ -1166,6 +1409,46 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
         lines.extend(["", "## Aggregate Gate Failures", ""])
         for failure in aggregate_failures:
             lines.append(f"- {failure}")
+    impact = summary.get("impact_summary", {})
+    if isinstance(impact, dict) and impact:
+        lines.extend(
+            [
+                "",
+                "## Impact Summary",
+                "",
+                "| case | repeats | projected device MiB | stable device memory | max RSS growth KiB | max RSS tail KiB | max follow-up p95 seconds | max follow-up p99 seconds | min p50 tok/s | avg p50 tok/s | live offloaded segments |",
+                "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for case_id, metrics in impact.items():
+            if not isinstance(metrics, dict):
+                continue
+            projected_min = metrics.get("projected_device_memory_mib_min")
+            projected_max = metrics.get("projected_device_memory_mib_max")
+            projected_range = (
+                ""
+                if projected_min is None or projected_max is None
+                else f"{format_metric(projected_min)}..{format_metric(projected_max)}"
+            )
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        str(case_id),
+                        format_metric(metrics.get("completed_repeats")),
+                        projected_range,
+                        f"`{str(bool(metrics.get('projected_device_memory_stable'))).lower()}`",
+                        format_metric(metrics.get("rss_growth_kib_max")),
+                        format_metric(metrics.get("rss_tail_growth_kib_max")),
+                        format_metric(metrics.get("followup_latency_p95_seconds_max")),
+                        format_metric(metrics.get("followup_latency_p99_seconds_max")),
+                        format_metric(metrics.get("predicted_tokens_per_second_p50_min")),
+                        format_metric(metrics.get("predicted_tokens_per_second_p50_average")),
+                        format_metric(metrics.get("live_offloaded_segments_total")),
+                    ]
+                )
+                + " |"
+            )
     backend_memory = summary.get("backend_memory_diagnostics", {})
     if isinstance(backend_memory, dict):
         lines.extend(
