@@ -1128,8 +1128,9 @@ keys only for runs on hosts with suitable direct counters; the local Apple Metal
 policy examples leave them disabled because `nvidia-smi` is absent.
 The server probe also bounds evidence ingestion with `--max-trace-bytes` and
 `--max-trace-line-bytes`; matrix configs can set `max_trace_bytes` and
-`max_trace_line_bytes` so oversized or pathological JSONL traces fail closed
-instead of being read into memory during long soaks.
+`max_trace_line_bytes` so oversized, malformed, or pathological JSONL traces
+fail closed instead of being read into memory or silently ignored during long
+soaks.
 When native and QATQ cases share a `comparison_group`, the matrix runner can
 also enforce `require_direct_peak_vram_counters: 1` and
 `max_direct_peak_vram_ratio` under `comparison_gates`, so a burn-in fails if

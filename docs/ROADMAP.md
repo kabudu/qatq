@@ -433,8 +433,9 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       so repeated hardware-counter runs can fail on unstable direct peak-VRAM
       measurements. The server evidence probe also bounds JSONL trace
       ingestion with `--max-trace-bytes` and `--max-trace-line-bytes`; trace
-      parsing is streaming, and oversized files or individual trace lines now
-      fail closed instead of growing validator memory during long soaks.
+      parsing is streaming, and oversized files, malformed JSONL rows, or
+      individual oversized trace lines now fail closed instead of growing
+      validator memory or silently dropping corrupt evidence during long soaks.
       The report at
       `/private/tmp/qatq-live-vram-server-family-policy-soak-burnin3-p256q4-p05-tailgate-20260626/hardware-counters.json`
       confirms that all six cases in the latest accepted burn-in repeat had

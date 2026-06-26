@@ -1723,6 +1723,9 @@ def trace_parse_failures(name: str, stats: dict[str, object]) -> list[str]:
     oversized_lines = stats.get("_oversized_lines")
     if isinstance(oversized_lines, int) and oversized_lines > 0:
         failures.append(f"{name} contains {oversized_lines} oversized JSONL lines")
+    invalid_json_lines = stats.get("_invalid_json_lines")
+    if isinstance(invalid_json_lines, int) and invalid_json_lines > 0:
+        failures.append(f"{name} contains {invalid_json_lines} invalid JSONL lines")
     if stats.get("_trace_limit_exceeded") is True:
         failures.append(f"{name} was not parsed because it exceeds --max-trace-bytes")
     return failures

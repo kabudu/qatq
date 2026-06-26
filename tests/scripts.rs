@@ -3381,6 +3381,63 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_cancel_probe_rejects_corrupt_trace_evidence() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, json, sys, tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    work_dir = Path(raw_tmp)
+    page_segments = work_dir / "page-segments.jsonl"
+    page_segments.write_text(
+        json.dumps({
+            "event": "attention-page-segments",
+            "attention_consumed": True,
+            "consumer": "backend_scheduled_flattened_flash_attention",
+            "segments": [{"stream_index": 0, "live_offloaded": True, "shape": [128, 2, 64, 1]}],
+        }) + "\n{this is not json}\n",
+        encoding="utf-8",
+    )
+    artifacts = {
+        "event_trace": work_dir / "event-trace.jsonl",
+        "page_segments": page_segments,
+        "persistent_page_source": work_dir / "persistent-page-source.jsonl",
+        "persistent_pool": work_dir / "persistent-pool.jsonl",
+    }
+    result = module.evaluate_result(
+        artifacts,
+        stream_cancelled=True,
+        stream_bytes=256,
+        health_after_cancel_ok=True,
+        followup_ok=True,
+        followup_bytes=128,
+        process_returncode=0,
+        startup_failures=[],
+        require_flattened_flash_consumer=True,
+        require_live_offloaded_stream_count=1,
+    )
+    failures = "\n".join(result["failures"])
+    assert "page-segment trace contains 1 invalid JSONL lines" in failures
+    assert result["page_segment_counts"]["_invalid_json_lines"] == 1
+    assert result["page_segment_counts"]["_parsed_lines"] == 1
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_cancel_probe_summarises_persistent_page_source_retention() {
     let output = run_python_snippet(
         r#"
