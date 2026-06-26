@@ -47,6 +47,12 @@ on:
       max_rss_tail_growth_jitter_ratio:
         description: "Repeated-run steady-state RSS tail-growth jitter ceiling, or 0 to disable"
         default: "1.5"
+      max_rss_growth_kib:
+        description: "Absolute repeated-run RSS growth ceiling in KiB, or 0 to disable"
+        default: "0"
+      max_rss_tail_growth_kib:
+        description: "Absolute repeated-run steady-state RSS tail-growth ceiling in KiB, or 0 to disable"
+        default: "0"
       max_backend_kv_jitter_ratio:
         description: "Repeated-run backend K/V memory jitter ceiling"
         default: "1.001"
@@ -97,6 +103,8 @@ jobs:
           CUSTOM_MIN_PASSED_SECONDS: ${{ inputs.min_passed_elapsed_seconds }}
           MAX_RSS_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_growth_jitter_ratio }}
           MAX_RSS_TAIL_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_tail_growth_jitter_ratio }}
+          MAX_RSS_GROWTH_KIB: ${{ inputs.max_rss_growth_kib }}
+          MAX_RSS_TAIL_GROWTH_KIB: ${{ inputs.max_rss_tail_growth_kib }}
           MAX_BACKEND_KV_JITTER_RATIO: ${{ inputs.max_backend_kv_jitter_ratio }}
           MAX_PROJECTED_DEVICE_JITTER_RATIO: ${{ inputs.max_projected_device_jitter_ratio }}
           MAX_DIRECT_PEAK_VRAM_JITTER_RATIO: ${{ inputs.max_direct_peak_vram_jitter_ratio }}
@@ -139,6 +147,8 @@ jobs:
             --require-soak-memory-metrics \
             --max-rss-growth-jitter-ratio "${MAX_RSS_GROWTH_JITTER_RATIO}" \
             --max-rss-tail-growth-jitter-ratio "${MAX_RSS_TAIL_GROWTH_JITTER_RATIO}" \
+            --max-rss-growth-kib "${MAX_RSS_GROWTH_KIB}" \
+            --max-rss-tail-growth-kib "${MAX_RSS_TAIL_GROWTH_KIB}" \
             --max-backend-kv-jitter-ratio "${MAX_BACKEND_KV_JITTER_RATIO}" \
             --max-projected-device-jitter-ratio "${MAX_PROJECTED_DEVICE_JITTER_RATIO}" \
             --max-direct-peak-vram-jitter-ratio "${MAX_DIRECT_PEAK_VRAM_JITTER_RATIO}" \
@@ -158,6 +168,8 @@ jobs:
           CUSTOM_MIN_PASSED_SECONDS: ${{ inputs.min_passed_elapsed_seconds }}
           MAX_RSS_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_growth_jitter_ratio }}
           MAX_RSS_TAIL_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_tail_growth_jitter_ratio }}
+          MAX_RSS_GROWTH_KIB: ${{ inputs.max_rss_growth_kib }}
+          MAX_RSS_TAIL_GROWTH_KIB: ${{ inputs.max_rss_tail_growth_kib }}
           MAX_BACKEND_KV_JITTER_RATIO: ${{ inputs.max_backend_kv_jitter_ratio }}
           MAX_PROJECTED_DEVICE_JITTER_RATIO: ${{ inputs.max_projected_device_jitter_ratio }}
           MAX_DIRECT_PEAK_VRAM_JITTER_RATIO: ${{ inputs.max_direct_peak_vram_jitter_ratio }}
@@ -200,6 +212,8 @@ jobs:
             --require-soak-memory-metrics \
             --max-rss-growth-jitter-ratio "${MAX_RSS_GROWTH_JITTER_RATIO}" \
             --max-rss-tail-growth-jitter-ratio "${MAX_RSS_TAIL_GROWTH_JITTER_RATIO}" \
+            --max-rss-growth-kib "${MAX_RSS_GROWTH_KIB}" \
+            --max-rss-tail-growth-kib "${MAX_RSS_TAIL_GROWTH_KIB}" \
             --max-backend-kv-jitter-ratio "${MAX_BACKEND_KV_JITTER_RATIO}" \
             --max-projected-device-jitter-ratio "${MAX_PROJECTED_DEVICE_JITTER_RATIO}" \
             --max-direct-peak-vram-jitter-ratio "${MAX_DIRECT_PEAK_VRAM_JITTER_RATIO}"

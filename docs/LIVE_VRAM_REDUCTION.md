@@ -801,7 +801,11 @@ per case. The wrapper also has explicit sustained-soak gates:
 requested wall-clock duration, `--require-soak-memory-metrics` fails unless
 every completed case exports `rss_growth_kib`, `rss_tail_growth_kib`, and
 `rss_tail_range_kib`, and `--max-rss-tail-growth-jitter-ratio` fails repeated
-runs whose steady-state RSS tail growth is unstable. This makes the future
+runs whose steady-state RSS tail growth is unstable. The wrapper also supports
+absolute repeated-run leak ceilings with `--max-rss-growth-kib` and
+`--max-rss-tail-growth-kib`; those are the preferred sustained-soak gates when
+healthy samples can legitimately be zero or much lower than other repeats. This
+makes the future
 one-hour and overnight burn-in claims machine-checkable instead of relying on
 operator convention. `--preflight-only` validates the selected config before a
 long run starts, writes `preflight.json`, `preflight.md`, and
@@ -2870,7 +2874,9 @@ Exit criteria:
       `sustained_runtime`, rejects runs below `--min-passed-elapsed-seconds`,
       requires exported RSS growth/tail metrics with
       `--require-soak-memory-metrics`, and can cap repeated
-      `rss_tail_growth_kib` jitter with `--max-rss-tail-growth-jitter-ratio`.
+      `rss_tail_growth_kib` jitter with `--max-rss-tail-growth-jitter-ratio`
+      or absolute repeated-run leak ceilings with `--max-rss-growth-kib` and
+      `--max-rss-tail-growth-kib`.
       The focused regression
       `cargo test --locked --test scripts live_vram_server_burnin -- --nocapture`
       proves the gates fail closed. This enables, but does not replace, the

@@ -1280,6 +1280,10 @@ with tempfile.TemporaryDirectory() as raw_tmp:
             "1.5",
             "--max-rss-tail-growth-jitter-ratio",
             "1.4",
+            "--max-rss-growth-kib",
+            "262144",
+            "--max-rss-tail-growth-kib",
+            "4096",
             "--max-backend-kv-jitter-ratio",
             "1.1",
             "--max-projected-device-jitter-ratio",
@@ -1321,6 +1325,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["soak_memory_metric_failures"] == []
     assert summary["gates"]["max_rss_growth_jitter_ratio"] == 1.5
     assert summary["gates"]["max_rss_tail_growth_jitter_ratio"] == 1.4
+    assert summary["gates"]["max_rss_growth_kib"] == 262144.0
+    assert summary["gates"]["max_rss_tail_growth_kib"] == 4096.0
     assert summary["gates"]["max_direct_peak_vram_jitter_ratio"] == 1.2
     for index in (1, 2):
         run_summary = work_dir / f"run-{index:03d}" / "summary.json"
@@ -1855,6 +1861,8 @@ spec.loader.exec_module(module)
 
 class Args:
     max_rss_growth_jitter_ratio = 1.1
+    max_rss_growth_kib = 140
+    max_rss_tail_growth_kib = 11
     max_backend_kv_jitter_ratio = 1.05
     max_projected_device_jitter_ratio = 1.05
     max_direct_peak_vram_jitter_ratio = 1.1
@@ -1913,6 +1921,8 @@ assert aggregate["case-a"]["rss_tail_growth_kib"]["jitter_ratio"] == 1.2
 assert aggregate["case-a"]["direct_peak_vram_mib"]["jitter_ratio"] == 1.2
 failures = "\n".join(module.evaluate_aggregate_gates(Args(), aggregate))
 assert "case-a: rss_growth_kib jitter ratio exceeded: 1.5 > 1.1" in failures
+assert "case-a: rss_growth_kib exceeded absolute gate: 150.0 > 140" in failures
+assert "case-a: rss_tail_growth_kib exceeded absolute gate: 12.0 > 11" in failures
 assert "case-a: backend_accelerator_context_mib jitter ratio exceeded: 1.1 > 1.05" in failures
 assert "case-a: direct_peak_vram_mib jitter ratio exceeded: 1.2 > 1.1" in failures
 assert "projected_device_memory_mib" not in failures
@@ -2204,6 +2214,8 @@ assert "--min-passed-elapsed-seconds" in workflow
 assert "--require-backend-memory-diagnostics" in workflow
 assert "--require-soak-memory-metrics" in workflow
 assert "--max-rss-tail-growth-jitter-ratio" in workflow
+assert "--max-rss-growth-kib" in workflow
+assert "--max-rss-tail-growth-kib" in workflow
 assert "--max-direct-peak-vram-jitter-ratio" in workflow
 assert "server-burnin-effective-config.json" in workflow
 assert "preflight.json" in workflow

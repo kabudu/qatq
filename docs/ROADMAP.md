@@ -452,7 +452,11 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       `--max-rss-tail-growth-jitter-ratio`, records sustained-runtime and soak
       memory diagnostics in JSON/Markdown summaries, and fails closed when
       passing runs do not meet the requested duration or completed cases do not
-      export RSS growth/tail metrics. This makes the one-hour and overnight
+      export RSS growth/tail metrics. It also supports absolute repeated-run
+      leak ceilings with `--max-rss-growth-kib` and
+      `--max-rss-tail-growth-kib`, which are better sustained-soak gates when
+      healthy RSS/tail samples can be zero or much lower than other repeats.
+      This makes the one-hour and overnight
       claims auditable, but the actual long-duration runs remain open below.
 - [x] Add a manual self-hosted live-VRAM burn-in workflow. The workflow at
       `.github/workflows/live-vram-burnin.yml` targets runners labelled

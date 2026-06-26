@@ -1073,6 +1073,8 @@ python3 scripts/llama_cpp_live_vram_server_burnin.py \
   --min-passed-elapsed-seconds 3600 \
   --require-backend-memory-diagnostics \
   --require-soak-memory-metrics \
+  --max-rss-growth-kib 262144 \
+  --max-rss-tail-growth-kib 4096 \
   --max-backend-kv-jitter-ratio 1.001 \
   --max-projected-device-jitter-ratio 1.001 \
   --max-rss-tail-growth-jitter-ratio 1.5
@@ -1093,7 +1095,10 @@ require backend diagnostics per case. Use `--min-passed-elapsed-seconds 3600`
 for the one-hour gate and `28800` or higher for overnight soak evidence.
 `--require-soak-memory-metrics` fails unless every completed case exports RSS
 growth, RSS tail growth, and RSS tail range metrics, and
-`--max-rss-tail-growth-jitter-ratio` rejects unstable repeated tail growth. The
+`--max-rss-growth-kib` plus `--max-rss-tail-growth-kib` enforce absolute
+repeated-run leak ceilings. `--max-rss-tail-growth-jitter-ratio` is still
+available for non-zero samples, but absolute ceilings are usually better for
+mixed zero/non-zero steady-state tail growth where lower RSS is healthy. The
 manual `.github/workflows/live-vram-burnin.yml` workflow runs this same wrapper
 on self-hosted runners labelled `live-vram`; set `job_timeout_minutes` high
 enough for the selected one-hour, overnight, or custom profile. The workflow

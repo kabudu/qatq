@@ -111,6 +111,18 @@ def main() -> int:
     )
     parser.add_argument("--max-rss-growth-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-rss-tail-growth-jitter-ratio", type=float, default=0.0)
+    parser.add_argument(
+        "--max-rss-growth-kib",
+        type=float,
+        default=0.0,
+        help="Fail if any completed matrix case exceeds this RSS growth ceiling.",
+    )
+    parser.add_argument(
+        "--max-rss-tail-growth-kib",
+        type=float,
+        default=0.0,
+        help="Fail if any completed matrix case exceeds this steady-state RSS tail-growth ceiling.",
+    )
     parser.add_argument("--max-backend-kv-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-direct-peak-vram-jitter-ratio", type=float, default=0.0)
@@ -192,6 +204,8 @@ def validate_args(args: argparse.Namespace) -> None:
         args.max_rss_tail_growth_jitter_ratio >= 0.0,
         "--max-rss-tail-growth-jitter-ratio must be non-negative",
     )
+    require(args.max_rss_growth_kib >= 0.0, "--max-rss-growth-kib must be non-negative")
+    require(args.max_rss_tail_growth_kib >= 0.0, "--max-rss-tail-growth-kib must be non-negative")
     require(args.max_backend_kv_jitter_ratio >= 0.0, "--max-backend-kv-jitter-ratio must be non-negative")
     require(
         args.max_projected_device_jitter_ratio >= 0.0,
@@ -266,6 +280,8 @@ def build_plan(
         "require_soak_memory_metrics": args.require_soak_memory_metrics,
         "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
         "max_rss_tail_growth_jitter_ratio": args.max_rss_tail_growth_jitter_ratio,
+        "max_rss_growth_kib": args.max_rss_growth_kib,
+        "max_rss_tail_growth_kib": args.max_rss_tail_growth_kib,
         "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
         "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
@@ -407,6 +423,8 @@ def build_preflight_only_summary(
             "require_soak_memory_metrics": args.require_soak_memory_metrics,
             "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
             "max_rss_tail_growth_jitter_ratio": args.max_rss_tail_growth_jitter_ratio,
+            "max_rss_growth_kib": args.max_rss_growth_kib,
+            "max_rss_tail_growth_kib": args.max_rss_tail_growth_kib,
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
@@ -573,6 +591,8 @@ def build_summary(args: argparse.Namespace, work_dir: Path, runs: list[BurnInRun
             "require_soak_memory_metrics": getattr(args, "require_soak_memory_metrics", False),
             "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
             "max_rss_tail_growth_jitter_ratio": getattr(args, "max_rss_tail_growth_jitter_ratio", 0.0),
+            "max_rss_growth_kib": getattr(args, "max_rss_growth_kib", 0.0),
+            "max_rss_tail_growth_kib": getattr(args, "max_rss_tail_growth_kib", 0.0),
             "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
             "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
             "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
@@ -848,6 +868,20 @@ def evaluate_aggregate_gates(args: argparse.Namespace, aggregate: dict[str, Any]
                     f"{case_id}: {metric} jitter ratio exceeded: "
                     f"{stats['jitter_ratio']} > {gate}"
                 )
+        absolute_gate_map = {
+            "rss_growth_kib": getattr(args, "max_rss_growth_kib", 0.0),
+            "rss_tail_growth_kib": getattr(args, "max_rss_tail_growth_kib", 0.0),
+        }
+        for metric, gate in absolute_gate_map.items():
+            if gate <= 0.0:
+                continue
+            stats = metrics.get(metric)
+            maximum = stats.get("max") if isinstance(stats, dict) else None
+            if not isinstance(maximum, (int, float)):
+                failures.append(f"{case_id}: {metric} absolute gate requires at least one sample")
+                continue
+            if maximum > gate:
+                failures.append(f"{case_id}: {metric} exceeded absolute gate: {maximum} > {gate}")
     return failures
 
 
