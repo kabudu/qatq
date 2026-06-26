@@ -803,7 +803,15 @@ every completed case exports `rss_growth_kib`, `rss_tail_growth_kib`, and
 `rss_tail_range_kib`, and `--max-rss-tail-growth-jitter-ratio` fails repeated
 runs whose steady-state RSS tail growth is unstable. This makes the future
 one-hour and overnight burn-in claims machine-checkable instead of relying on
-operator convention. The first
+operator convention. `--preflight-only` validates the selected config before a
+long run starts, writes `preflight.json`, `preflight.md`, and
+`server-burnin-effective-config.json`, and fails closed when the patched
+`llama-server`, selected model files, or required production gate flags are
+missing. `--model-root` makes self-hosted runners portable by resolving each
+selected case model to `<model-root>/<original model filename>` in the effective
+config. The manual `live-vram-burnin` workflow runs that preflight step before
+the sustained burn-in and uploads the preflight artifacts with the final
+summary. The first
 layer-policy burn-in
 at `/private/tmp/qatq-live-vram-server-layer-policy-burnin2-device-jitter-20260625`
 failed correctly on the existing QATQ/native RSS-growth ratio gate
@@ -2870,11 +2878,14 @@ Exit criteria:
 - [x] Manual self-hosted sustained burn-in workflow. The
       `.github/workflows/live-vram-burnin.yml` workflow runs the burn-in wrapper
       on a self-hosted runner labelled `live-vram`, supports `one-hour`,
-      `overnight`, and `custom` modes, uploads the plan/summary artifacts, and
-      always forwards the backend-memory, soak-memory, elapsed-duration, and
-      repeated-jitter gates. `job_timeout_minutes` must be set high enough for
-      the chosen profile. It is intentionally not a GitHub-hosted workflow; the
-      patched runtime, model files, accelerator telemetry, and long-running
+      `overnight`, and `custom` modes, uploads the plan, preflight,
+      effective-config, and summary artifacts, and always forwards the
+      backend-memory, soak-memory, elapsed-duration, and repeated-jitter gates.
+      It runs `--preflight-only` before the expensive burn-in so missing
+      patched binaries, model files, model-root mappings, or required
+      production gates fail early. `job_timeout_minutes` must be set high enough
+      for the chosen profile. It is intentionally not a GitHub-hosted workflow;
+      the patched runtime, model files, accelerator telemetry, and long-running
       process control must come from the dedicated runner.
 - [ ] Sustained generation for at least 1 hour under mixed prompt lengths.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.

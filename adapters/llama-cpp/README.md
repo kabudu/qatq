@@ -1064,6 +1064,7 @@ For bounded repetition burn-in, wrap any accepted server matrix with:
 python3 scripts/llama_cpp_live_vram_server_burnin.py \
   --config adapters/llama-cpp/live-vram-server-family-policy-notrace.local.example.json \
   --llama-server /path/to/patched/llama-server \
+  --model-root /path/to/models \
   --work-dir /tmp/qatq-live-vram-server-family-policy-burnin \
   --runs 2 \
   --max-cases 2 \
@@ -1095,7 +1096,13 @@ growth, RSS tail growth, and RSS tail range metrics, and
 `--max-rss-tail-growth-jitter-ratio` rejects unstable repeated tail growth. The
 manual `.github/workflows/live-vram-burnin.yml` workflow runs this same wrapper
 on self-hosted runners labelled `live-vram`; set `job_timeout_minutes` high
-enough for the selected one-hour, overnight, or custom profile. GitHub-hosted
+enough for the selected one-hour, overnight, or custom profile. The workflow
+first runs the wrapper with `--preflight-only`, writes `preflight.json`,
+`preflight.md`, and `server-burnin-effective-config.json`, and fails before the
+long burn-in if the patched `llama-server`, selected model files, or required
+production gates are missing. Use `--model-root` when the checked-in matrix
+contains machine-specific model paths; the wrapper resolves each selected case
+to `<model-root>/<original model filename>` in the effective config. GitHub-hosted
 runners are not a substitute because they do not provide the patched runtime,
 model files, or direct accelerator telemetry. The server probe's
 steady-state tail gate now fails on positive RSS tail growth rather than raw

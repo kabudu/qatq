@@ -232,5 +232,8 @@ over all configured layer/head coverage, reclaimed runtime-attested GPU K/V
 residency, and beat raw/zstd/lz4 on the same page boundaries. Fresh
 installed-runtime reruns cover breadth profiles, sustained Coder profiles,
 bf16/f32 dtype profiles, page-size variation, and sealed metadata evidence. The
+manual self-hosted live-VRAM burn-in workflow now performs a strict preflight
+before long runs, including patched-runtime checks, model-root-resolved config
+artifacts, selected-model presence, and required sustained-soak gates. The
 implementation and validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).

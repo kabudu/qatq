@@ -17,6 +17,9 @@ on:
       llama_server:
         description: "Patched llama-server binary on the self-hosted runner"
         default: /opt/qatq/llama.cpp/build/bin/llama-server
+      model_root:
+        description: "Optional directory containing model files by filename"
+        default: ""
       work_dir:
         description: "Burn-in artifact directory on the self-hosted runner"
         default: /var/tmp/qatq-live-vram-server-burnin
@@ -79,11 +82,12 @@ jobs:
         run: cargo metadata --locked --format-version 1
       - name: Verify patched llama-server
         run: test -x "${{ inputs.llama_server }}"
-      - name: Run sustained live VRAM burn-in
+      - name: Preflight sustained live VRAM burn-in
         env:
           MODE: ${{ inputs.mode }}
           CONFIG: ${{ inputs.config }}
           LLAMA_SERVER: ${{ inputs.llama_server }}
+          MODEL_ROOT: ${{ inputs.model_root }}
           WORK_DIR: ${{ inputs.work_dir }}
           RUNS: ${{ inputs.runs }}
           MAX_CASES: ${{ inputs.max_cases }}
@@ -115,9 +119,76 @@ jobs:
               ;;
           esac
 
+          MODEL_ROOT_ARGS=()
+          if [ -n "${MODEL_ROOT}" ]; then
+            MODEL_ROOT_ARGS=(--model-root "${MODEL_ROOT}")
+          fi
+
           python3 scripts/llama_cpp_live_vram_server_burnin.py \
             --config "${CONFIG}" \
             --llama-server "${LLAMA_SERVER}" \
+            "${MODEL_ROOT_ARGS[@]}" \
+            --work-dir "${WORK_DIR}" \
+            --runs "${RUNS}" \
+            --max-cases "${MAX_CASES}" \
+            --timeout "${TIMEOUT_SECONDS}" \
+            --run-timeout "${RUN_TIMEOUT_SECONDS}" \
+            --max-total-seconds "${MAX_TOTAL_SECONDS}" \
+            --min-passed-elapsed-seconds "${MIN_PASSED_SECONDS}" \
+            --require-backend-memory-diagnostics \
+            --require-soak-memory-metrics \
+            --max-rss-growth-jitter-ratio "${MAX_RSS_GROWTH_JITTER_RATIO}" \
+            --max-rss-tail-growth-jitter-ratio "${MAX_RSS_TAIL_GROWTH_JITTER_RATIO}" \
+            --max-backend-kv-jitter-ratio "${MAX_BACKEND_KV_JITTER_RATIO}" \
+            --max-projected-device-jitter-ratio "${MAX_PROJECTED_DEVICE_JITTER_RATIO}" \
+            --max-direct-peak-vram-jitter-ratio "${MAX_DIRECT_PEAK_VRAM_JITTER_RATIO}" \
+            --preflight-only
+      - name: Run sustained live VRAM burn-in
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIG: ${{ inputs.config }}
+          LLAMA_SERVER: ${{ inputs.llama_server }}
+          MODEL_ROOT: ${{ inputs.model_root }}
+          WORK_DIR: ${{ inputs.work_dir }}
+          RUNS: ${{ inputs.runs }}
+          MAX_CASES: ${{ inputs.max_cases }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+          RUN_TIMEOUT_SECONDS: ${{ inputs.run_timeout_seconds }}
+          MAX_TOTAL_SECONDS: ${{ inputs.max_total_seconds }}
+          CUSTOM_MIN_PASSED_SECONDS: ${{ inputs.min_passed_elapsed_seconds }}
+          MAX_RSS_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_growth_jitter_ratio }}
+          MAX_RSS_TAIL_GROWTH_JITTER_RATIO: ${{ inputs.max_rss_tail_growth_jitter_ratio }}
+          MAX_BACKEND_KV_JITTER_RATIO: ${{ inputs.max_backend_kv_jitter_ratio }}
+          MAX_PROJECTED_DEVICE_JITTER_RATIO: ${{ inputs.max_projected_device_jitter_ratio }}
+          MAX_DIRECT_PEAK_VRAM_JITTER_RATIO: ${{ inputs.max_direct_peak_vram_jitter_ratio }}
+        run: |
+          set -euo pipefail
+
+          case "${MODE}" in
+            one-hour)
+              MIN_PASSED_SECONDS=3600
+              ;;
+            overnight)
+              MIN_PASSED_SECONDS=28800
+              ;;
+            custom)
+              MIN_PASSED_SECONDS="${CUSTOM_MIN_PASSED_SECONDS}"
+              ;;
+            *)
+              echo "unknown burn-in mode: ${MODE}" >&2
+              exit 64
+              ;;
+          esac
+
+          MODEL_ROOT_ARGS=()
+          if [ -n "${MODEL_ROOT}" ]; then
+            MODEL_ROOT_ARGS=(--model-root "${MODEL_ROOT}")
+          fi
+
+          python3 scripts/llama_cpp_live_vram_server_burnin.py \
+            --config "${CONFIG}" \
+            --llama-server "${LLAMA_SERVER}" \
+            "${MODEL_ROOT_ARGS[@]}" \
             --work-dir "${WORK_DIR}" \
             --runs "${RUNS}" \
             --max-cases "${MAX_CASES}" \
@@ -139,6 +210,9 @@ jobs:
           name: live-vram-burnin-summary
           path: |
             ${{ inputs.work_dir }}/server-burnin-plan.json
+            ${{ inputs.work_dir }}/server-burnin-effective-config.json
+            ${{ inputs.work_dir }}/preflight.json
+            ${{ inputs.work_dir }}/preflight.md
             ${{ inputs.work_dir }}/summary.json
             ${{ inputs.work_dir }}/summary.md
           if-no-files-found: warn

@@ -39,6 +39,13 @@ class BurnInRun:
     cleanup_escalated: bool = False
 
 
+@dataclass(frozen=True)
+class BurnInPreparedConfig:
+    original_path: Path
+    effective_path: Path
+    config: dict[str, Any]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Matrix config JSON")
@@ -53,6 +60,14 @@ def main() -> int:
     parser.add_argument(
         "--llama-server",
         default="/private/tmp/qatq-llama-live-work/build/bin/llama-server",
+    )
+    parser.add_argument(
+        "--model-root",
+        default="",
+        help=(
+            "Optional directory used to resolve every case model to "
+            "<model-root>/<original model filename> before running."
+        ),
     )
     parser.add_argument("--work-dir", default="/private/tmp/qatq-live-vram-server-burnin")
     parser.add_argument("--runs", type=int, default=2)
@@ -99,6 +114,7 @@ def main() -> int:
     parser.add_argument("--max-backend-kv-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-projected-device-jitter-ratio", type=float, default=0.0)
     parser.add_argument("--max-direct-peak-vram-jitter-ratio", type=float, default=0.0)
+    parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--keep-work-dir", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -109,8 +125,23 @@ def main() -> int:
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    plan = build_plan(args, work_dir)
+    prepared_config = prepare_config(args, work_dir)
+    args.config = str(prepared_config.effective_path)
+
+    plan = build_plan(args, work_dir, prepared_config)
     write_json(work_dir / "server-burnin-plan.json", plan)
+    preflight = build_preflight_report(args, work_dir, prepared_config)
+    write_json(work_dir / "preflight.json", preflight)
+    write_preflight_markdown(work_dir / "preflight.md", preflight)
+    if preflight["status"] != "pass":
+        print((work_dir / "preflight.md").read_text(encoding="utf-8"))
+        return 1
+    if args.preflight_only:
+        summary = build_preflight_only_summary(args, work_dir, prepared_config, preflight)
+        write_json(work_dir / "summary.json", summary)
+        write_markdown(work_dir / "summary.md", summary)
+        print((work_dir / "summary.md").read_text(encoding="utf-8"))
+        return 0
 
     runs: list[BurnInRun] = []
     started = time.monotonic()
@@ -140,6 +171,9 @@ def main() -> int:
             break
 
     summary = build_summary(args, work_dir, runs)
+    summary["preflight"] = preflight
+    summary["config"] = str(prepared_config.effective_path)
+    summary["original_config"] = str(prepared_config.original_path)
     write_json(work_dir / "summary.json", summary)
     write_markdown(work_dir / "summary.md", summary)
     print((work_dir / "summary.md").read_text(encoding="utf-8"))
@@ -167,12 +201,57 @@ def validate_args(args: argparse.Namespace) -> None:
         args.max_direct_peak_vram_jitter_ratio >= 0.0,
         "--max-direct-peak-vram-jitter-ratio must be non-negative",
     )
+    if args.model_root:
+        require(Path(args.model_root).is_dir(), f"--model-root is not a directory: {args.model_root}")
 
 
-def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
+def prepare_config(args: argparse.Namespace, work_dir: Path) -> BurnInPreparedConfig:
+    original_path = Path(args.config)
+    config = load_burnin_config(original_path)
+    if args.max_cases:
+        config = {**config, "cases": config["cases"][: args.max_cases]}
+    if args.model_root:
+        model_root = Path(args.model_root)
+        resolved_cases = []
+        for case in config["cases"]:
+            model_path = Path(str(case["model"]))
+            resolved = model_root / model_path.name
+            resolved_cases.append({**case, "model": str(resolved)})
+        config = {**config, "cases": resolved_cases}
+    effective_path = work_dir / "server-burnin-effective-config.json"
+    write_json(effective_path, config)
+    return BurnInPreparedConfig(original_path=original_path, effective_path=effective_path, config=config)
+
+
+def load_burnin_config(path: Path) -> dict[str, Any]:
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"config file missing: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid JSON config {path}: {exc}") from exc
+    require(isinstance(config, dict), "config must be a JSON object")
+    defaults = config.get("defaults", {})
+    require(isinstance(defaults, dict), "config defaults must be an object")
+    cases = config.get("cases")
+    require(isinstance(cases, list) and cases, "config must contain a non-empty cases array")
+    for index, case in enumerate(cases, start=1):
+        require(isinstance(case, dict), f"case {index} must be an object")
+        require(isinstance(case.get("id"), str) and case["id"], f"case {index} missing id")
+        require(isinstance(case.get("model"), str) and case["model"], f"case {case['id']} missing model")
+    return config
+
+
+def build_plan(
+    args: argparse.Namespace,
+    work_dir: Path,
+    prepared_config: BurnInPreparedConfig,
+) -> dict[str, Any]:
     return {
         "format": "qatq-live-vram-server-burnin-plan-v1",
-        "config": str(Path(args.config)),
+        "config": str(prepared_config.effective_path),
+        "original_config": str(prepared_config.original_path),
+        "model_root": args.model_root,
         "matrix_runner": args.matrix_runner,
         "probe_runner": args.probe_runner,
         "llama_server": args.llama_server,
@@ -191,7 +270,153 @@ def build_plan(args: argparse.Namespace, work_dir: Path) -> dict[str, Any]:
         "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
         "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
         "dry_run": args.dry_run,
+        "preflight_only": args.preflight_only,
         "run_work_dirs": [str(work_dir / f"run-{index:03d}") for index in range(1, args.runs + 1)],
+    }
+
+
+def build_preflight_report(
+    args: argparse.Namespace,
+    work_dir: Path,
+    prepared_config: BurnInPreparedConfig,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    def add_check(name: str, passed: bool, detail: str, *, required: bool = True) -> None:
+        checks.append(
+            {
+                "name": name,
+                "status": "pass" if passed else "skip" if not required else "fail",
+                "required": required,
+                "detail": detail,
+            }
+        )
+
+    add_check(
+        "config",
+        prepared_config.original_path.is_file() and prepared_config.effective_path.is_file(),
+        f"original={prepared_config.original_path}; effective={prepared_config.effective_path}",
+    )
+    add_check(
+        "matrix-runner",
+        Path(args.matrix_runner).is_file(),
+        args.matrix_runner,
+    )
+    add_check(
+        "probe-runner",
+        Path(args.probe_runner).is_file(),
+        args.probe_runner,
+    )
+    executable_required = not args.dry_run
+    add_check(
+        "llama-server-executable",
+        os.access(args.llama_server, os.X_OK),
+        args.llama_server,
+        required=executable_required,
+    )
+    model_required = not args.dry_run
+    cases = prepared_config.config.get("cases", [])
+    missing_models: list[str] = []
+    if isinstance(cases, list):
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            model = str(case.get("model", ""))
+            if not Path(model).is_file():
+                missing_models.append(f"{case.get('id', '<unknown>')}={model}")
+    add_check(
+        "model-files",
+        not missing_models,
+        "all selected models exist" if not missing_models else "; ".join(missing_models[:16]),
+        required=model_required,
+    )
+    add_check(
+        "duration-gate",
+        args.min_passed_elapsed_seconds > 0.0,
+        f"min_passed_elapsed_seconds={format_metric(args.min_passed_elapsed_seconds)}",
+        required=not args.dry_run and args.preflight_only,
+    )
+    add_check(
+        "soak-memory-gate",
+        args.require_soak_memory_metrics,
+        f"require_soak_memory_metrics={str(args.require_soak_memory_metrics).lower()}",
+        required=not args.dry_run and args.preflight_only,
+    )
+    add_check(
+        "backend-memory-gate",
+        args.require_backend_memory_diagnostics,
+        f"require_backend_memory_diagnostics={str(args.require_backend_memory_diagnostics).lower()}",
+        required=not args.dry_run and args.preflight_only,
+    )
+
+    failures = [check for check in checks if check["required"] and check["status"] == "fail"]
+    return {
+        "format": "qatq-live-vram-server-burnin-preflight-v1",
+        "status": "fail" if failures else "pass",
+        "dry_run": args.dry_run,
+        "preflight_only": args.preflight_only,
+        "work_dir": str(work_dir),
+        "config": str(prepared_config.effective_path),
+        "original_config": str(prepared_config.original_path),
+        "model_root": args.model_root,
+        "selected_cases": len(cases) if isinstance(cases, list) else 0,
+        "checks": checks,
+        "failures": failures,
+        "boundary": (
+            "Preflight validates local runner inputs and required burn-in gates. "
+            "It does not prove runtime correctness or memory stability."
+        ),
+    }
+
+
+def build_preflight_only_summary(
+    args: argparse.Namespace,
+    work_dir: Path,
+    prepared_config: BurnInPreparedConfig,
+    preflight: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "format": "qatq-live-vram-server-burnin-summary-v1",
+        "status": "pass",
+        "dry_run": args.dry_run,
+        "preflight_only": True,
+        "work_dir": str(work_dir),
+        "runs_requested": args.runs,
+        "runs_completed": 0,
+        "passed": 0,
+        "dry_run_runs": 0,
+        "failed": 0,
+        "runs": [],
+        "preflight": preflight,
+        "sustained_runtime": {
+            "passed_elapsed_seconds": 0.0,
+            "required_passed_elapsed_seconds": args.min_passed_elapsed_seconds,
+            "passing_runs": 0,
+            "completed_runs": 0,
+        },
+        "sustained_runtime_failures": [],
+        "aggregate_case_metrics": {},
+        "aggregate_gate_failures": [],
+        "backend_memory_diagnostics": {},
+        "backend_memory_diagnostic_failures": [],
+        "soak_memory_metrics": {},
+        "soak_memory_metric_failures": [],
+        "gates": {
+            "min_passed_elapsed_seconds": args.min_passed_elapsed_seconds,
+            "require_backend_memory_diagnostics": args.require_backend_memory_diagnostics,
+            "require_soak_memory_metrics": args.require_soak_memory_metrics,
+            "max_rss_growth_jitter_ratio": args.max_rss_growth_jitter_ratio,
+            "max_rss_tail_growth_jitter_ratio": args.max_rss_tail_growth_jitter_ratio,
+            "max_backend_kv_jitter_ratio": args.max_backend_kv_jitter_ratio,
+            "max_projected_device_jitter_ratio": args.max_projected_device_jitter_ratio,
+            "max_direct_peak_vram_jitter_ratio": args.max_direct_peak_vram_jitter_ratio,
+        },
+        "boundary": (
+            "Preflight-only burn-in summary. It proves the selected runner inputs "
+            "and gates are present, not live runtime correctness."
+        ),
+        "config": str(prepared_config.effective_path),
+        "original_config": str(prepared_config.original_path),
     }
 
 
@@ -686,6 +911,49 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def markdown_cell(value: Any) -> str:
+    return str(value).replace("\n", " ").replace("|", "\\|")
+
+
+def write_preflight_markdown(path: Path, preflight: dict[str, Any]) -> None:
+    lines = [
+        "# QATQ Live VRAM Server Burn-In Preflight",
+        "",
+        f"- status: `{preflight['status']}`",
+        f"- dry run: `{preflight['dry_run']}`",
+        f"- preflight only: `{preflight['preflight_only']}`",
+        f"- selected cases: `{preflight['selected_cases']}`",
+        f"- config: `{preflight['config']}`",
+        f"- original config: `{preflight['original_config']}`",
+        "",
+        "| check | status | required | detail |",
+        "| --- | --- | --- | --- |",
+    ]
+    for check in preflight["checks"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    markdown_cell(check["name"]),
+                    f"`{markdown_cell(check['status'])}`",
+                    f"`{str(check['required']).lower()}`",
+                    markdown_cell(check["detail"]),
+                ]
+            )
+            + " |"
+        )
+    failures = preflight.get("failures", [])
+    if isinstance(failures, list) and failures:
+        lines.extend(["", "## Failures", ""])
+        for failure in failures:
+            if isinstance(failure, dict):
+                lines.append(f"- {failure.get('name', '<unknown>')}: {failure.get('detail', '')}")
+            else:
+                lines.append(f"- {failure}")
+    lines.extend(["", preflight["boundary"], ""])
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     lines = [
         "# QATQ Live VRAM Server Burn-In",
@@ -805,6 +1073,26 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
         lines.extend(["", "## Soak Memory Metric Failures", ""])
         for failure in soak_failures:
             lines.append(f"- {failure}")
+    preflight = summary.get("preflight", {})
+    if isinstance(preflight, dict) and preflight:
+        lines.extend(
+            [
+                "",
+                "## Preflight",
+                "",
+                f"- status: `{preflight.get('status')}`",
+                f"- selected cases: `{preflight.get('selected_cases', 0)}`",
+                f"- config: `{preflight.get('config', '')}`",
+            ]
+        )
+        failures = preflight.get("failures", [])
+        if isinstance(failures, list) and failures:
+            lines.extend(["", "### Preflight Failures", ""])
+            for failure in failures:
+                if isinstance(failure, dict):
+                    lines.append(f"- {failure.get('name', '<unknown>')}: {failure.get('detail', '')}")
+                else:
+                    lines.append(f"- {failure}")
     lines.extend(["", summary["boundary"], ""])
     path.write_text("\n".join(lines), encoding="utf-8")
 

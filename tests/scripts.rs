@@ -1300,8 +1300,20 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert plan["timeout_seconds"] == 30
     assert plan["run_timeout_seconds"] == 120
     assert plan["min_passed_elapsed_seconds"] == 0.0
+    assert plan["config"] == str(work_dir / "server-burnin-effective-config.json")
+    assert plan["original_config"].endswith("live-vram-server-layer-policy-notrace.local.example.json")
+    preflight = json.loads((work_dir / "preflight.json").read_text())
+    assert preflight["status"] == "pass"
+    assert preflight["dry_run"] is True
+    assert preflight["selected_cases"] > 0
+    checks = {check["name"]: check for check in preflight["checks"]}
+    assert checks["llama-server-executable"]["status"] == "skip"
+    assert checks["model-files"]["required"] is False
+    assert (work_dir / "preflight.md").exists()
+    assert (work_dir / "server-burnin-effective-config.json").exists()
     assert summary["format"] == "qatq-live-vram-server-burnin-summary-v1"
     assert summary["status"] == "dry-run"
+    assert summary["preflight"]["status"] == "pass"
     assert summary["runs_completed"] == 2
     assert summary["dry_run_runs"] == 2
     assert summary["aggregate_gate_failures"] == []
@@ -1327,6 +1339,118 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_server_burnin_preflight_resolves_model_root_and_fails_closed() {
+    let output = run_python_snippet(
+        r###"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    config = tmp / "config.json"
+    model_root = tmp / "models"
+    model_root.mkdir()
+    model = model_root / "model-a.gguf"
+    model.write_bytes(b"fake model")
+    config.write_text(json.dumps({
+        "defaults": {},
+        "cases": [
+            {
+                "id": "portable-model",
+                "model": "/runner-specific/path/model-a.gguf",
+            }
+        ]
+    }), encoding="utf-8")
+
+    missing_server_work = tmp / "missing-server"
+    missing_server = tmp / "missing-llama-server"
+    missing = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--llama-server",
+            str(missing_server),
+            "--model-root",
+            str(model_root),
+            "--work-dir",
+            str(missing_server_work),
+            "--runs",
+            "1",
+            "--timeout",
+            "30",
+            "--run-timeout",
+            "120",
+            "--min-passed-elapsed-seconds",
+            "3600",
+            "--require-backend-memory-diagnostics",
+            "--require-soak-memory-metrics",
+            "--preflight-only",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert missing.returncode == 1, missing.stdout
+    missing_preflight = json.loads((missing_server_work / "preflight.json").read_text())
+    assert missing_preflight["status"] == "fail"
+    assert any(failure["name"] == "llama-server-executable" for failure in missing_preflight["failures"])
+    effective = json.loads((missing_server_work / "server-burnin-effective-config.json").read_text())
+    assert effective["cases"][0]["model"] == str(model)
+    assert "llama-server-executable" in (missing_server_work / "preflight.md").read_text()
+
+    llama_server = tmp / "llama-server"
+    llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
+    pass_work = tmp / "preflight-pass"
+    passed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_server_burnin.py",
+            "--config",
+            str(config),
+            "--llama-server",
+            str(llama_server),
+            "--model-root",
+            str(model_root),
+            "--work-dir",
+            str(pass_work),
+            "--runs",
+            "1",
+            "--timeout",
+            "30",
+            "--run-timeout",
+            "120",
+            "--min-passed-elapsed-seconds",
+            "3600",
+            "--require-backend-memory-diagnostics",
+            "--require-soak-memory-metrics",
+            "--preflight-only",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert passed.returncode == 0, passed.stderr
+    summary = json.loads((pass_work / "summary.json").read_text())
+    assert summary["status"] == "pass"
+    assert summary["preflight_only"] is True
+    assert summary["runs_completed"] == 0
+    assert summary["preflight"]["status"] == "pass"
+    assert "## Preflight" in (pass_work / "summary.md").read_text()
+"###,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_server_burnin_times_out_hung_matrix_process_group() {
     let output = run_python_snippet(
         r#"
@@ -1339,11 +1463,13 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     config = tmp / "config.json"
     runner = tmp / "hung_matrix.py"
     llama_server = tmp / "llama-server"
+    model = tmp / "model-a.gguf"
+    model.write_bytes(b"fake model")
     config.write_text(json.dumps({
         "cases": [
             {
                 "id": "hung-case",
-                "model": "/tmp/model-a.gguf",
+                "model": str(model),
                 "model_id": "hung-case"
             }
         ]
@@ -1369,6 +1495,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         encoding="utf-8",
     )
     llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
     completed = subprocess.run(
         [
             sys.executable,
@@ -1433,17 +1560,20 @@ from pathlib import Path
 with tempfile.TemporaryDirectory() as raw_tmp:
     tmp = Path(raw_tmp)
     config = tmp / "config.json"
+    model = tmp / "model-a.gguf"
+    model.write_bytes(b"fake model")
     config.write_text(json.dumps({
         "cases": [
             {
                 "id": "summary-integrity",
-                "model": "/tmp/model-a.gguf",
+                "model": str(model),
                 "model_id": "summary-integrity"
             }
         ]
     }), encoding="utf-8")
     llama_server = tmp / "llama-server"
     llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
 
     missing_runner = tmp / "missing_summary_matrix.py"
     missing_runner.write_text(
@@ -1558,12 +1688,14 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     runner = tmp / "hung_matrix.py"
     llama_server = tmp / "llama-server"
     work_dir = tmp / "burnin"
+    model = tmp / "model-a.gguf"
+    model.write_bytes(b"fake model")
     config.write_text(json.dumps({
         "defaults": {},
         "cases": [
             {
                 "id": "fake",
-                "model": "/tmp/nonexistent-model.gguf",
+                "model": str(model),
             }
         ]
     }), encoding="utf-8")
@@ -1588,6 +1720,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         encoding="utf-8",
     )
     llama_server.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    llama_server.chmod(0o755)
     started = time.monotonic()
     completed = subprocess.run(
         [
@@ -2059,13 +2192,22 @@ assert "runs-on: [self-hosted, live-vram]" in workflow
 assert "timeout-minutes: ${{ fromJSON(inputs.job_timeout_minutes) }}" in workflow
 assert "actions/checkout@v7" in workflow
 assert "actions/upload-artifact@v4" in workflow
+assert "model_root:" in workflow
+assert "MODEL_ROOT:" in workflow
+assert "Preflight sustained live VRAM burn-in" in workflow
 assert "MIN_PASSED_SECONDS=3600" in workflow
 assert "MIN_PASSED_SECONDS=28800" in workflow
+assert "MODEL_ROOT_ARGS=()" in workflow
+assert "--model-root" in workflow
+assert "--preflight-only" in workflow
 assert "--min-passed-elapsed-seconds" in workflow
 assert "--require-backend-memory-diagnostics" in workflow
 assert "--require-soak-memory-metrics" in workflow
 assert "--max-rss-tail-growth-jitter-ratio" in workflow
 assert "--max-direct-peak-vram-jitter-ratio" in workflow
+assert "server-burnin-effective-config.json" in workflow
+assert "preflight.json" in workflow
+assert "preflight.md" in workflow
 assert "if-no-files-found: warn" in workflow
 "#,
     );

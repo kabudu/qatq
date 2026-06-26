@@ -460,9 +460,12 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       profiles, verifies the patched `llama-server` path, invokes the burn-in
       wrapper with backend-memory, soak-memory, elapsed-duration, and jitter
       gates, accepts a `job_timeout_minutes` ceiling for long runs, and uploads
-      the plan/summary artifacts. This is the reproducible launch path for the
-      real long soaks; the soaks themselves remain open until the workflow has
-      passed on suitable hardware.
+      the plan, preflight, effective-config, and summary artifacts. The workflow
+      runs `--preflight-only` before the expensive burn-in so missing patched
+      binaries, model files, model-root mappings, or required production gates
+      fail early. This is the reproducible launch path for the real long soaks;
+      the soaks themselves remain open until the workflow has passed on suitable
+      hardware.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5
