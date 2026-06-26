@@ -2964,6 +2964,25 @@ Exit criteria:
       peak-VRAM counters are unavailable on this Apple Metal host. This closes
       the bounded warmup-depth regression, but it is still not the one-hour or
       overnight soak.
+- [x] Re-run the mixed-model one-hour soak with warmup-eight. The calibrated
+      burn-in at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-onehour-20260626`
+      passed `8/8` mixed-model repeats and `24/24` live
+      cancellation/follow-up cases, banking `4294.28` passed seconds against
+      the `3600` second gate. Backend diagnostics and soak RSS metrics were
+      present for every case, aggregate gate failures were empty, and projected
+      device memory was exactly stable across repeats at `1426` MiB for
+      Qwen2.5 1.5B, `2391` MiB for Qwen2.5 3B, and `5304` MiB for Phi 3.5
+      mini. The maximum measured steady-state RSS tail growth stayed under the
+      unchanged `4096` KiB ceiling: `336` KiB for Qwen2.5 1.5B, `2464` KiB
+      for Qwen2.5 3B, and `352` KiB for Phi 3.5 mini. Follow-up p95 latency
+      averaged `1.9s`, `3.4s`, and `5.0s` respectively, with observed maxima
+      of `2.1s`, `4.5s`, and `6.0s`. The hardware-counter report at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-onehour-20260626/hardware-counters.json`
+      confirms backend memory diagnostics are present while direct
+      per-process peak-VRAM counters remain unavailable on this Apple Metal
+      host. This closes the calibrated one-hour warmup-depth evidence gap; it
+      does not close overnight soak or direct hardware peak-VRAM proof.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests

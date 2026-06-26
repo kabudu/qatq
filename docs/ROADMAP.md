@@ -508,7 +508,19 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       device memory stable at `1426`, `2391`, and `5304` MiB, and kept
       positive measured RSS-tail growth at `0` KiB for every case under the
       unchanged `4096` KiB ceiling. This closes the bounded warmup-depth
-      regression before the still-open one-hour/overnight reruns.
+      regression before the longer one-hour/overnight reruns.
+- [x] Re-run the mixed-model one-hour gate with the warmup-eight profile. The
+      calibrated burn-in at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-onehour-20260626`
+      passed `8/8` repeats and `24/24` live cancellation/follow-up cases,
+      banked `4294.28` passed seconds against the `3600` second gate, kept
+      projected device memory exactly stable at `1426`, `2391`, and `5304`
+      MiB, and kept maximum measured RSS-tail growth at `336`, `2464`, and
+      `352` KiB respectively under the unchanged `4096` KiB ceiling. The
+      hardware-counter report confirms backend diagnostics are present while
+      direct per-process peak-VRAM counters remain unavailable on this Apple
+      Metal host, so overnight soak and direct hardware peak-VRAM proof remain
+      open.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

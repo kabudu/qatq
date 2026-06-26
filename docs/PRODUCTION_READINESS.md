@@ -269,6 +269,18 @@ ceiling. The subsequent mixed-model warmup-eight burn-in at
 passed `3/3` repeats and `9/9` live cancellation/follow-up cases, banked
 `1609.72` passed seconds, kept projected device memory stable at `1426`,
 `2391`, and `5304` MiB, and kept positive measured RSS-tail growth at `0` KiB
-for every completed case under the unchanged `4096` KiB ceiling. The
-implementation and validation plan for that experimental track is maintained in
+for every completed case under the unchanged `4096` KiB ceiling. The calibrated
+warmup-eight one-hour burn-in at
+`/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-onehour-20260626`
+then passed `8/8` repeats and `24/24` live cancellation/follow-up cases,
+banked `4294.28` passed seconds against the `3600` second gate, exported
+backend diagnostics and soak RSS metrics for every case, and reported no
+aggregate gate failures. Projected device memory stayed exactly stable at
+`1426`, `2391`, and `5304` MiB. Maximum measured steady-state RSS tail growth
+was `336`, `2464`, and `352` KiB respectively, below the unchanged `4096` KiB
+ceiling, and follow-up p95 latency averaged `1.9s`, `3.4s`, and `5.0s` for
+the three configured cases. Its hardware-counter report again confirms that
+backend memory diagnostics are present while direct per-process peak-VRAM
+counters remain unavailable on this Apple Metal host. The implementation and
+validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
