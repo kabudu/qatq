@@ -531,6 +531,25 @@ in [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
       direct per-process peak-VRAM counters remain unavailable on this Apple
       Metal host, so overnight soak and direct hardware peak-VRAM proof remain
       open.
+- [x] Preserve the first failed overnight warmup-eight burn-in. The run at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-overnight-20260626`
+      stopped after `9/55` passing repeats and `4925.07` passed seconds because
+      Phi 3.5 mini reached `6000` KiB steady-state RSS-tail growth against the
+      strict `4096` KiB ceiling. The failure was fail-closed and still useful:
+      projected device memory stayed exactly stable at `1426`, `2391`, and
+      `5304` MiB, all `27` completed cases exported backend diagnostics and
+      soak RSS metrics, max follow-up p95 latency stayed at `2.91s`, `4.64s`,
+      and `5.75s`, and average p50 predicted throughput was `75.0`, `42.5`,
+      and `35.9` tok/s. The next calibration must prove either a lower Phi
+      tail or a justified bounded higher RSS-tail ceiling.
+- [x] Add focused Phi tail calibration after the failed overnight warmup-eight
+      run. `/private/tmp/qatq-live-vram-phi-tail8m-calibration-5x-20260626`
+      passed `5/5` Phi 3.5 mini repeats, banked `1395.2` passed seconds
+      against the `1200` second gate, kept projected device memory stable at
+      `5304` MiB, and held max steady-state RSS-tail growth to `1104` KiB
+      under the unchanged `4096` KiB ceiling. This narrows the remaining
+      overnight question to mixed-model sequencing or host allocator stability
+      rather than a repeatedly reproduced Phi-only tail leak.
 - [ ] Broaden in-process server cancellation burn-in across more native
       multi-stream retained page-table models, harsher pressure variation, and
       broader runtime coverage. The scoped two-stream Qwen2.5 1.5B, Qwen2.5

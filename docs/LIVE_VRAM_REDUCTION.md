@@ -2995,6 +2995,30 @@ Exit criteria:
       per-process peak-VRAM counters remain unavailable on this Apple Metal
       host. This closes the calibrated one-hour warmup-depth evidence gap; it
       does not close overnight soak or direct hardware peak-VRAM proof.
+- [x] Preserve failed overnight warmup-eight evidence. The first overnight
+      attempt at
+      `/private/tmp/qatq-live-vram-server-mixed-model-soak-warmup8-overnight-20260626`
+      stopped after `9/55` passing repeats and `4925.07` passed seconds because
+      the strict `4096` KiB steady-state RSS-tail ceiling caught Phi 3.5 mini
+      at `6000` KiB in repeat nine. This is a useful fail-closed result, not a
+      product pass: projected device memory stayed exactly stable at `1426`,
+      `2391`, and `5304` MiB; backend diagnostics and soak RSS metrics were
+      present for all `27` completed cases; max follow-up p95 latency was
+      `2.91s`, `4.64s`, and `5.75s`; and average p50 predicted throughput was
+      `75.0`, `42.5`, and `35.9` tok/s. The follow-up calibration must either
+      keep Phi below the original `4096` KiB tail ceiling or justify a bounded
+      higher ceiling with repeat evidence.
+- [x] Run focused Phi warmup-eight tail calibration. The Phi-only rerun at
+      `/private/tmp/qatq-live-vram-phi-tail8m-calibration-5x-20260626`
+      passed `5/5` repeats and banked `1395.2` passed seconds against the
+      `1200` second gate. It kept projected device memory exactly stable at
+      `5304` MiB, recorded max steady-state RSS-tail growth of `1104` KiB
+      under the unchanged `4096` KiB ceiling, and produced max follow-up
+      p95/p99 latency of `6.59681s` with average p50 predicted throughput of
+      `35.4421` tok/s. This does not erase the mixed-model overnight failure,
+      but it shows the Phi tail spike was not reproduced in focused repeat
+      evidence and should be investigated as a mixed-model sequencing or host
+      allocator stability issue before relaxing the global overnight gate.
 - [ ] Overnight soak with metrics export and no unbounded memory growth.
 
 ### Performance Tests

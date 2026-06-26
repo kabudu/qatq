@@ -129,8 +129,16 @@ QATQ is release-candidate grade, not yet declared production-complete.
 > the burn-in plan plus JSON/Markdown summaries. `job_timeout_minutes` must be
 > set high enough for the selected profile.
 > This re-closes bounded accepted-policy repeatability and makes future
-> one-hour/overnight claims machine-checkable. Overnight burn-in and direct
-> peak-VRAM hardware-counter proof remain open.
+> one-hour/overnight claims machine-checkable. The first warmup-eight overnight
+> attempt failed closed after `9/55` repeats because Phi 3.5 mini hit `6000`
+> KiB steady-state RSS-tail growth against the strict `4096` KiB ceiling, while
+> projected device memory stayed stable and latency/throughput remained usable.
+> A focused Phi-only warmup-eight calibration subsequently passed `5/5`
+> repeats and `1395.2` passed seconds with stable `5304` MiB projected device
+> memory, max `1104` KiB steady-state RSS-tail growth, max `6.59681s`
+> follow-up p95/p99 latency, and `35.4421` tok/s average p50 predicted
+> throughput. Overnight mixed-model burn-in and direct peak-VRAM
+> hardware-counter proof remain open.
 
 ## Implemented Evidence
 
@@ -284,3 +292,10 @@ backend memory diagnostics are present while direct per-process peak-VRAM
 counters remain unavailable on this Apple Metal host. The implementation and
 validation plan for that experimental track is maintained in
 [`docs/LIVE_VRAM_REDUCTION.md`](LIVE_VRAM_REDUCTION.md).
+The focused Phi-only warmup-eight calibration at
+`/private/tmp/qatq-live-vram-phi-tail8m-calibration-5x-20260626` then passed
+`5/5` repeats, banked `1395.2` passed seconds against the `1200` second gate,
+kept projected device memory stable at `5304` MiB, held max steady-state
+RSS-tail growth to `1104` KiB, and averaged `35.4421` tok/s p50 predicted
+throughput. That narrows but does not close the failed mixed-model overnight
+tail question.
