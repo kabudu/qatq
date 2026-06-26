@@ -382,7 +382,10 @@ The in-process server cancellation path has since been hardened beyond the
 original Qwen2.5 1.5B 1 GiB pressure soaks. The probe now runs repeated
 stream-cancel/follow-up cycles against one `llama-server` process, records
 server RSS, applies touched host-memory pressure, and fails on per-iteration or
-follow-up latency ceilings. It also exposes strict native multi-stream trace
+follow-up latency ceilings. It starts `llama-server` in its own process group,
+shuts down that group with SIGTERM/SIGKILL escalation if needed, and records
+the `shutdown_cleanup` signal/escalation metadata in `summary.json`. It also
+exposes strict native multi-stream trace
 gates: `--require-flattened-flash-consumer` requires attention-consumed trace
 rows to use `backend_scheduled_flattened_flash_attention`, and
 `--require-live-offloaded-stream-count <n>` requires live-offloaded page

@@ -1323,6 +1323,9 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     assert summary["require_direct_peak_vram_counter"] is True
     assert summary["direct_peak_vram_sample_interval_ms"] == 250
     assert summary["direct_peak_vram_retain_samples"] == 2
+    assert summary["shutdown_cleanup"]["attempted"] is False
+    assert summary["shutdown_cleanup"]["signal"] is None
+    assert summary["shutdown_cleanup"]["escalated"] is False
     artifacts = plan["artifacts"]
     assert artifacts["event_trace"].endswith("event-trace.jsonl")
     assert artifacts["page_segments"].endswith("page-segments.jsonl")
@@ -1365,6 +1368,62 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     )
     assert result.returncode == 1
     assert "--require-direct-peak-vram-counter requires --sample-direct-peak-vram" in result.stderr
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_server_cancel_probe_stop_server_cleans_process_group() {
+    let output = run_python_snippet(
+        r#"
+import importlib.util, subprocess, sys, tempfile, time
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("server_cancel", "scripts/llama_cpp_live_vram_server_cancel_probe.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    marker = tmp / "child-terminated.txt"
+    server = tmp / "fake_server.py"
+    server.write_text(
+        "import subprocess, sys, time\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    sys.argv[1],\n"
+        "])\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.Popen(
+        [sys.executable, str(server), str(marker)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    time.sleep(0.2)
+    cleanup = module.stop_server(proc, 2.0)
+    assert cleanup["attempted"] is True
+    assert cleanup["signal"] == "SIGTERM"
+    assert cleanup["escalated"] is False
+    assert isinstance(cleanup["returncode"], int)
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigterm"
 "#,
     );
 

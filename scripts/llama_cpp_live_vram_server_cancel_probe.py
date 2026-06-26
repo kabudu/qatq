@@ -375,6 +375,12 @@ def main() -> int:
             "require_direct_peak_vram_counter": args.require_direct_peak_vram_counter,
             "direct_peak_vram_sample_interval_ms": args.direct_peak_vram_sample_interval_ms,
             "direct_peak_vram_retain_samples": args.direct_peak_vram_retain_samples,
+            "shutdown_cleanup": {
+                "attempted": False,
+                "signal": None,
+                "escalated": False,
+                "returncode": None,
+            },
             "artifacts": {key: str(value) for key, value in artifacts.items()},
             "boundary": "Dry-run plan only; no llama-server process was started.",
         }
@@ -406,6 +412,12 @@ def main() -> int:
         "available": False,
         "backend": None,
         "reason": "direct peak-VRAM sampling was not requested",
+    }
+    shutdown_cleanup: dict[str, object] = {
+        "attempted": False,
+        "signal": None,
+        "escalated": False,
+        "returncode": None,
     }
 
     try:
@@ -464,7 +476,8 @@ def main() -> int:
             host_pressure[0] ^= 0xA5
         if direct_peak_sampler is not None:
             direct_peak_vram_counter = direct_peak_sampler.stop()
-        returncode = stop_server(proc, args.shutdown_timeout)
+        shutdown_cleanup = stop_server(proc, args.shutdown_timeout)
+        returncode = shutdown_cleanup["returncode"]
 
     if args.require_direct_peak_vram_counter and not bool(direct_peak_vram_counter["available"]):
         failures.append(
@@ -579,6 +592,7 @@ def main() -> int:
         "followup_completion_metrics": followup_completion_metrics,
         "backend_memory": backend_memory,
         "process_returncode": returncode,
+        "shutdown_cleanup": shutdown_cleanup,
         "stdout": str(stdout_path),
         "stderr": str(stderr_path),
         "artifacts": {key: str(value) for key, value in artifacts.items()},
@@ -1539,28 +1553,46 @@ def first_numeric_path(
     return None
 
 
-def stop_server(proc: subprocess.Popen[bytes] | None, timeout: float) -> int | None:
+def stop_server(proc: subprocess.Popen[bytes] | None, timeout: float) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": False,
+        "signal": None,
+        "escalated": False,
+        "returncode": None,
+    }
     if proc is None:
-        return None
+        return cleanup
     if proc.poll() is not None:
-        return proc.returncode
+        cleanup["returncode"] = proc.returncode
+        return cleanup
+    cleanup["attempted"] = True
     try:
         os.killpg(proc.pid, signal.SIGTERM)
+        cleanup["signal"] = "SIGTERM"
     except ProcessLookupError:
-        return proc.poll()
+        cleanup["signal"] = "exited"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
     except PermissionError:
-        return proc.poll()
+        cleanup["signal"] = "permission-denied"
+        cleanup["returncode"] = proc.poll()
+        return cleanup
     try:
-        return proc.wait(timeout=timeout)
+        cleanup["returncode"] = proc.wait(timeout=timeout)
+        return cleanup
     except subprocess.TimeoutExpired:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["signal"] = "SIGKILL"
+            cleanup["escalated"] = True
         except (ProcessLookupError, PermissionError):
             pass
         try:
-            return proc.wait(timeout=5.0)
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+            return cleanup
         except subprocess.TimeoutExpired:
-            return None
+            cleanup["returncode"] = None
+            return cleanup
 
 
 def evaluate_result(
@@ -2031,6 +2063,10 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     out += f"- iterations completed: `{summary.get('iterations_completed', 0)}` / `{summary.get('iterations_requested', 1)}`\n"
     out += f"- host memory pressure: `{summary.get('host_memory_pressure_mib', 0)} MiB`\n"
     out += f"- QATQ traces enabled: `{summary.get('qatq_traces_enabled', False)}`\n"
+    shutdown_cleanup = summary.get("shutdown_cleanup", {})
+    if isinstance(shutdown_cleanup, dict) and shutdown_cleanup:
+        out += f"- shutdown cleanup signal: `{shutdown_cleanup.get('signal')}`\n"
+        out += f"- shutdown cleanup escalated: `{shutdown_cleanup.get('escalated', False)}`\n"
     out += f"- max trace bytes: `{summary.get('max_trace_bytes', DEFAULT_MAX_TRACE_BYTES)}`\n"
     out += f"- max trace line bytes: `{summary.get('max_trace_line_bytes', DEFAULT_MAX_TRACE_LINE_BYTES)}`\n"
     out += f"- require backend memory diagnostics: `{summary.get('require_backend_memory_diagnostics', False)}`\n"

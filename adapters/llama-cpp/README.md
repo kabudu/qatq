@@ -709,6 +709,12 @@ python3 scripts/llama_cpp_live_vram_server_cancel_probe.py \
   --require-live-offloaded-stream-count 2
 ```
 
+The probe starts `llama-server` in its own session and shuts down the full
+process group. `summary.json` records `shutdown_cleanup.attempted`,
+`shutdown_cleanup.signal`, `shutdown_cleanup.escalated`, and the final
+`process_returncode`, so failed or timed-out probes do not silently leave child
+runtime processes behind.
+
 For repeatable three-model-family validation, run the checked-in sequential
 matrix wrapper instead of maintaining hand-written probe commands:
 
