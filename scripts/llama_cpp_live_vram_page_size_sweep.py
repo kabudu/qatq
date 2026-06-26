@@ -100,6 +100,7 @@ def main() -> int:
 
     summary = build_summary(results, work_dir)
     (work_dir / "summary.md").write_text(summary, encoding="utf-8")
+    write_json(work_dir / "summary.json", build_summary_json(results, work_dir))
     print(summary)
 
     failures = [result for result in results if result.status != "pass"]
@@ -216,8 +217,25 @@ def run_page_size(
             failure=(completed.stderr or completed.stdout or "").strip(),
         )
 
-    evidence = load_json(work_dir / "runtime-reclaim-evidence.json")
-    attention = load_optional_json(work_dir / "attention-trace-summary.json")
+    try:
+        evidence = load_live_vram_evidence(work_dir / "runtime-reclaim-evidence.json")
+        attention = load_optional_json(work_dir / "attention-trace-summary.json")
+    except Exception as exc:
+        return SweepResult(
+            page_tokens=page_tokens,
+            status="fail",
+            work_dir=work_dir,
+            total_pages=0,
+            verified_restores=0,
+            qatq_best_pages=0,
+            qatq_bytes=0,
+            zstd_bytes=0,
+            lz4_bytes=0,
+            raw_bytes=0,
+            attention_events=0,
+            elapsed_seconds=elapsed,
+            failure=f"sweep page size {page_tokens} completed but evidence parsing failed: {exc}",
+        )
     return SweepResult(
         page_tokens=page_tokens,
         status="pass",
@@ -274,6 +292,55 @@ def build_summary(results: list[SweepResult], work_dir: Path) -> str:
     return out
 
 
+def build_summary_json(results: list[SweepResult], work_dir: Path) -> dict[str, object]:
+    passed = sum(1 for result in results if result.status == "pass")
+    failed = len(results) - passed
+    return {
+        "format": "qatq-live-vram-page-size-sweep-summary-v1",
+        "status": "pass" if passed > 0 and failed == 0 else "fail",
+        "work_dir": str(work_dir),
+        "total_page_sizes": len(results),
+        "passed": passed,
+        "failed": failed,
+        "selected_page_tokens": select_recommended_page_tokens(results),
+        "results": [sweep_result_json(result) for result in results],
+        "boundary": (
+            "Machine-readable page-size sweep summary. Passing page sizes prove "
+            "only the configured runtime-reclaim evidence path and do not prove "
+            "transparent live token-page eviction from GPU memory."
+        ),
+    }
+
+
+def select_recommended_page_tokens(results: list[SweepResult]) -> int | None:
+    passing = [result for result in results if result.status == "pass"]
+    if not passing:
+        return None
+    return sorted(passing, key=lambda result: (result.page_tokens, result.qatq_bytes))[0].page_tokens
+
+
+def sweep_result_json(result: SweepResult) -> dict[str, object]:
+    return {
+        "page_tokens": result.page_tokens,
+        "status": result.status,
+        "work_dir": str(result.work_dir),
+        "total_pages": result.total_pages,
+        "verified_restores": result.verified_restores,
+        "qatq_best_pages": result.qatq_best_pages,
+        "qatq_bytes": result.qatq_bytes,
+        "zstd_bytes": result.zstd_bytes,
+        "lz4_bytes": result.lz4_bytes,
+        "raw_bytes": result.raw_bytes,
+        "attention_events": result.attention_events,
+        "elapsed_seconds": result.elapsed_seconds,
+        "failure": result.failure,
+        "timed_out": result.timed_out,
+        "timeout_seconds": result.timeout_seconds,
+        "cleanup_signal": result.cleanup_signal,
+        "cleanup_escalated": result.cleanup_escalated,
+    }
+
+
 def parse_page_sizes(value: str) -> list[int]:
     sizes: list[int] = []
     seen = set()
@@ -297,6 +364,57 @@ def require_file(path: Path, label: str) -> Path:
 def load_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_live_vram_evidence(path: Path) -> dict:
+    evidence = load_json(path)
+    evidence_require(isinstance(evidence, dict), f"live VRAM evidence is not a JSON object: {path}")
+    total_pages = require_non_negative_int(evidence, "total_pages", path)
+    verified_restores = require_non_negative_int(evidence, "verified_restores", path)
+    qatq_best_pages = require_non_negative_int(
+        evidence,
+        "qatq_beats_best_general_codec_pages",
+        path,
+    )
+    raw_bytes = require_positive_int(evidence, "raw_bytes", path)
+    require_non_negative_int(evidence, "qatq_candidate_bytes", path)
+    require_non_negative_int(evidence, "zstd_bytes", path)
+    require_non_negative_int(evidence, "lz4_bytes", path)
+    evidence_require(total_pages > 0, f"live VRAM evidence has zero total_pages: {path}")
+    evidence_require(
+        verified_restores <= total_pages,
+        f"live VRAM evidence verified_restores exceeds total_pages: {path}",
+    )
+    evidence_require(
+        qatq_best_pages <= total_pages,
+        f"live VRAM evidence qatq_beats_best_general_codec_pages exceeds total_pages: {path}",
+    )
+    evidence_require(raw_bytes > 0, f"live VRAM evidence has zero raw_bytes: {path}")
+    return evidence
+
+
+def require_non_negative_int(evidence: dict, key: str, path: Path) -> int:
+    value = evidence.get(key)
+    evidence_require(
+        isinstance(value, int) and not isinstance(value, bool) and value >= 0,
+        f"live VRAM evidence field {key} must be a non-negative integer: {path}",
+    )
+    return value
+
+
+def require_positive_int(evidence: dict, key: str, path: Path) -> int:
+    value = require_non_negative_int(evidence, key, path)
+    evidence_require(value > 0, f"live VRAM evidence field {key} must be positive: {path}")
+    return value
+
+
+def evidence_require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def load_optional_json(path: Path) -> dict:

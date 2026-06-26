@@ -888,6 +888,99 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_page_size_sweep_rejects_missing_or_malformed_evidence() {
+    let output = run_python_snippet(
+        r#"
+import json, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    llama_simple = tmp / "llama-simple"
+    model = tmp / "model.gguf"
+    llama_simple.write_text(chr(35) + "!/bin/sh\n", encoding="utf-8")
+    model.write_text("fake model", encoding="utf-8")
+
+    missing_runner = tmp / "missing_evidence.py"
+    missing_runner.write_text(
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "Path(args.work_dir).mkdir(parents=True, exist_ok=True)\n"
+        "print('evidence runner exited without evidence')\n",
+        encoding="utf-8",
+    )
+    missing_work = tmp / "missing"
+    missing = subprocess.run([
+        sys.executable,
+        "scripts/llama_cpp_live_vram_page_size_sweep.py",
+        "--evidence-runner", str(missing_runner),
+        "--llama-simple", str(llama_simple),
+        "--model", str(model),
+        "--model-id", "fake-model",
+        "--work-dir", str(missing_work),
+        "--page-tokens", "256",
+        "--timeout", "10",
+        "--fail-on-any",
+    ], text=True, capture_output=True)
+    assert missing.returncode == 1, missing.stdout
+    missing_summary = json.loads((missing_work / "summary.json").read_text())
+    assert missing_summary["format"] == "qatq-live-vram-page-size-sweep-summary-v1"
+    assert missing_summary["status"] == "fail"
+    assert missing_summary["failed"] == 1
+    assert "evidence parsing failed" in missing_summary["results"][0]["failure"]
+
+    malformed_runner = tmp / "malformed_evidence.py"
+    malformed_runner.write_text(
+        "import argparse, json\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--work-dir', required=True)\n"
+        "args, _ = parser.parse_known_args()\n"
+        "work = Path(args.work_dir)\n"
+        "work.mkdir(parents=True, exist_ok=True)\n"
+        "(work / 'runtime-reclaim-evidence.json').write_text(json.dumps({\n"
+        "    'total_pages': 1,\n"
+        "    'verified_restores': 2,\n"
+        "    'qatq_beats_best_general_codec_pages': 1,\n"
+        "    'raw_bytes': 1024,\n"
+        "    'qatq_candidate_bytes': 512,\n"
+        "    'zstd_bytes': 768,\n"
+        "    'lz4_bytes': 900\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+    malformed_work = tmp / "malformed"
+    malformed = subprocess.run([
+        sys.executable,
+        "scripts/llama_cpp_live_vram_page_size_sweep.py",
+        "--evidence-runner", str(malformed_runner),
+        "--llama-simple", str(llama_simple),
+        "--model", str(model),
+        "--model-id", "fake-model",
+        "--work-dir", str(malformed_work),
+        "--page-tokens", "256",
+        "--timeout", "10",
+        "--fail-on-any",
+    ], text=True, capture_output=True)
+    assert malformed.returncode == 1, malformed.stdout
+    malformed_summary = json.loads((malformed_work / "summary.json").read_text())
+    assert malformed_summary["status"] == "fail"
+    assert "verified_restores exceeds total_pages" in malformed_summary["results"][0]["failure"]
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_parallel_stress_dry_run_shards_cases_and_iterations() {
     let output = run_python_snippet(
         r#"
