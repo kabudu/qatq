@@ -73,6 +73,13 @@ def main() -> int:
             "status": "dry-run",
             "command": command,
             "artifacts": {key: str(value) for key, value in artifacts.items()},
+            "abort_cleanup": {
+                "attempted": False,
+                "signal": None,
+                "escalated": False,
+                "escalation_signal": None,
+                "returncode": None,
+            },
         }
         write_json(work_dir / "summary.json", summary)
         write_markdown(work_dir / "summary.md", summary)
@@ -93,11 +100,19 @@ def main() -> int:
         )
         observed_export = wait_for_export(stderr_path, proc, args.export_timeout)
         aborted = False
+        abort_cleanup = {
+            "attempted": False,
+            "signal": None,
+            "escalated": False,
+            "escalation_signal": None,
+            "returncode": None,
+        }
         if observed_export and proc.poll() is None:
             time.sleep(args.abort_after_export_seconds)
-            send_signal(proc, args.abort_signal)
+            abort_cleanup = send_signal(proc, args.abort_signal)
             aborted = True
-        returncode = wait_after_abort(proc, args.shutdown_timeout)
+        abort_cleanup = wait_after_abort(proc, args.shutdown_timeout, abort_cleanup)
+        returncode = abort_cleanup["returncode"]
 
     checks = evaluate_abort_result(artifacts, stderr_path, observed_export, aborted, returncode)
     summary = {
@@ -106,6 +121,7 @@ def main() -> int:
         "observed_export": observed_export,
         "aborted": aborted,
         "returncode": returncode,
+        "abort_cleanup": abort_cleanup,
         "stdout": str(stdout_path),
         "stderr": str(stderr_path),
         "artifacts": {key: str(value) for key, value in artifacts.items()},
@@ -203,26 +219,52 @@ def wait_for_export(stderr_path: Path, proc: subprocess.Popen[bytes], timeout: f
     return False
 
 
-def send_signal(proc: subprocess.Popen[bytes], signal_name: str) -> None:
+def send_signal(proc: subprocess.Popen[bytes], signal_name: str) -> dict[str, object]:
+    cleanup: dict[str, object] = {
+        "attempted": True,
+        "signal": None,
+        "escalated": False,
+        "escalation_signal": None,
+        "returncode": proc.poll(),
+    }
     signum = signal.SIGINT if signal_name == "INT" else signal.SIGTERM
+    cleanup["signal"] = "SIGINT" if signal_name == "INT" else "SIGTERM"
     try:
         os.killpg(proc.pid, signum)
     except ProcessLookupError:
-        return
+        cleanup["signal"] = "exited"
+        cleanup["returncode"] = proc.poll()
+    except PermissionError:
+        cleanup["signal"] = "permission-denied"
+        cleanup["returncode"] = proc.poll()
+    return cleanup
 
 
-def wait_after_abort(proc: subprocess.Popen[bytes], timeout: float) -> int | None:
+def wait_after_abort(
+    proc: subprocess.Popen[bytes],
+    timeout: float,
+    cleanup: dict[str, object],
+) -> dict[str, object]:
+    if proc.poll() is not None:
+        cleanup["returncode"] = proc.returncode
+        return cleanup
     try:
-        return proc.wait(timeout=timeout)
+        cleanup["returncode"] = proc.wait(timeout=timeout)
+        return cleanup
     except subprocess.TimeoutExpired:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
+            cleanup["attempted"] = True
+            cleanup["escalated"] = True
+            cleanup["escalation_signal"] = "SIGKILL"
         except ProcessLookupError:
-            pass
+            cleanup["escalation_signal"] = "exited"
         try:
-            return proc.wait(timeout=5.0)
+            cleanup["returncode"] = proc.wait(timeout=5.0)
+            return cleanup
         except subprocess.TimeoutExpired:
-            return None
+            cleanup["returncode"] = None
+            return cleanup
 
 
 def evaluate_abort_result(
@@ -283,6 +325,10 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     out += f"- observed export: `{summary.get('observed_export', False)}`\n"
     out += f"- aborted: `{summary.get('aborted', False)}`\n"
     out += f"- return code: `{summary.get('returncode')}`\n"
+    cleanup = summary.get("abort_cleanup", {})
+    if isinstance(cleanup, dict) and cleanup:
+        out += f"- abort cleanup signal: `{cleanup.get('signal')}`\n"
+        out += f"- abort cleanup escalated: `{cleanup.get('escalated', False)}`\n"
     if isinstance(checks, dict):
         out += f"- exported files: `{checks.get('exported_file_count', 0)}`\n"
         out += f"- event trace bytes: `{checks.get('event_trace_bytes', 0)}`\n"

@@ -1296,7 +1296,104 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     artifacts = plan["artifacts"]
     assert artifacts["output_manifest"].endswith("output-manifest.json")
     assert artifacts["token_timings"].endswith("token-timings.csv")
+    assert summary["abort_cleanup"]["attempted"] is False
+    assert summary["abort_cleanup"]["signal"] is None
+    assert summary["abort_cleanup"]["escalated"] is False
 "#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn live_vram_abort_probe_records_process_group_cleanup() {
+    let output = run_python_snippet(
+        r##"
+import json, os, subprocess, sys, tempfile, time
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    work_dir = tmp / "abort-probe"
+    fake_llama = tmp / "llama-simple.py"
+    model = tmp / "model.gguf"
+    model.write_bytes(b"fake model")
+    fake_llama.write_text(
+        "#!/usr/bin/env python3\n"
+        "import subprocess, signal, sys, time\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "def arg_value(name):\n"
+        "    return args[args.index(name) + 1]\n"
+        "export_dir = Path(arg_value('--qatq-kv-export-dir'))\n"
+        "event_trace = Path(arg_value('--qatq-event-trace'))\n"
+        "page_segments = Path(arg_value('--qatq-attention-page-segments-trace'))\n"
+        "marker = export_dir.parent / 'child-interrupted.txt'\n"
+        "export_dir.mkdir(parents=True, exist_ok=True)\n"
+        "(export_dir / 'page.bin').write_bytes(b'qatq')\n"
+        "event_trace.write_text('{\"events\": []}\\n')\n"
+        "page_segments.write_text('{\"segment\": 1}\\n')\n"
+        "child = subprocess.Popen([\n"
+        "    sys.executable,\n"
+        "    '-c',\n"
+        "    'import signal, sys, time; from pathlib import Path; marker = Path(sys.argv[1]); '\n"
+        "    'signal.signal(signal.SIGINT, lambda signum, frame: (marker.write_text(\"sigint\"), sys.exit(0))); '\n"
+        "    'signal.signal(signal.SIGTERM, lambda signum, frame: (marker.write_text(\"sigterm\"), sys.exit(0))); '\n"
+        "    'time.sleep(30)',\n"
+        "    str(marker),\n"
+        "])\n"
+        "print('exported QATQ KV tensors', file=sys.stderr, flush=True)\n"
+        "try:\n"
+        "    time.sleep(30)\n"
+        "except KeyboardInterrupt:\n"
+        "    raise\n",
+        encoding="utf-8",
+    )
+    fake_llama.chmod(0o755)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_abort_probe.py",
+            "--model",
+            str(model),
+            "--llama-simple",
+            str(fake_llama),
+            "--work-dir",
+            str(work_dir),
+            "--export-timeout",
+            "3",
+            "--abort-after-export-seconds",
+            "0",
+            "--shutdown-timeout",
+            "2",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    summary = json.loads((work_dir / "summary.json").read_text())
+    assert summary["status"] == "pass"
+    assert summary["observed_export"] is True
+    assert summary["aborted"] is True
+    assert summary["abort_cleanup"]["attempted"] is True
+    assert summary["abort_cleanup"]["signal"] == "SIGINT"
+    assert summary["abort_cleanup"]["escalated"] is False
+    assert isinstance(summary["abort_cleanup"]["returncode"], int)
+    assert summary["checks"]["exported_file_count"] == 1
+    marker = work_dir / "child-interrupted.txt"
+    deadline = time.time() + 3
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "sigint"
+    markdown = (work_dir / "summary.md").read_text()
+    assert "abort cleanup signal: `SIGINT`" in markdown
+"##,
     );
 
     assert!(

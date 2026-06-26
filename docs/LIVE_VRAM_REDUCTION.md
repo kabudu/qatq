@@ -2624,8 +2624,9 @@ Exit criteria:
 - [x] Process-abort fail-closed evidence for the currently wired patched
       `llama-simple` adapter path. The reusable probe
       `scripts/llama_cpp_live_vram_abort_probe.py` waits for a real QATQ KV
-      export marker, interrupts generation, and fails if normal completion
-      artifacts appear after abort.
+      export marker, interrupts the whole process group, records structured
+      `abort_cleanup` signal/escalation metadata, and fails if normal
+      completion artifacts appear after abort.
       `/private/tmp/qatq-live-vram-abort-probe-qwen15b-20260625` passed on
       Qwen2.5 1.5B with SIGINT return code `-2`, 57 exported files, a
       49,921-byte event trace, a 218,674-byte page-segment trace, and no output

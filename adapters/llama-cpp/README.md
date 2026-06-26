@@ -676,8 +676,10 @@ python3 scripts/llama_cpp_live_vram_abort_probe.py \
   --max-queued-pages 32
 ```
 
-The probe waits for a real QATQ KV export marker, interrupts generation, and
-fails if normal completion artifacts such as the output manifest or token
+The probe waits for a real QATQ KV export marker, interrupts the whole
+`llama-simple` process group, records `abort_cleanup.attempted`,
+`abort_cleanup.signal`, `abort_cleanup.escalated`, and the final return code,
+and fails if normal completion artifacts such as the output manifest or token
 timings appear after abort. The Qwen2.5 1.5B run at
 `/private/tmp/qatq-live-vram-abort-probe-qwen15b-20260625` observed the export,
 interrupted the process with return code `-2`, retained 57 exported files plus
