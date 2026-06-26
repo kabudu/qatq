@@ -179,6 +179,13 @@ def inspect_nvidia_smi(
             help_text.strip() or "nvidia-smi capability probe timed out"
         )
         return info
+    if help_result.returncode != 0:
+        text = help_text.strip()
+        info["direct_peak_vram_counter"]["reason"] = (
+            "nvidia-smi capability probe failed"
+            + (f": {text.splitlines()[0]}" if text else f": return code {help_result.returncode}")
+        )
+        return info
     info["supports_process_gpu_memory"] = (
         "used_memory" in help_text and "pid" in help_text
     )

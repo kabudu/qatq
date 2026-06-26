@@ -2045,6 +2045,61 @@ with tempfile.TemporaryDirectory() as raw_tmp:
 }
 
 #[test]
+fn live_vram_hardware_counter_report_rejects_failed_nvidia_smi_capability_probe() {
+    let output = run_python_snippet(
+        r#"
+import json, os, subprocess, sys, tempfile
+from pathlib import Path
+
+with tempfile.TemporaryDirectory() as raw_tmp:
+    tmp = Path(raw_tmp)
+    fake = tmp / "nvidia-smi"
+    output = tmp / "hardware.json"
+    fake.write_text("\n".join([
+        '#!/usr/bin/env python3',
+        'import sys',
+        'if "--help-query-compute-apps" in sys.argv:',
+        '    print("pid\\\\nused_memory")',
+        '    raise SystemExit(2)',
+        'raise SystemExit(2)',
+    ]) + "\n", encoding="utf-8")
+    fake.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = str(tmp) + os.pathsep + env.get("PATH", "")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/llama_cpp_live_vram_hardware_counters.py",
+            "--output",
+            str(output),
+            "--sample-pid",
+            "4242",
+            "--require-direct-peak-vram",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    assert result.returncode == 1
+    report = json.loads(output.read_text())
+    assert report["nvidia_smi"]["help_returncode"] == 2
+    assert report["nvidia_smi"]["supports_process_gpu_memory"] is False
+    assert report["direct_peak_vram_counter"]["available"] is False
+    assert "capability probe failed" in report["direct_peak_vram_counter"]["reason"]
+    assert "capability probe failed" in result.stdout
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn live_vram_abort_probe_dry_run_records_fail_closed_artifacts() {
     let output = run_python_snippet(
         r#"
