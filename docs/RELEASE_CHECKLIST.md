@@ -67,6 +67,22 @@ cargo test --test kv_stress -- --ignored --nocapture
 python3 scripts/llama_cpp_kv_matrix.py --max-cases 2
 ```
 
+For a patch release whose source diff is limited to additive wrappers around
+the existing exact codec, tests, and documentation, the pinned llama.cpp matrix
+may be inherited when all of the following are recorded in a release evidence
+document:
+
+- the llama.cpp adapter patch and matrix harness are unchanged from the prior
+  release tag;
+- the existing matrix report and adapter patch SHA-256 digests are recorded;
+- the exact codec, container, public compression gates, and full KV stress
+  matrix are rerun on the release commit;
+- no runtime or compression claim is broadened by the release.
+
+This exception does not apply to changes in codec strategy selection, QATC wire
+format, tensor decoding, the llama.cpp adapter, or runtime claims. Those changes
+must rerun the live matrix before tagging.
+
 After regenerating benchmark outputs, review
 [`PUBLIC_COMPRESSION_SUMMARY.md`](PUBLIC_COMPRESSION_SUMMARY.md) and update it
 if the public fixture ratios changed.
@@ -128,8 +144,8 @@ workflow rejects tags that are cut from any other branch.
 Use annotated tags only:
 
 ```sh
-git tag -a v0.1.0 -m "QATQ v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.2 -m "QATQ v0.1.2"
+git push origin v0.1.2
 ```
 
 ## crates.io Publication
@@ -145,7 +161,7 @@ Publishing to crates.io is manual:
 5. Confirm the repository has a protected GitHub environment named `crates-io`
    with required reviewer approval.
 6. Run the `Publish crate` workflow from `master`.
-7. Enter the expected package version, for example `0.1.0`.
+7. Enter the expected package version, for example `0.1.2`.
 8. Approve the `crates-io` environment deployment.
 
 The workflow runs format, check, test, package, and `cargo publish --dry-run`

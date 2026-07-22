@@ -15,22 +15,22 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 
 | group | dataset | values | codec | exact strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | zstd-raw-f32le |  | 15285 | 0.4665 | 95.32 | 30.96 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lz4-raw-f32le |  | 22614 | 0.6901 | 44.78 | 11.13 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact | byte-plane-zstd | 12509 | 0.3817 | 381.54 | 63.93 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact-container | qatc-container | 12545 | 0.3828 | 386.49 | 75.46 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | zstd-raw-f32le |  | 19003 | 0.2900 | 123.20 | 39.94 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lz4-raw-f32le |  | 30757 | 0.4693 | 61.70 | 15.17 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact | quaternion-chain-zstd | 7554 | 0.1153 | 639.40 | 119.37 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact-container | qatc-container | 7590 | 0.1158 | 643.84 | 127.54 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | zstd-raw-f32le |  | 44539 | 0.9061 | 43.63 | 36.27 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lz4-raw-f32le |  | 49350 | 1.0040 | 6.44 | 1.91 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact | byte-plane-zstd | 32108 | 0.6532 | 680.88 | 106.55 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact-container | qatc-container | 32144 | 0.6540 | 722.88 | 140.21 | yes | 0.000000 | 0.000000 |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | zstd-raw-f32le |  | 676 | 0.0413 | 14.21 | 3.24 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | lz4-raw-f32le |  | 1103 | 0.0673 | 2.23 | 0.51 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact | quaternion-chain-zstd | 199 | 0.0121 | 166.97 | 28.64 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact-container | qatc-container | 235 | 0.0143 | 168.20 | 28.87 | yes | 0.000000 | NaN |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | zstd-raw-f32le |  | 15285 | 0.4665 | 97.43 | 31.21 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lz4-raw-f32le |  | 22614 | 0.6901 | 46.75 | 11.51 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact | byte-plane-zstd | 12509 | 0.3817 | 398.24 | 65.80 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact-container | qatc-container | 12545 | 0.3828 | 404.35 | 77.64 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | zstd-raw-f32le |  | 19003 | 0.2900 | 132.33 | 42.00 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lz4-raw-f32le |  | 30757 | 0.4693 | 68.39 | 16.06 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact | quaternion-chain-zstd | 7554 | 0.1153 | 666.24 | 119.50 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact-container | qatc-container | 7590 | 0.1158 | 693.17 | 122.59 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | zstd-raw-f32le |  | 44539 | 0.9061 | 45.26 | 36.46 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lz4-raw-f32le |  | 49350 | 1.0040 | 7.28 | 2.15 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact | byte-plane-zstd | 32108 | 0.6532 | 713.92 | 107.35 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact-container | qatc-container | 32144 | 0.6540 | 746.20 | 141.05 | yes | 0.000000 | 0.000000 |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | zstd-raw-f32le |  | 676 | 0.0413 | 14.78 | 3.44 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | lz4-raw-f32le |  | 1103 | 0.0673 | 2.48 | 0.61 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact | quaternion-chain-zstd | 199 | 0.0121 | 172.75 | 29.36 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact-container | qatc-container | 235 | 0.0143 | 172.41 | 29.77 | yes | 0.000000 | NaN |
 
 ## Interpretation
 
