@@ -54,6 +54,10 @@ Accepted on 2026-06-22:
 
 ## Post-Freeze Change Policy
 
+Additive exact-container APIs may be introduced without changing the frozen
+CLI or QATC v2 wire format. The opaque-word and bounded-inspection APIs added
+after v0.1.1 follow that rule: existing symbols and encoded bytes are unchanged.
+
 Before crates.io publication, any API or CLI rename must include:
 
 - an explicit changelog entry;

@@ -453,6 +453,33 @@ assert_eq!(decoded_count, 3);
 # Ok::<(), qatq::QatqError>(())
 ```
 
+Protocols that carry arbitrary 32-bit state can use the opaque-word API. It
+preserves every word exactly, including bit patterns that represent NaNs as
+`f32`, while retaining the existing QATC v2 wire format. Inspection validates
+aggregate limits, the container checksum, and each chunk's decoded word count
+before chunk bodies are decoded:
+
+```rust
+use qatq::{
+    decode_qatq_exact_u32_container, encode_qatq_exact_u32_container,
+    inspect_qatq_exact_container_with_limits, QatcDecodeLimits,
+};
+
+let words = [0_u32, 0x7fc0_0001, u32::MAX];
+let max_words_per_chunk = 2;
+let payload = encode_qatq_exact_u32_container(&words, max_words_per_chunk)?;
+let metadata = inspect_qatq_exact_container_with_limits(
+    &payload,
+    QatcDecodeLimits::default(),
+    max_words_per_chunk,
+)?;
+let decoded = decode_qatq_exact_u32_container(&payload, max_words_per_chunk)?;
+
+assert_eq!(metadata.total_values, words.len());
+assert_eq!(decoded, words);
+# Ok::<(), qatq::QatqError>(())
+```
+
 ## External Validation
 
 QATQ does not depend on any external runtime. Historical runtime-integration
