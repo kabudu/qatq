@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.1.2 - 2026-07-22
+
 ### Added
 
 - Added exact opaque `u32` QATC encode/decode helpers for non-tensor protocols.
