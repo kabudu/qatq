@@ -37,10 +37,13 @@ jobs:
       - name: Reject local paths
         shell: bash
         run: |
+          # Assemble the expression at runtime so this guard does not match its
+          # own workflow source when ripgrep includes hidden directories.
+          forbidden="/Users/"kabudu"|deliberium-"group"|/home/"kabudu
           if command -v rg >/dev/null 2>&1; then
-            ! rg -n "/Users/kabudu|deliberium-group|/home/kabudu" --glob '!target/**' --glob '!.git/**' .
+            ! rg -n "$forbidden" --glob '!target/**' --glob '!.git/**' .
           else
-            ! grep -R -n -E --exclude-dir=.git --exclude-dir=target "/Users/kabudu|deliberium-group|/home/kabudu" .
+            ! grep -R -n -E --exclude-dir=.git --exclude-dir=target "$forbidden" .
           fi
       - name: Package
         run: cargo package --locked

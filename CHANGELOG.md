@@ -4,6 +4,11 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Fixed
+
+- Prevented the crates.io publication path-scrub guard from matching its own
+  workflow source on runners whose search includes hidden directories.
+
 ## 0.1.2 - 2026-07-22
 
 ### Added
