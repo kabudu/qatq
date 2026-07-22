@@ -4,6 +4,12 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added exact opaque byte QATC encode, decode and bounded chunk-visitor APIs.
+  They preserve the existing QATC v2 wire format, require the surrounding
+  protocol's authenticated byte length, and reject non-canonical padding.
+
 ## 0.1.3 - 2026-07-22
 
 ### Fixed
