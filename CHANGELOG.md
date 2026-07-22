@@ -4,6 +4,11 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Fixed
+
+- Preflight the caller-authenticated decoded byte length against QATC aggregate
+  limits before the exact-byte decode API attempts its output allocation.
+
 ## 0.1.4 - 2026-07-22
 
 ### Added
