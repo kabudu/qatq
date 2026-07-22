@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.1.4 - 2026-07-22
+
 ### Added
 
 - Added exact opaque byte QATC encode, decode and bounded chunk-visitor APIs.
