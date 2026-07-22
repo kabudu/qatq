@@ -204,6 +204,21 @@ pub struct QatcDecodeLimits {
     pub max_chunk_bytes: usize,
 }
 
+/// Validated metadata for one exact payload in a QATC container.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct QatcExactChunkMetadata {
+    pub encoded_bytes: usize,
+    pub decoded_values: usize,
+}
+
+/// Validated metadata for an exact QATC container.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QatcExactContainerMetadata {
+    pub encoded_bytes: usize,
+    pub total_values: usize,
+    pub chunks: Vec<QatcExactChunkMetadata>,
+}
+
 impl Default for QatcDecodeLimits {
     fn default() -> Self {
         Self {
@@ -1310,6 +1325,20 @@ pub fn encode_qatq_exact_container(
     encode_qatq_exact_container_with_config(values, max_values_per_chunk, Phase1Config::default())
 }
 
+/// Encodes opaque 32-bit words through the exact QATC format.
+///
+/// Every bit pattern is preserved, including patterns that would represent
+/// NaNs if interpreted as `f32`. The resulting bytes are identical to calling
+/// [`encode_qatq_exact_container`] after mapping each word with
+/// [`f32::from_bits`].
+pub fn encode_qatq_exact_u32_container(
+    words: &[u32],
+    max_words_per_chunk: usize,
+) -> Result<Vec<u8>, QatqError> {
+    let values: Vec<f32> = words.iter().copied().map(f32::from_bits).collect();
+    encode_qatq_exact_container(&values, max_words_per_chunk)
+}
+
 pub fn encode_qatq_exact_container_with_config(
     values: &[f32],
     max_values_per_chunk: usize,
@@ -1383,6 +1412,77 @@ pub fn decode_qatq_exact_container_with_limits(
         return Err(QatqError::InvalidContainer);
     }
     Ok(values)
+}
+
+/// Validates an exact QATC container and reports its canonical chunk layout
+/// without decoding chunk bodies.
+///
+/// `max_values_per_chunk` is the chunk size declared by the surrounding
+/// protocol or selected by the encoder. Requiring it here makes non-final
+/// short chunks and oversized chunks reject before exact payload decoding
+/// allocates their outputs.
+pub fn inspect_qatq_exact_container_with_limits(
+    payload: &[u8],
+    limits: QatcDecodeLimits,
+    max_values_per_chunk: usize,
+) -> Result<QatcExactContainerMetadata, QatqError> {
+    if max_values_per_chunk == 0 || max_values_per_chunk > MAX_VALUES_PER_PAYLOAD {
+        return Err(QatqError::InvalidChunkSize(max_values_per_chunk));
+    }
+    let (header, body, chunk_count) = container_body_and_chunk_count(payload, limits)?;
+    let index = read_container_chunk_index(body, chunk_count, header.total_values, limits)?;
+    verify_container_checksum(&header, body, &index)?;
+
+    let mut chunks = Vec::with_capacity(index.len());
+    for (position, (chunk_start, chunk_end)) in index.iter().copied().enumerate() {
+        let chunk = &body[chunk_start..chunk_end];
+        let chunk_header = Header::parse_for_mode(chunk, CodecMode::QatqExact)?;
+        let is_final = position + 1 == chunk_count;
+        let valid_count = if header.total_values == 0 {
+            chunk_count == 1 && chunk_header.value_count == 0
+        } else if is_final {
+            (1..=max_values_per_chunk).contains(&chunk_header.value_count)
+        } else {
+            chunk_header.value_count == max_values_per_chunk
+        };
+        if !valid_count {
+            return Err(QatqError::InvalidContainer);
+        }
+        chunks.push(QatcExactChunkMetadata {
+            encoded_bytes: chunk.len(),
+            decoded_values: chunk_header.value_count,
+        });
+    }
+
+    Ok(QatcExactContainerMetadata {
+        encoded_bytes: payload.len(),
+        total_values: header.total_values,
+        chunks,
+    })
+}
+
+/// Decodes an exact QATC container as opaque 32-bit words.
+pub fn decode_qatq_exact_u32_container(
+    payload: &[u8],
+    max_words_per_chunk: usize,
+) -> Result<Vec<u32>, QatqError> {
+    decode_qatq_exact_u32_container_with_limits(
+        payload,
+        QatcDecodeLimits::default(),
+        max_words_per_chunk,
+    )
+}
+
+/// Decodes an exact QATC container as opaque 32-bit words after validating
+/// both aggregate resource limits and the declared canonical chunk layout.
+pub fn decode_qatq_exact_u32_container_with_limits(
+    payload: &[u8],
+    limits: QatcDecodeLimits,
+    max_words_per_chunk: usize,
+) -> Result<Vec<u32>, QatqError> {
+    inspect_qatq_exact_container_with_limits(payload, limits, max_words_per_chunk)?;
+    decode_qatq_exact_container_with_limits(payload, limits)
+        .map(|values| values.into_iter().map(f32::to_bits).collect())
 }
 
 pub fn for_each_qatq_exact_container_payload(
@@ -4905,6 +5005,92 @@ mod tests {
             Err(QatqError::ContainerLimitExceeded("total values"))
         );
         assert_eq!(visited, 0);
+    }
+
+    #[test]
+    fn qatq_exact_u32_container_preserves_every_bit_pattern() {
+        let words = [
+            0,
+            0x8000_0000,
+            0x7f80_0000,
+            0xff80_0000,
+            0x7fc0_0001,
+            0x7fa0_1234,
+            u32::MAX,
+        ];
+        let values: Vec<f32> = words.iter().copied().map(f32::from_bits).collect();
+
+        let encoded = encode_qatq_exact_u32_container(&words, 3).unwrap();
+        let legacy_encoded = encode_qatq_exact_container(&values, 3).unwrap();
+        let decoded = decode_qatq_exact_u32_container(&encoded, 3).unwrap();
+
+        assert_eq!(encoded, legacy_encoded);
+        assert_eq!(decoded, words);
+    }
+
+    #[test]
+    fn qatq_exact_container_inspection_reports_canonical_layout() {
+        let encoded = encode_qatq_exact_u32_container(&[10, 20, 30, 40, 50], 2).unwrap();
+        let metadata =
+            inspect_qatq_exact_container_with_limits(&encoded, QatcDecodeLimits::default(), 2)
+                .unwrap();
+
+        assert_eq!(metadata.encoded_bytes, encoded.len());
+        assert_eq!(metadata.total_values, 5);
+        assert_eq!(
+            metadata
+                .chunks
+                .iter()
+                .map(|chunk| chunk.decoded_values)
+                .collect::<Vec<_>>(),
+            [2, 2, 1]
+        );
+        assert!(metadata.chunks.iter().all(|chunk| chunk.encoded_bytes > 0));
+    }
+
+    #[test]
+    fn qatq_exact_container_inspection_rejects_wrong_declared_chunk_size() {
+        let encoded = encode_qatq_exact_u32_container(&[10, 20, 30, 40, 50], 2).unwrap();
+
+        assert_eq!(
+            inspect_qatq_exact_container_with_limits(&encoded, QatcDecodeLimits::default(), 3,),
+            Err(QatqError::InvalidContainer)
+        );
+        assert_eq!(
+            decode_qatq_exact_u32_container(&encoded, 3),
+            Err(QatqError::InvalidContainer)
+        );
+    }
+
+    #[test]
+    fn qatq_exact_container_inspection_handles_empty_input() {
+        let encoded = encode_qatq_exact_u32_container(&[], 16).unwrap();
+        let metadata =
+            inspect_qatq_exact_container_with_limits(&encoded, QatcDecodeLimits::default(), 16)
+                .unwrap();
+
+        assert_eq!(metadata.total_values, 0);
+        assert_eq!(metadata.chunks.len(), 1);
+        assert_eq!(metadata.chunks[0].decoded_values, 0);
+        assert!(
+            decode_qatq_exact_u32_container(&encoded, 16)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn qatq_exact_u32_decode_enforces_limits_before_decode() {
+        let encoded = encode_qatq_exact_u32_container(&[1, 2, 3], 2).unwrap();
+        let limits = QatcDecodeLimits {
+            max_total_values: 2,
+            ..QatcDecodeLimits::default()
+        };
+
+        assert_eq!(
+            decode_qatq_exact_u32_container_with_limits(&encoded, limits, 2),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
     }
 
     #[test]

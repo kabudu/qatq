@@ -4,6 +4,12 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added exact opaque `u32` QATC encode/decode helpers for non-tensor protocols.
+- Added public, resource-bounded QATC chunk metadata inspection so integrations
+  can validate decoded counts and canonical chunk layout before body decoding.
+
 ## 0.1.1 - 2026-06-23
 
 ### Fixed
