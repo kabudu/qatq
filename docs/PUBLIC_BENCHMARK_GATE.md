@@ -19,11 +19,11 @@
 
 | dataset | check | status | details |
 | --- | --- | --- | --- |
-| qatq-public / bf16-kv-ramp-64x8x16 | qatq-exact | pass | values 8192, strategy byte-plane-zstd, ratio 0.3817, encode 369.03us, decode 61.11us (7.4602ns/value), exact_bits=true |
-| qatq-public / bf16-kv-ramp-64x8x16 | qatq-exact-container | pass | values 8192, ratio 0.3828, decode 74.34us (9.0743ns/value), exact_bits=true |
-| qatq-public / bf16-kv-wave-128x8x16 | qatq-exact | pass | values 16384, strategy quaternion-chain-zstd, ratio 0.1153, encode 631.66us, decode 111.24us (6.7893ns/value), exact_bits=true |
-| qatq-public / bf16-kv-wave-128x8x16 | qatq-exact-container | pass | values 16384, ratio 0.1158, decode 120.21us (7.3369ns/value), exact_bits=true |
-| qatq-public / f32-noisy-pass-through-64x12x16 | qatq-exact | pass | values 12288, strategy byte-plane-zstd, ratio 0.6532, encode 683.11us, decode 105.80us (8.6102ns/value), exact_bits=true |
-| qatq-public / f32-noisy-pass-through-64x12x16 | qatq-exact-container | pass | values 12288, ratio 0.6540, decode 138.57us (11.2765ns/value), exact_bits=true |
-| qatq-public / stress-signed-zero-nan-inf | qatq-exact | pass | values 4096, strategy quaternion-chain-zstd, ratio 0.0121, encode 167.28us, decode 28.59us (6.9795ns/value), exact_bits=true |
-| qatq-public / stress-signed-zero-nan-inf | qatq-exact-container | pass | values 4096, ratio 0.0143, decode 29.15us (7.1156ns/value), exact_bits=true |
+| qatq-public / bf16-kv-ramp-64x8x16 | qatq-exact | pass | values 8192, strategy byte-plane-zstd, ratio 0.3817, encode 369.02us, decode 61.02us (7.4491ns/value), exact_bits=true |
+| qatq-public / bf16-kv-ramp-64x8x16 | qatq-exact-container | pass | values 8192, ratio 0.3828, decode 74.00us (9.0337ns/value), exact_bits=true |
+| qatq-public / bf16-kv-wave-128x8x16 | qatq-exact | pass | values 16384, strategy quaternion-chain-zstd, ratio 0.1153, encode 635.80us, decode 115.30us (7.0374ns/value), exact_bits=true |
+| qatq-public / bf16-kv-wave-128x8x16 | qatq-exact-container | pass | values 16384, ratio 0.1158, decode 123.33us (7.5274ns/value), exact_bits=true |
+| qatq-public / f32-noisy-pass-through-64x12x16 | qatq-exact | pass | values 12288, strategy byte-plane-zstd, ratio 0.6532, encode 684.87us, decode 105.84us (8.6135ns/value), exact_bits=true |
+| qatq-public / f32-noisy-pass-through-64x12x16 | qatq-exact-container | pass | values 12288, ratio 0.6540, decode 139.95us (11.3892ns/value), exact_bits=true |
+| qatq-public / stress-signed-zero-nan-inf | qatq-exact | pass | values 4096, strategy quaternion-chain-zstd, ratio 0.0121, encode 167.64us, decode 28.61us (6.9846ns/value), exact_bits=true |
+| qatq-public / stress-signed-zero-nan-inf | qatq-exact-container | pass | values 4096, ratio 0.0143, decode 29.16us (7.1188ns/value), exact_bits=true |
