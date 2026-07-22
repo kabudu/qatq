@@ -493,6 +493,14 @@ assert_eq!(visited, words);
 # Ok::<(), qatq::QatqError>(())
 ```
 
+Byte-oriented protocols can use `encode_qatq_exact_bytes_container`,
+`decode_qatq_exact_bytes_container`, and
+`for_each_qatq_exact_bytes_container_chunk_with_limits`. The surrounding
+protocol supplies its authenticated decoded-byte length. QATQ then validates
+that length and canonical zero padding before returning bytes or invoking the
+first visitor callback. The byte API emits the same QATC v2 bytes as canonical
+little-endian packing through the opaque-word API.
+
 ## External Validation
 
 QATQ does not depend on any external runtime. Historical runtime-integration
