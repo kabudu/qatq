@@ -55,7 +55,7 @@ name = "qatq"
 path = "src/main.rs"
 
 [dependencies]
-lz4_flex = "0.13.1"
+lz4_flex = "0.14.0"
 zstd = "0.13.3"
 
 # The profile that 'dist' will build with
