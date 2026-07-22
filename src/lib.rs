@@ -1534,6 +1534,7 @@ pub fn decode_qatq_exact_bytes_container_with_limits(
     limits: QatcDecodeLimits,
     max_words_per_chunk: usize,
 ) -> Result<Vec<u8>, QatqError> {
+    preflight_qatq_exact_decoded_bytes(decoded_bytes, limits)?;
     let mut bytes = Vec::new();
     bytes
         .try_reserve_exact(decoded_bytes)
@@ -1616,10 +1617,7 @@ pub fn for_each_qatq_exact_bytes_container_chunk_with_limits(
     max_words_per_chunk: usize,
     mut visitor: impl FnMut(&[u8]) -> Result<(), QatqError>,
 ) -> Result<QatcExactContainerMetadata, QatqError> {
-    let expected_words = decoded_bytes
-        .checked_add(3)
-        .ok_or(QatqError::ContainerLimitExceeded("total values"))?
-        / 4;
+    let expected_words = preflight_qatq_exact_decoded_bytes(decoded_bytes, limits)?;
     let metadata = inspect_qatq_exact_container_with_limits(payload, limits, max_words_per_chunk)?;
     if metadata.total_values != expected_words {
         return Err(QatqError::InvalidContainer);
@@ -1662,6 +1660,20 @@ pub fn for_each_qatq_exact_bytes_container_chunk_with_limits(
         return Err(QatqError::InvalidContainer);
     }
     Ok(metadata)
+}
+
+fn preflight_qatq_exact_decoded_bytes(
+    decoded_bytes: usize,
+    limits: QatcDecodeLimits,
+) -> Result<usize, QatqError> {
+    let expected_words = decoded_bytes
+        .checked_add(3)
+        .ok_or(QatqError::ContainerLimitExceeded("total values"))?
+        / 4;
+    if expected_words > limits.max_total_values {
+        return Err(QatqError::ContainerLimitExceeded("total values"));
+    }
+    Ok(expected_words)
 }
 
 pub fn for_each_qatq_exact_container_payload(
@@ -5261,6 +5273,33 @@ mod tests {
             decode_qatq_exact_bytes_container(&encoded, bytes.len() + 4, 2),
             Err(QatqError::InvalidContainer)
         );
+    }
+
+    #[test]
+    fn qatq_exact_byte_decode_preflights_declared_length_before_allocation() {
+        let encoded = encode_qatq_exact_bytes_container(b"four", 1).unwrap();
+        let limits = QatcDecodeLimits {
+            max_total_values: 1,
+            ..QatcDecodeLimits::default()
+        };
+        let mut callbacks = 0;
+
+        assert_eq!(
+            decode_qatq_exact_bytes_container_with_limits(&encoded, usize::MAX, limits, 1),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
+        assert_eq!(
+            decode_qatq_exact_bytes_container_with_limits(&encoded, 8, limits, 1),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
+        assert_eq!(
+            for_each_qatq_exact_bytes_container_chunk_with_limits(&encoded, 8, limits, 1, |_| {
+                callbacks += 1;
+                Ok(())
+            },),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
+        assert_eq!(callbacks, 0);
     }
 
     #[test]
