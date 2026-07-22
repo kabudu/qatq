@@ -462,6 +462,7 @@ before chunk bodies are decoded:
 ```rust
 use qatq::{
     decode_qatq_exact_u32_container, encode_qatq_exact_u32_container,
+    for_each_qatq_exact_u32_container_chunk_with_limits,
     inspect_qatq_exact_container_with_limits, QatcDecodeLimits,
 };
 
@@ -477,6 +478,18 @@ let decoded = decode_qatq_exact_u32_container(&payload, max_words_per_chunk)?;
 
 assert_eq!(metadata.total_values, words.len());
 assert_eq!(decoded, words);
+
+let mut visited = Vec::new();
+for_each_qatq_exact_u32_container_chunk_with_limits(
+    &payload,
+    QatcDecodeLimits::default(),
+    max_words_per_chunk,
+    |chunk| {
+        visited.extend_from_slice(chunk);
+        Ok(())
+    },
+)?;
+assert_eq!(visited, words);
 # Ok::<(), qatq::QatqError>(())
 ```
 

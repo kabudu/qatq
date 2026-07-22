@@ -1485,6 +1485,43 @@ pub fn decode_qatq_exact_u32_container_with_limits(
         .map(|values| values.into_iter().map(f32::to_bits).collect())
 }
 
+/// Visits an exact QATC container as bounded chunks of opaque 32-bit words.
+///
+/// All container framing, aggregate limits, checksum, and canonical chunk
+/// counts are validated before the first callback. Only one decoded chunk is
+/// materialised at a time.
+pub fn for_each_qatq_exact_u32_container_chunk(
+    payload: &[u8],
+    max_words_per_chunk: usize,
+    visitor: impl FnMut(&[u32]) -> Result<(), QatqError>,
+) -> Result<QatcExactContainerMetadata, QatqError> {
+    for_each_qatq_exact_u32_container_chunk_with_limits(
+        payload,
+        QatcDecodeLimits::default(),
+        max_words_per_chunk,
+        visitor,
+    )
+}
+
+/// Visits an exact QATC container as bounded chunks of opaque 32-bit words
+/// under explicit aggregate decode limits.
+pub fn for_each_qatq_exact_u32_container_chunk_with_limits(
+    payload: &[u8],
+    limits: QatcDecodeLimits,
+    max_words_per_chunk: usize,
+    mut visitor: impl FnMut(&[u32]) -> Result<(), QatqError>,
+) -> Result<QatcExactContainerMetadata, QatqError> {
+    let metadata = inspect_qatq_exact_container_with_limits(payload, limits, max_words_per_chunk)?;
+    for_each_qatq_exact_container_payload_with_limits(payload, limits, |chunk| {
+        let words: Vec<u32> = decode_qatq_exact(chunk)?
+            .into_iter()
+            .map(f32::to_bits)
+            .collect();
+        visitor(&words)
+    })?;
+    Ok(metadata)
+}
+
 pub fn for_each_qatq_exact_container_payload(
     payload: &[u8],
     mut visitor: impl FnMut(&[u8]) -> Result<(), QatqError>,
@@ -5091,6 +5128,48 @@ mod tests {
             decode_qatq_exact_u32_container_with_limits(&encoded, limits, 2),
             Err(QatqError::ContainerLimitExceeded("total values"))
         );
+    }
+
+    #[test]
+    fn qatq_exact_u32_chunk_visitor_is_bounded_and_bit_exact() {
+        let words = [0, 0x7fc0_0001, u32::MAX, 4, 5];
+        let encoded = encode_qatq_exact_u32_container(&words, 2).unwrap();
+        let mut chunk_lengths = Vec::new();
+        let mut decoded = Vec::new();
+
+        let metadata = for_each_qatq_exact_u32_container_chunk(&encoded, 2, |chunk| {
+            chunk_lengths.push(chunk.len());
+            decoded.extend_from_slice(chunk);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(chunk_lengths, [2, 2, 1]);
+        assert_eq!(decoded, words);
+        assert_eq!(metadata.total_values, words.len());
+    }
+
+    #[test]
+    fn qatq_exact_u32_chunk_visitor_validates_before_callbacks() {
+        let encoded = encode_qatq_exact_u32_container(&[1, 2, 3], 2).unwrap();
+        let mut callbacks = 0;
+
+        assert_eq!(
+            for_each_qatq_exact_u32_container_chunk_with_limits(
+                &encoded,
+                QatcDecodeLimits {
+                    max_total_values: 2,
+                    ..QatcDecodeLimits::default()
+                },
+                2,
+                |_| {
+                    callbacks += 1;
+                    Ok(())
+                },
+            ),
+            Err(QatqError::ContainerLimitExceeded("total values"))
+        );
+        assert_eq!(callbacks, 0);
     }
 
     #[test]
