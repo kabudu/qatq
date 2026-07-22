@@ -9,6 +9,11 @@ All notable changes to QATQ are recorded here.
 - Prevented the crates.io publication path-scrub guard from matching its own
   workflow source on runners whose search includes hidden directories.
 
+### Added
+
+- Added an opaque `u32` QATC chunk visitor that validates the complete
+  container before callbacks and materialises only one decoded chunk at a time.
+
 ## 0.1.2 - 2026-07-22
 
 ### Added
