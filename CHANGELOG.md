@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.1.3 - 2026-07-22
+
 ### Fixed
 
 - Prevented the crates.io publication path-scrub guard from matching its own

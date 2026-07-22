@@ -1,6 +1,6 @@
 [package]
 name = "qatq"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.96"
 description = "Exact tensor-aware compression for LLM KV caches and runtime migration"

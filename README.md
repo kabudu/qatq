@@ -9,7 +9,7 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
   <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
   <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
-  <img alt="Crate version 0.1.2" src="https://img.shields.io/badge/crate-0.1.2-2a4e66?style=flat-square">
+  <img alt="Crate version 0.1.3" src="https://img.shields.io/badge/crate-0.1.3-2a4e66?style=flat-square">
 </p>
 
 # QATQ
@@ -107,13 +107,13 @@ cargo-dist installer:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/kabudu/qatq/releases/download/v0.1.2/qatq-installer.sh | sh
+  https://github.com/kabudu/qatq/releases/download/v0.1.3/qatq-installer.sh | sh
 ```
 
 On Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.1.2/qatq-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.1.3/qatq-installer.ps1 | iex"
 ```
 
 ## Attribution
