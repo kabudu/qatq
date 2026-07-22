@@ -167,7 +167,11 @@ def main() -> int:
 
 def parse_models(values: list[str]) -> list[ModelSpec]:
     if not values:
-        values = [f"{label}:{path}" for label, path in DEFAULT_MODELS if Path(path).exists()]
+        values = [
+            f"{label}:{path}"
+            for label, path in DEFAULT_MODELS
+            if path and Path(path).is_file()
+        ]
     models = []
     for value in values:
         label, sep, path = value.partition(":")

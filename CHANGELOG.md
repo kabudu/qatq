@@ -4,10 +4,14 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.1.5 - 2026-07-22
+
 ### Fixed
 
 - Preflight the caller-authenticated decoded byte length against QATC aggregate
   limits before the exact-byte decode API attempts its output allocation.
+- Reject empty default llama.cpp model paths as missing configuration instead
+  of misreading the repository directory as a model.
 
 ## 0.1.4 - 2026-07-22
 
