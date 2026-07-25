@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.2.1 - 2026-07-25
+
 ### Changed
 
 - `qatq encode` now defaults to the production `qatq-exact` mode when `--mode`
