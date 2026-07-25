@@ -17,7 +17,7 @@ body:
       label: Reproduction
       description: Include commands, input shape, dtype, and whether the input is public or private.
       placeholder: |
-        cargo run -- encode --mode qatq-exact --dtype f16 input.f16le output.qatq
+        cargo run -- encode --dtype f16 input.f16le output.qatq
     validations:
       required: true
   - type: input

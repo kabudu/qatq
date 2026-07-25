@@ -154,8 +154,13 @@ storage workloads.
 Encode a raw f32 little-endian tensor with QATQ exact reconstruction:
 
 ```sh
-cargo run -- encode --mode qatq-exact input.f32le output.qatq
+cargo run -- encode input.f32le output.qatq
 ```
+
+`qatq-exact` is the default mode. QATQ automatically selects the applicable
+lossless internal strategy; users do not select byte-plane, adjacent-XOR,
+quaternion-chain, or other exact strategies themselves. Pass `--mode` only to
+explicitly choose a comparator or research mode.
 
 Decode back to raw f32 little-endian:
 
@@ -166,8 +171,8 @@ cargo run -- decode output.qatq restored.f32le
 Encode native raw bf16 or f16 little-endian tensors without widening to f32:
 
 ```sh
-cargo run -- encode --mode qatq-exact --dtype bf16 input.bf16le output.qatq
-cargo run -- encode --mode qatq-exact --dtype f16 input.f16le output.qatq
+cargo run -- encode --dtype bf16 input.bf16le output.qatq
+cargo run -- encode --dtype f16 input.f16le output.qatq
 ```
 
 Decode writes the same native little-endian tensor bytes that were encoded:
@@ -179,7 +184,7 @@ cargo run -- decode output.qatq restored.bf16le
 Use an explicit seed for reproducible QATQ exact sweeps:
 
 ```sh
-cargo run -- encode --mode qatq-exact --seed 0x51415451 input.f32le output.qatq
+cargo run -- encode --seed 0x51415451 input.f32le output.qatq
 ```
 
 For large tensors, write a QATQ exact chunk container so each embedded payload

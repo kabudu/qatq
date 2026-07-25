@@ -42,22 +42,24 @@ fn run() -> Result<(), String> {
 }
 
 fn encode_command(args: &[String]) -> Result<(), String> {
-    if args.len() < 4 {
+    if args.len() < 2 {
         print_usage();
         return Err(
-            "usage: qatq encode --mode <mode> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
+            "usage: qatq encode [--mode <mode>] [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
                 .to_string(),
         );
     }
-    if args[0] != "--mode" {
-        print_usage();
-        return Err("encode requires --mode <mode>".to_string());
-    }
 
-    let mode = parse_mode(&args[1]).map_err(|error| error.to_string())?;
+    let (mode, mut index) = if args.first().map(String::as_str) == Some("--mode") {
+        let value = args
+            .get(1)
+            .ok_or_else(|| "--mode requires a value".to_string())?;
+        (parse_mode(value).map_err(|error| error.to_string())?, 2)
+    } else {
+        (CodecMode::QatqExact, 0)
+    };
     let mut dtype = TensorDType::F32;
     let mut seed = None;
-    let mut index = 2;
     while index < args.len() && args[index].starts_with("--") {
         let value = args
             .get(index + 1)
@@ -71,7 +73,7 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     }
     if args.len() - index != 2 {
         print_usage();
-        return Err("usage: qatq encode --mode <mode> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>".to_string());
+        return Err("usage: qatq encode [--mode <mode>] [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>".to_string());
     }
     if dtype != TensorDType::F32 && mode != CodecMode::QatqExact {
         return Err("--dtype f16/bf16 is only supported with qatq-exact".to_string());
@@ -1281,8 +1283,9 @@ fn parse_dtype(value: &str) -> Result<TensorDType, String> {
 fn print_usage() {
     eprintln!("usage:");
     eprintln!(
-        "  qatq encode --mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|qatq-exact> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
+        "  qatq encode [--mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|qatq-exact>] [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
     );
+    eprintln!("    default mode: qatq-exact");
     eprintln!(
         "  qatq encode-chunked --max-values-per-chunk <usize> [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatc>"
     );
