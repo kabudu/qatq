@@ -17,13 +17,16 @@ two byte planes and compressed with Zstd level 3.
 
 ## Selection policy
 
-The encoder constructs the residual planes in one pass and counts zero bytes.
-It uses the predictor candidate only when more than half of the residual bytes
-are zero. Otherwise it retains the existing byte-plane Zstd candidate. Raw bits
-and the other exact candidates remain available as fallbacks.
+The encoder first samples at most 4,096 evenly spaced words without allocating a
+residual buffer. Only a sample with more than half zero residual bytes proceeds
+to full residual construction. The full stream must independently meet the same
+sparsity threshold before the predictor candidate can be selected. Otherwise
+the existing byte-plane Zstd candidate remains available. Raw bits and the other
+exact candidates remain available as fallbacks.
 
-This gate is deliberately cheap. It prevents the encoder from running two Zstd
-passes and avoids selecting the predictor for the tested piecewise and random
+This bounded gate prevents the encoder from running two Zstd passes or
+allocating a tensor-sized residual buffer for unsuitable inputs. It avoids
+selecting the predictor for the tested piecewise, random, and real llama.cpp KV
 fixtures.
 
 ## Method
@@ -56,17 +59,34 @@ confirmation on real runtime captures.
 ## Integrity and validation
 
 - Native f16 and bf16 arbitrary-pattern round trips remain byte-identical.
+- An exhaustive ordered stream containing every possible 16-bit word round
+  trips through the adaptive exact encoder for both native dtypes.
 - The predictor fixture verifies explicit strategy selection and rejects a
   truncated payload.
-- The complete test suite passes: 93 library tests, 14 benchmark integration
-  tests, and 21 CLI integration tests.
+- A dedicated native typed tensor fuzz target exercises both f16 and bf16
+  encode/decode.
 - The release-mode 4,096-case f32 KV stress matrix remains exact and reports
   7.88 ns/value aggregate decode time.
 
+## Live runtime validation
+
+A fresh pinned llama.cpp Phi-4 Mini matrix covered two token budgets for both
+native f16 and bf16 packed KV bundles. Every row restored exactly and retained
+the existing `byte-plane-zstd` strategy:
+
+| dtype | raw bytes | QATQ bytes | ratio | selected strategy |
+| --- | ---: | ---: | ---: | --- |
+| f16 | 2,228,224 | 1,929,497 | 0.8659 | byte-plane-zstd |
+| bf16 | 2,228,224 | 1,600,669 | 0.7184 | byte-plane-zstd |
+
+This is non-regression evidence for the bounded preflight on genuine KV data.
+It does not claim that the predictor improves these particular captures.
+
 ## Conclusion
 
-The result demonstrates additional lossless compression potential for correlated
-native 16-bit tensors. On this deterministic corpus it improves size without a
-measured throughput regression. Real f16/bf16 KV captures across multiple
-models and layouts are still required before treating the sparsity threshold as
-production-calibrated.
+The result demonstrates additional lossless compression potential for highly
+correlated native 16-bit tensors while safely retaining the established strategy
+on the tested real captures. The exactness, bounded-memory selection path, fuzz
+coverage, and real-capture non-regression evidence make the strategy suitable
+for release. Broader model and layout coverage remains necessary before making
+a general claim about predictor selection frequency or compression gains.

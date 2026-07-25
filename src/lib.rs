@@ -30,6 +30,7 @@ const QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE: u8 = 6;
 const QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD: u8 = 7;
 const QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD: u8 = 8;
 const QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD: u8 = 9;
+const NATIVE_U16_XOR_SAMPLE_WORDS: usize = 4_096;
 const BYTE_PLANE_BLOCK_ZERO: u8 = 0;
 const BYTE_PLANE_BLOCK_RAW: u8 = 1;
 const BYTE_PLANE_BLOCK_REPEAT: u8 = 2;
@@ -3241,6 +3242,9 @@ fn encode_delta_xor_byte_plane_runs_bounded(
 
 fn adjacent_xor_u16_byte_planes_if_sparse(canonical: &[u8]) -> Option<Vec<u8>> {
     debug_assert_eq!(canonical.len() % 2, 0);
+    if !adjacent_xor_u16_sample_is_sparse(canonical) {
+        return None;
+    }
     let element_count = canonical.len() / 2;
     let mut plane_bytes = vec![0_u8; canonical.len()];
     let mut zero_count = 0;
@@ -3258,6 +3262,31 @@ fn adjacent_xor_u16_byte_planes_if_sparse(canonical: &[u8]) -> Option<Vec<u8>> {
     } else {
         None
     }
+}
+
+fn adjacent_xor_u16_sample_is_sparse(canonical: &[u8]) -> bool {
+    debug_assert_eq!(canonical.len() % 2, 0);
+    let element_count = canonical.len() / 2;
+    if element_count == 0 {
+        return false;
+    }
+    let sample_count = element_count.min(NATIVE_U16_XOR_SAMPLE_WORDS);
+    let stride = element_count.div_ceil(sample_count);
+    let mut sampled_bytes = 0;
+    let mut zero_count = 0;
+    for index in (0..element_count).step_by(stride).take(sample_count) {
+        let offset = index * 2;
+        let word = u16::from_be_bytes([canonical[offset], canonical[offset + 1]]);
+        let previous = if index == 0 {
+            0
+        } else {
+            u16::from_be_bytes([canonical[offset - 2], canonical[offset - 1]])
+        };
+        let [high, low] = (word ^ previous).to_be_bytes();
+        zero_count += usize::from(high == 0) + usize::from(low == 0);
+        sampled_bytes += 2;
+    }
+    zero_count > sampled_bytes / 2
 }
 
 fn encode_zstd_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<u8>> {
@@ -4668,9 +4697,20 @@ mod tests {
         assert_eq!(decoded.dtype, TensorDType::BF16);
         assert_eq!(decoded.bytes_le, bytes);
 
-        let mut truncated = encoded;
+        let mut truncated = encoded.clone();
         truncated.pop();
         assert!(decode_qatq_exact_tensor_le(&truncated).is_err());
+
+        let body_offset = HEADER_LEN + QATQ_EXACT_PREFIX_LEN;
+        let mut residual_planes =
+            zstd::bulk::decompress(&encoded[body_offset..], bytes.len()).unwrap();
+        residual_planes[0] ^= 1;
+        let mut corrupted = encoded[..body_offset].to_vec();
+        corrupted.extend_from_slice(&zstd::bulk::compress(&residual_planes, 3).unwrap());
+        assert!(matches!(
+            decode_qatq_exact_tensor_le(&corrupted),
+            Err(QatqError::ChecksumMismatch { .. })
+        ));
     }
 
     #[test]
@@ -4690,6 +4730,40 @@ mod tests {
             assert_eq!(decoded.dtype, dtype);
             assert_eq!(decoded.bytes_le, bytes);
         }
+    }
+
+    #[test]
+    fn qatq_exact_typed_adjacent_xor_preserves_every_u16_pattern() {
+        let mut bytes = Vec::with_capacity((u16::MAX as usize + 1) * 4);
+        for word in 0..=u16::MAX {
+            bytes.extend_from_slice(&word.to_le_bytes());
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+
+        for dtype in [TensorDType::F16, TensorDType::BF16] {
+            let encoded = try_encode_qatq_exact_tensor_le(&bytes, dtype).unwrap();
+            let decoded = decode_qatq_exact_tensor_le(&encoded).unwrap();
+            assert_eq!(decoded.dtype, dtype);
+            assert_eq!(decoded.bytes_le, bytes);
+        }
+    }
+
+    #[test]
+    fn native_u16_xor_sample_rejects_random_bits_and_accepts_smooth_words() {
+        let mut random = Vec::new();
+        let mut state = 0x5141_5451_c0de_f00d_u64;
+        for _ in 0..16_384 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            random.extend_from_slice(&(state as u16).to_be_bytes());
+        }
+        assert!(!adjacent_xor_u16_sample_is_sparse(&random));
+
+        let smooth: Vec<u8> = (0..16_384_u16)
+            .flat_map(|word| word.to_be_bytes())
+            .collect();
+        assert!(adjacent_xor_u16_sample_is_sparse(&smooth));
     }
 
     #[test]

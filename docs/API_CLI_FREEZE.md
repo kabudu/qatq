@@ -58,6 +58,13 @@ Additive exact-container APIs may be introduced without changing the frozen
 CLI or QATC v2 wire format. The opaque-word and bounded-inspection APIs added
 after v0.1.1 follow that rule: existing symbols and encoded bytes are unchanged.
 
+QATQ 0.2.0 adds `QatqExactStrategy::AdjacentXorBytePlaneZstd` and exact strategy
+identifier `9` for native f16/bf16 payloads. New decoders remain backward
+compatible with all version-1 QATQ envelopes and QATC v2 containers. Older
+decoders reject payloads that select the new identifier rather than silently
+misdecoding them. Because adding a public Rust enum variant can break exhaustive
+downstream matches, this is released as 0.2.0 rather than a 0.1.x patch.
+
 Before crates.io publication, any API or CLI rename must include:
 
 - an explicit changelog entry;

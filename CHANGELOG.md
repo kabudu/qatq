@@ -7,9 +7,13 @@ All notable changes to QATQ are recorded here.
 ### Added
 
 - Added a sparsity-gated adjacent-XOR byte-plane Zstd strategy for native f16
-  and bf16 tensors. The reversible predictor is selected only when more than
-  half of its residual bytes are zero, preserves the original bytes exactly,
-  and leaves the existing byte-plane Zstd path in place otherwise.
+  and bf16 tensors. A bounded 4,096-word sample avoids full residual allocation
+  for unsuitable inputs; the reversible predictor is selected only when both
+  the sample and complete residual stream contain more than half zero bytes.
+  Original bytes remain exact and the existing byte-plane Zstd path remains the
+  fallback.
+- Added a native f16/bf16 exact round-trip fuzz target and exhaustive ordered
+  coverage of every 16-bit word pattern.
 
 ## 0.1.5 - 2026-07-22
 

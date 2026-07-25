@@ -8,6 +8,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | --- | --- | --- |
 | Exact codec | ready for v0.1.0 | `cargo test`, public fixtures, exact checksum verification. |
 | Native typed tensors | ready for v0.1.0 | f32/f16/bf16 encode/decode and QATC tests. |
+| Native 16-bit XOR strategy | ready for v0.2.0 | exhaustive u16-pattern tests, bounded sparsity preflight, typed fuzz target, deterministic benchmarks, and fresh f16/bf16 llama.cpp non-regression matrix. |
 | QATC container | hardened for v0.1.0 | decode limits, checksum validation, hostile count/length CLI tests. |
 | Public compression gates | ready for v0.1.0 | `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`. |
 | Deterministic KV stress | ready for v0.1.0 | ignored stress test plus scheduled workflow. |
@@ -34,7 +35,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 ## Current Claim
 
 QATQ can exactly compress and restore native tensor bytes, including real
-llama.cpp f16 KV-cache captures. In a scoped external Rust live-migration run,
+llama.cpp f16 and bf16 KV-cache captures. In a scoped external Rust live-migration run,
 standalone QATQ preserved exact task behavior through 128 generated tokens and
 transferred 14,004,990 bytes for streamed block artifacts that measured
 50,331,648 raw bytes, 20,405,381 zstd bytes, and 28,739,217 lz4 bytes. That is
