@@ -9,7 +9,7 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
   <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
   <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
-  <img alt="Crate version 0.2.1" src="https://img.shields.io/badge/crate-0.2.1-2a4e66?style=flat-square">
+  <img alt="Crate version 0.3.0" src="https://img.shields.io/badge/crate-0.3.0-2a4e66?style=flat-square">
 </p>
 
 # QATQ
@@ -45,8 +45,9 @@ The current implementation provides:
   adaptive exact storage over raw bits, byte-RLE, byte-plane RLE,
   byte-plane zstd entropy coding, reversible quaternion-chain residual coding,
   adjacent-bit delta-XOR byte-plane residuals, sparsity-gated adjacent-XOR zstd
-  for native f16/bf16 tensors, or Phase 1 prediction plus coded XOR residuals
-  for bit-identical reconstruction;
+  for native f16/bf16 tensors, shape-aware strided-XOR zstd for native
+  f16/bf16 rows, or Phase 1 prediction plus coded XOR residuals for
+  bit-identical reconstruction;
 - a sequential `QATC` chunk container for exact QATQ exact transport of large
   tensors through the CLI;
 - production chunk helpers for exact QATQ exact storage decisions and restore;
@@ -109,13 +110,13 @@ cargo-dist installer:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/kabudu/qatq/releases/download/v0.2.1/qatq-installer.sh | sh
+  https://github.com/kabudu/qatq/releases/download/v0.3.0/qatq-installer.sh | sh
 ```
 
 On Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.2.1/qatq-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.3.0/qatq-installer.ps1 | iex"
 ```
 
 ## Attribution
@@ -174,6 +175,20 @@ Encode native raw bf16 or f16 little-endian tensors without widening to f32:
 cargo run -- encode --dtype bf16 input.bf16le output.qatq
 cargo run -- encode --dtype f16 input.f16le output.qatq
 ```
+
+When the runtime knows the flattened row or chunk width, provide it in tensor
+elements to enable the reversible cross-row predictor:
+
+```sh
+cargo run -- encode --dtype bf16 --stride-elements 128 \
+  input.bf16le output.qatq
+```
+
+`--stride-elements` is valid only for native f16/bf16 `qatq-exact` encoding.
+QATQ validates the stride, samples both ordinary byte planes and strided XOR
+residual planes, and performs one full Zstd pass with the predicted winner.
+Omit the option when the layout is unknown; the default path remains fully
+automatic and incurs no cross-row probing cost.
 
 Decode writes the same native little-endian tensor bytes that were encoded:
 
@@ -410,6 +425,14 @@ Direct fallible helpers are also available for mode-specific callers:
 and `try_encode_qatq_exact_exhaustive_with_config`. Use the chunk APIs or
 `QATC` container for larger tensors. Use `qatq_exact_strategy` to inspect
 which exact QATQ exact strategy was selected for an encoded payload.
+
+Shape-aware native tensor integrations may call
+`try_encode_qatq_exact_tensor_le_with_stride_hint(bytes, dtype, stride_elements)`.
+The stride is measured in tensor elements. The API is exact and checksum
+verified, rejects invalid layouts, and leaves the normal no-hint encoder
+unchanged. See
+[`docs/CROSS_CHUNK_XOR_EXPERIMENT.md`](docs/CROSS_CHUNK_XOR_EXPERIMENT.md)
+for selection boundaries and measured evidence.
 
 Chunk exact QATQ exact payloads for large tensor blocks:
 

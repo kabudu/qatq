@@ -161,7 +161,7 @@ Publishing to crates.io is manual:
 5. Confirm the repository has a protected GitHub environment named `crates-io`
    with required reviewer approval.
 6. Run the `Publish crate` workflow from `master`.
-7. Enter the expected package version, for example `0.2.1`.
+7. Enter the expected package version, for example `0.3.0`.
 8. Approve the `crates-io` environment deployment.
 
 The workflow runs format, check, test, package, and `cargo publish --dry-run`

@@ -3,7 +3,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use qatq::MAX_VALUES_PER_PAYLOAD;
+use qatq::{MAX_VALUES_PER_PAYLOAD, QatqExactStrategy, qatq_exact_strategy};
 
 #[test]
 fn cli_encodes_and_decodes_turboquant_q4_with_seed() {
@@ -243,6 +243,57 @@ fn cli_encodes_and_decodes_qatq_exact_bf16_native_bytes() {
         .expect("run decode");
     assert!(decode_status.success());
 
+    assert_eq!(fs::read(&decoded).expect("read decoded"), input_bytes);
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(encoded);
+    let _ = fs::remove_file(decoded);
+}
+
+#[test]
+fn cli_encodes_strided_bf16_exactly() {
+    const STRIDE: usize = 128;
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-strided-bf16-{}", std::process::id());
+    let input = dir.join(format!("{stem}.bf16le"));
+    let encoded = dir.join(format!("{stem}.qatq"));
+    let decoded = dir.join(format!("{stem}.decoded.bf16le"));
+    let mut input_bytes = Vec::new();
+    for token in 0..512_u16 {
+        for channel in 0..STRIDE as u16 {
+            let bits = 0x3e00_u16
+                .wrapping_add(channel.wrapping_mul(101))
+                .wrapping_add(token / 32);
+            input_bytes.extend_from_slice(&bits.to_le_bytes());
+        }
+    }
+    fs::write(&input, &input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let encode_status = Command::new(bin)
+        .arg("encode")
+        .arg("--dtype")
+        .arg("bf16")
+        .arg("--stride-elements")
+        .arg(STRIDE.to_string())
+        .arg(&input)
+        .arg(&encoded)
+        .status()
+        .expect("run strided encode");
+    assert!(encode_status.success());
+    let payload = fs::read(&encoded).expect("read encoded payload");
+    assert_eq!(
+        qatq_exact_strategy(&payload),
+        Ok(QatqExactStrategy::StridedXorBytePlaneZstd)
+    );
+
+    let decode_status = Command::new(bin)
+        .arg("decode")
+        .arg(&encoded)
+        .arg(&decoded)
+        .status()
+        .expect("run strided decode");
+    assert!(decode_status.success());
     assert_eq!(fs::read(&decoded).expect("read decoded"), input_bytes);
 
     let _ = fs::remove_file(input);

@@ -135,6 +135,9 @@ Coverage added:
   correlated exact bitstreams;
 - sparsity-gated native f16/bf16 adjacent-XOR byte-plane zstd selection with a
   bounded 4,096-word, 64-window preflight and full-stream confirmation;
+- shape-aware native f16/bf16 strided-XOR byte-plane zstd selection with
+  validated stride metadata, conservative one-pass sample classification,
+  f16/bf16 byte identity, CLI coverage, and default-path non-regression;
 - public QATQ exact strategy inspection for encoded exact payloads;
 - public QATQ exact storage-decision APIs that return either a compressed QATQ
   payload or raw f32le pass-through bytes when the selected exact strategy is

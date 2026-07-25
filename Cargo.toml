@@ -1,6 +1,6 @@
 [package]
 name = "qatq"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.96"
 default-run = "qatq"
@@ -42,6 +42,7 @@ include = [
     "docs/RUNTIME_*.md",
     "docs/LLAMA_CPP_*.md",
     "docs/NATIVE_U16_PREDICTOR_EXPERIMENT.md",
+    "docs/CROSS_CHUNK_XOR_EXPERIMENT.md",
     "docs/RELEASE_CHECKLIST.md",
     "docs/WHITEPAPER.md",
     "fixtures/public.manifest",
