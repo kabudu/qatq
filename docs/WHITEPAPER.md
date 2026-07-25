@@ -134,6 +134,7 @@ set. The current strategy family includes:
 - direct byte-plane block layouts;
 - byte-plane zstd entropy coding;
 - adjacent-bit delta-XOR byte-plane residual coding;
+- sparsity-gated adjacent-XOR byte-plane zstd for native f16 and bf16 tensors;
 - Phase 1 predictor plus coded XOR residuals;
 - reversible quaternion-chain residual coding followed by byte-plane zstd.
 

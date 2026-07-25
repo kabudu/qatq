@@ -4,6 +4,13 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added a sparsity-gated adjacent-XOR byte-plane Zstd strategy for native f16
+  and bf16 tensors. The reversible predictor is selected only when more than
+  half of its residual bytes are zero, preserves the original bytes exactly,
+  and leaves the existing byte-plane Zstd path in place otherwise.
+
 ## 0.1.5 - 2026-07-22
 
 ### Fixed

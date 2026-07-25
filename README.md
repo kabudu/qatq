@@ -44,8 +44,9 @@ The current implementation provides:
 - the QATQ exact `qatq-exact` codec as the primary QATQ implementation:
   adaptive exact storage over raw bits, byte-RLE, byte-plane RLE,
   byte-plane zstd entropy coding, reversible quaternion-chain residual coding,
-  adjacent-bit delta-XOR byte-plane residuals, or Phase 1 prediction plus coded
-  XOR residuals for bit-identical f32 reconstruction;
+  adjacent-bit delta-XOR byte-plane residuals, sparsity-gated adjacent-XOR zstd
+  for native f16/bf16 tensors, or Phase 1 prediction plus coded XOR residuals
+  for bit-identical reconstruction;
 - a sequential `QATC` chunk container for exact QATQ exact transport of large
   tensors through the CLI;
 - production chunk helpers for exact QATQ exact storage decisions and restore;
