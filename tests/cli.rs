@@ -154,6 +154,58 @@ fn cli_encodes_and_decodes_qatq_exact_with_seed_exactly() {
 }
 
 #[test]
+fn cli_encode_defaults_to_qatq_exact() {
+    let dir = std::env::temp_dir();
+    let stem = format!("qatq-cli-default-exact-{}", std::process::id());
+    let input = dir.join(format!("{stem}.f32le"));
+    let default_encoded = dir.join(format!("{stem}.default.qatq"));
+    let explicit_encoded = dir.join(format!("{stem}.explicit.qatq"));
+    let input_bytes: Vec<u8> = [
+        0.25_f32,
+        -0.0,
+        f32::INFINITY,
+        f32::from_bits(0x7fc0_1234),
+        -3.5,
+    ]
+    .into_iter()
+    .flat_map(f32::to_le_bytes)
+    .collect();
+    fs::write(&input, input_bytes).expect("write input");
+
+    let bin = env!("CARGO_BIN_EXE_qatq");
+    let default_status = Command::new(bin)
+        .arg("encode")
+        .arg(&input)
+        .arg(&default_encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run default encode");
+    assert!(default_status.success());
+
+    let explicit_status = Command::new(bin)
+        .arg("encode")
+        .arg("--mode")
+        .arg("qatq-exact")
+        .arg(&input)
+        .arg(&explicit_encoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run explicit encode");
+    assert!(explicit_status.success());
+
+    assert_eq!(
+        fs::read(&default_encoded).expect("read default payload"),
+        fs::read(&explicit_encoded).expect("read explicit payload")
+    );
+
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_file(default_encoded);
+    let _ = fs::remove_file(explicit_encoded);
+}
+
+#[test]
 fn cli_encodes_and_decodes_qatq_exact_bf16_native_bytes() {
     let dir = std::env::temp_dir();
     let stem = format!("qatq-cli-exact-bf16-{}", std::process::id());
@@ -171,8 +223,6 @@ fn cli_encodes_and_decodes_qatq_exact_bf16_native_bytes() {
     let bin = env!("CARGO_BIN_EXE_qatq");
     let encode_status = Command::new(bin)
         .arg("encode")
-        .arg("--mode")
-        .arg("qatq-exact")
         .arg("--dtype")
         .arg("bf16")
         .arg(&input)

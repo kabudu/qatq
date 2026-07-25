@@ -11,7 +11,7 @@ new freeze record and documenting the compatibility impact.
 | `qatq-exact` | primary | Default exact QATQ product mode. Lossless claims are scoped here. |
 | `QATC` v2 | primary | Sequential large-tensor container for exact QATQ chunks. |
 | native `f32`, `f16`, `bf16` exact tensor bytes | primary | `f16`/`bf16` are stored natively, not widened to f32. |
-| `qatq encode --mode qatq-exact [--dtype f32|f16|bf16]` | primary | Single-payload exact tensor encode. |
+| `qatq encode [--dtype f32|f16|bf16]` | primary | Single-payload exact tensor encode; `qatq-exact` is the default mode. |
 | `qatq encode-chunked --max-values-per-chunk N [--dtype f32|f16|bf16]` | primary | Streaming file encode into QATC. |
 | `qatq decode` | primary | Decodes QATQ single payloads and QATC containers. |
 | `qatq fixture generate/add/verify` | support | Public fixture and release reproducibility tooling. |
@@ -57,6 +57,11 @@ Accepted on 2026-06-22:
 Additive exact-container APIs may be introduced without changing the frozen
 CLI or QATC v2 wire format. The opaque-word and bounded-inspection APIs added
 after v0.1.1 follow that rule: existing symbols and encoded bytes are unchanged.
+
+QATQ 0.2.1 makes the existing `--mode qatq-exact` argument optional for
+`qatq encode`. Omitting `--mode` selects `qatq-exact`; every explicit mode
+continues to behave as before. This is a backward-compatible CLI addition and
+does not change encoded bytes or the QATQ/QATC wire formats.
 
 QATQ 0.2.0 adds `QatqExactStrategy::AdjacentXorBytePlaneZstd` and exact strategy
 identifier `9` for native f16/bf16 payloads. New decoders remain backward

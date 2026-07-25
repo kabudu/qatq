@@ -22,8 +22,8 @@ file per K/V cache tensor:
 The preferred QATQ commands are:
 
 ```sh
-cargo run -- encode --mode qatq-exact --dtype f16 captures/cache_k_l12.f16le cache_k_l12.qatq
-cargo run -- encode --mode qatq-exact --dtype bf16 captures/cache_v_l12.bf16le cache_v_l12.qatq
+cargo run -- encode --dtype f16 captures/cache_k_l12.f16le cache_k_l12.qatq
+cargo run -- encode --dtype bf16 captures/cache_v_l12.bf16le cache_v_l12.qatq
 ```
 
 For full-cache captures, use the chunked container:
