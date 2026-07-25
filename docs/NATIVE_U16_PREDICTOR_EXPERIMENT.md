@@ -17,12 +17,14 @@ two byte planes and compressed with Zstd level 3.
 
 ## Selection policy
 
-The encoder first samples at most 4,096 evenly spaced words without allocating a
-residual buffer. Only a sample with more than half zero residual bytes proceeds
-to full residual construction. The full stream must independently meet the same
-sparsity threshold before the predictor candidate can be selected. Otherwise
-the existing byte-plane Zstd candidate remains available. Raw bits and the other
-exact candidates remain available as fallbacks.
+The encoder first samples at most 4,096 words in 64 short consecutive windows
+distributed across the tensor, without allocating a residual buffer. Consecutive
+windows avoid aliasing periodic layouts while retaining broad coverage. Only a
+sample with more than half zero residual bytes proceeds to full residual
+construction. The full stream must independently meet the same sparsity
+threshold before the predictor candidate can be selected. Otherwise the existing
+byte-plane Zstd candidate remains available. Raw bits and the other exact
+candidates remain available as fallbacks.
 
 This bounded gate prevents the encoder from running two Zstd passes or
 allocating a tensor-sized residual buffer for unsuitable inputs. It avoids

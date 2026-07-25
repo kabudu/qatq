@@ -31,6 +31,7 @@ const QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD: u8 = 7;
 const QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD: u8 = 8;
 const QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD: u8 = 9;
 const NATIVE_U16_XOR_SAMPLE_WORDS: usize = 4_096;
+const NATIVE_U16_XOR_SAMPLE_BLOCKS: usize = 64;
 const BYTE_PLANE_BLOCK_ZERO: u8 = 0;
 const BYTE_PLANE_BLOCK_RAW: u8 = 1;
 const BYTE_PLANE_BLOCK_REPEAT: u8 = 2;
@@ -3271,20 +3272,25 @@ fn adjacent_xor_u16_sample_is_sparse(canonical: &[u8]) -> bool {
         return false;
     }
     let sample_count = element_count.min(NATIVE_U16_XOR_SAMPLE_WORDS);
-    let stride = element_count.div_ceil(sample_count);
+    let block_count = sample_count.min(NATIVE_U16_XOR_SAMPLE_BLOCKS);
+    let words_per_block = sample_count.div_ceil(block_count);
     let mut sampled_bytes = 0;
     let mut zero_count = 0;
-    for index in (0..element_count).step_by(stride).take(sample_count) {
-        let offset = index * 2;
-        let word = u16::from_be_bytes([canonical[offset], canonical[offset + 1]]);
-        let previous = if index == 0 {
-            0
-        } else {
-            u16::from_be_bytes([canonical[offset - 2], canonical[offset - 1]])
-        };
-        let [high, low] = (word ^ previous).to_be_bytes();
-        zero_count += usize::from(high == 0) + usize::from(low == 0);
-        sampled_bytes += 2;
+    for block in 0..block_count {
+        let start = block * element_count / block_count;
+        let end = (start + words_per_block).min(element_count);
+        for index in start..end {
+            let offset = index * 2;
+            let word = u16::from_be_bytes([canonical[offset], canonical[offset + 1]]);
+            let previous = if index == 0 {
+                0
+            } else {
+                u16::from_be_bytes([canonical[offset - 2], canonical[offset - 1]])
+            };
+            let [high, low] = (word ^ previous).to_be_bytes();
+            zero_count += usize::from(high == 0) + usize::from(low == 0);
+            sampled_bytes += 2;
+        }
     }
     zero_count > sampled_bytes / 2
 }
@@ -4761,7 +4767,7 @@ mod tests {
         assert!(!adjacent_xor_u16_sample_is_sparse(&random));
 
         let smooth: Vec<u8> = (0..16_384_u16)
-            .flat_map(|word| word.to_be_bytes())
+            .flat_map(|index| (index / 4).to_be_bytes())
             .collect();
         assert!(adjacent_xor_u16_sample_is_sparse(&smooth));
     }

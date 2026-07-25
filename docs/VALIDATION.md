@@ -73,9 +73,16 @@ Results:
 - native typed tensor exact paths: passed API and CLI round trips for bf16
   single-payload encoding and f16 chunked `QATC` encoding, preserving raw
   little-endian element bytes without widening to f32.
+- native f16/bf16 adjacent-XOR strategy: passed selected-strategy round trips,
+  checksum failure after a recompressed residual mutation, truncation rejection,
+  every possible 16-bit word pattern, random-pattern fallback, and the bounded
+  64-window sampling policy.
 - deterministic KV stress matrix in release mode: passed across the same 4,096
-  cases with aggregate ratio `0.1441`, encode throughput `62.09 ns/value`, and
-  decode throughput `7.25 ns/value`.
+  cases with aggregate ratio `0.1441`, encode throughput `59.92 ns/value`, and
+  decode throughput `7.03 ns/value`.
+- pinned llama.cpp matrix: passed four fresh Phi-4 Mini packed-KV cases covering
+  native f16 and bf16 at 16- and 64-token budgets. All rows restored exactly;
+  f16 ratio was `0.8659` and bf16 ratio was `0.7184`.
 - local Ollama model-output task harness: passed with `phi4-mini:latest`.
   Ollama embedding endpoints were unavailable for this installed model, so the
   harness used deterministic text generation to produce a 12-query by
@@ -86,10 +93,11 @@ Results:
 - `cargo check --manifest-path fuzz/Cargo.toml`: passed.
 - `cargo package --allow-dirty`: passed; package verification compiled the crate from the archive.
 - `cargo package --list --allow-dirty`: passed.
-- Tests: 109 passed, 0 failed.
-  - library tests: 78 passed.
+- Tests: 130 passed, 0 failed.
+  - library tests: 95 passed.
   - benchmark integration tests: 14 passed.
-  - CLI integration tests: 17 passed.
+  - CLI integration tests: 21 passed.
+- line coverage: `85.72%`, above the required `75%` floor.
 - Public benchmark report: regenerated at [PUBLIC_BENCHMARKS.md](PUBLIC_BENCHMARKS.md).
 - Public paper table report: regenerated at [PUBLIC_PAPER_TABLES.md](PUBLIC_PAPER_TABLES.md).
 - Public production KV throughput gate report: regenerated at [PUBLIC_BENCHMARK_GATE.md](PUBLIC_BENCHMARK_GATE.md).
@@ -125,6 +133,8 @@ Coverage added:
   layouts in bfloat16-derived runtime captures;
 - adjacent-bit QATQ exact delta-XOR byte-plane RLE strategy selection for
   correlated exact bitstreams;
+- sparsity-gated native f16/bf16 adjacent-XOR byte-plane zstd selection with a
+  bounded 4,096-word, 64-window preflight and full-stream confirmation;
 - public QATQ exact strategy inspection for encoded exact payloads;
 - public QATQ exact storage-decision APIs that return either a compressed QATQ
   payload or raw f32le pass-through bytes when the selected exact strategy is
@@ -259,8 +269,8 @@ Coverage added:
 
 Known validation limits:
 
-- Benchmarks include deterministic public tensors and a local Ollama
-  model-output task tensor, not direct live runtime KV-cache captures.
+- Runtime evidence includes direct pinned llama.cpp f16 and bf16 KV captures,
+  but only one model family and prompt class in the current release matrix.
 - The FP8 comparison is a local finite-value software E4M3 baseline, not a
   hardware/runtime FP8 path.
 - Phase 1 quality metrics are codec reconstruction metrics only. QATQ exact

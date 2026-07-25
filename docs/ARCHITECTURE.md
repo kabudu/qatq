@@ -127,7 +127,7 @@ track therefore needs a residual:
 
 The `qatq-exact` mode is the primary QATQ implementation and the only mode
 that carries lossless QATQ claims. The default encoder selects the smallest
-bit-identical candidate from byte-level, byte-plane, reversible
+applicable bit-identical candidate from byte-level, byte-plane, reversible
 quaternion-chain, delta-XOR, and predictor-residual strategies. Runtime KV-cache
 captures exposed a common exact pattern where the high two f32 byte planes vary
 and the low two byte planes are all zero, so QATQ exact also has a
@@ -152,10 +152,10 @@ QATQ exact can store:
 - adjacent-bit delta-XOR byte-plane run coding, which stores the first f32 bit
   pattern followed by `current_bits ^ previous_bits` residuals in byte-plane
   order;
-- native f16/bf16 adjacent-word XOR byte-plane zstd coding, which uses a bounded
-  4,096-word sparsity sample before allocating the full residual planes and
-  requires both the sample and complete residual stream to contain more than
-  half zero bytes;
+- native f16/bf16 adjacent-word XOR byte-plane zstd coding, which samples at
+  most 4,096 words in 64 distributed consecutive windows before allocating the
+  full residual planes and requires both the sample and complete residual stream
+  to contain more than half zero bytes;
 - Phase 1 prediction plus run-coded XOR residuals.
 
 The predictor strategy:

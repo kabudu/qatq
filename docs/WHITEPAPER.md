@@ -126,8 +126,8 @@ The architecture diagram is maintained as
 
 ## 5. Exact Strategy Selection
 
-`qatq-exact` chooses the smallest bit-identical representation from a strategy
-set. The current strategy family includes:
+`qatq-exact` chooses the smallest applicable bit-identical representation under
+its bounded strategy policy. The current strategy family includes:
 
 - raw bit storage as the universal exact fallback;
 - byte-run and byte-plane run coding;

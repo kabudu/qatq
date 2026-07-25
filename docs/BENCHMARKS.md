@@ -7,30 +7,58 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 - iterations per timing sample: `200`
 - timing samples: `3`
 - timing value: `best sample mean`
-- external fixtures: `4`
-- fixture manifests: `1`
-- synthetic controls: `disabled`
-- benchmark mode: `exact-only`
+- external fixtures: `0`
+- fixture manifests: `0`
+- synthetic controls: `enabled`
+- benchmark mode: `all-codecs`
 - target: `macos` / `aarch64`
 
 | group | dataset | values | codec | exact strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | zstd-raw-f32le |  | 15285 | 0.4665 | 95.53 | 29.90 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lz4-raw-f32le |  | 22614 | 0.6901 | 44.00 | 10.95 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact | byte-plane-zstd | 12509 | 0.3817 | 379.21 | 63.88 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact-container | qatc-container | 12545 | 0.3828 | 390.40 | 75.20 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | zstd-raw-f32le |  | 19003 | 0.2900 | 122.75 | 39.66 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lz4-raw-f32le |  | 30757 | 0.4693 | 60.82 | 15.57 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact | quaternion-chain-zstd | 7554 | 0.1153 | 636.23 | 118.83 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact-container | qatc-container | 7590 | 0.1158 | 640.82 | 127.14 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | zstd-raw-f32le |  | 44539 | 0.9061 | 43.44 | 36.74 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lz4-raw-f32le |  | 49350 | 1.0040 | 6.35 | 1.93 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact | byte-plane-zstd | 32108 | 0.6532 | 686.98 | 106.39 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact-container | qatc-container | 32144 | 0.6540 | 721.05 | 140.45 | yes | 0.000000 | 0.000000 |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | zstd-raw-f32le |  | 676 | 0.0413 | 13.86 | 3.21 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | lz4-raw-f32le |  | 1103 | 0.0673 | 2.25 | 0.49 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact | quaternion-chain-zstd | 199 | 0.0121 | 168.37 | 28.84 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact-container | qatc-container | 235 | 0.0143 | 169.01 | 29.07 | yes | 0.000000 | NaN |
+| synthetic | smooth-sine | 16384 | raw-f32le |  | 65536 | 1.0000 | 5.53 | 1.35 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | lossless-f32 |  | 65564 | 1.0004 | 74.50 | 72.34 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | zstd-raw-f32le |  | 60228 | 0.9190 | 74.51 | 48.05 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | lz4-raw-f32le |  | 65798 | 1.0040 | 9.49 | 3.08 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 59.52 | 17.37 | no | 0.124957 | 0.050102 |
+| synthetic | smooth-sine | 16384 | lossy-i4 |  | 8220 | 0.1254 | 104.06 | 7.11 | no | 0.228135 | 0.126263 |
+| synthetic | smooth-sine | 16384 | turboquant-q4 |  | 8272 | 0.1262 | 604.23 | 334.74 | no | 1.160907 | 0.315560 |
+| synthetic | smooth-sine | 16384 | phase1-q4 |  | 10288 | 0.1570 | 162.91 | 55.63 | no | 0.314044 | 0.114028 |
+| synthetic | smooth-sine | 16384 | qatq-exact | quaternion-chain-zstd | 33454 | 0.5105 | 835.88 | 114.83 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | qatq-exact-exhaustive | quaternion-chain-zstd | 33454 | 0.5105 | 874.96 | 114.87 | yes | 0.000000 | 0.000000 |
+| synthetic | smooth-sine | 16384 | qatq-exact-container | qatc-container | 33490 | 0.5110 | 903.82 | 152.72 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | raw-f32le |  | 65536 | 1.0000 | 5.61 | 0.85 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | lossless-f32 |  | 65564 | 1.0004 | 76.12 | 73.35 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | zstd-raw-f32le |  | 60107 | 0.9172 | 74.06 | 48.62 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | lz4-raw-f32le |  | 65798 | 1.0040 | 9.57 | 2.88 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 78.96 | 19.89 | no | 0.062459 | 0.020074 |
+| synthetic | kv-like | 16384 | lossy-i4 |  | 8220 | 0.1254 | 105.36 | 7.14 | no | 0.103843 | 0.059749 |
+| synthetic | kv-like | 16384 | turboquant-q4 |  | 8272 | 0.1262 | 590.89 | 339.85 | no | 0.512257 | 0.116852 |
+| synthetic | kv-like | 16384 | phase1-q4 |  | 10288 | 0.1570 | 163.02 | 56.09 | no | 0.138686 | 0.050129 |
+| synthetic | kv-like | 16384 | qatq-exact | quaternion-chain-zstd | 41511 | 0.6334 | 873.66 | 115.81 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | qatq-exact-exhaustive | quaternion-chain-zstd | 41511 | 0.6334 | 888.29 | 115.93 | yes | 0.000000 | 0.000000 |
+| synthetic | kv-like | 16384 | qatq-exact-container | qatc-container | 41547 | 0.6340 | 905.38 | 159.83 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | raw-f32le |  | 65536 | 1.0000 | 5.59 | 0.64 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | lossless-f32 |  | 65564 | 1.0004 | 74.95 | 72.48 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | zstd-raw-f32le |  | 59672 | 0.9105 | 74.67 | 47.69 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | lz4-raw-f32le |  | 65798 | 1.0040 | 9.57 | 3.12 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 69.38 | 24.87 | no | 0.299554 | 0.024646 |
+| synthetic | spiky | 16384 | lossy-i4 |  | 8220 | 0.1254 | 142.10 | 7.19 | no | 0.557102 | 0.371499 |
+| synthetic | spiky | 16384 | turboquant-q4 |  | 8272 | 0.1262 | 605.26 | 328.25 | no | 0.560560 | 0.134119 |
+| synthetic | spiky | 16384 | phase1-q4 |  | 10288 | 0.1570 | 160.33 | 55.11 | no | 0.450652 | 0.163320 |
+| synthetic | spiky | 16384 | qatq-exact | quaternion-chain-zstd | 35683 | 0.5445 | 837.31 | 114.51 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | qatq-exact-exhaustive | quaternion-chain-zstd | 35683 | 0.5445 | 858.34 | 113.49 | yes | 0.000000 | 0.000000 |
+| synthetic | spiky | 16384 | qatq-exact-container | qatc-container | 35719 | 0.5450 | 871.80 | 150.41 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | raw-f32le |  | 65536 | 1.0000 | 5.44 | 0.90 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | lossless-f32 |  | 65564 | 1.0004 | 73.35 | 72.10 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | zstd-raw-f32le |  | 25 | 0.0004 | 15.27 | 11.78 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | lz4-raw-f32le |  | 279 | 0.0043 | 9.03 | 27.17 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | fp8-e4m3 |  | 16384 | 0.2500 | 55.63 | 15.10 | no | 0.001965 | 0.001389 |
+| synthetic | bit-delta | 16384 | lossy-i4 |  | 8220 | 0.1254 | 101.86 | 7.04 | no | 0.015893 | 0.011238 |
+| synthetic | bit-delta | 16384 | turboquant-q4 |  | 8272 | 0.1262 | 602.03 | 347.50 | no | 0.252510 | 0.062401 |
+| synthetic | bit-delta | 16384 | phase1-q4 |  | 10288 | 0.1570 | 160.48 | 56.49 | no | 0.040468 | 0.012896 |
+| synthetic | bit-delta | 16384 | qatq-exact | delta-xor-byte-plane-rle | 60 | 0.0009 | 626.26 | 110.00 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | qatq-exact-exhaustive | delta-xor-byte-plane-rle | 60 | 0.0009 | 632.08 | 110.34 | yes | 0.000000 | 0.000000 |
+| synthetic | bit-delta | 16384 | qatq-exact-container | qatc-container | 96 | 0.0015 | 606.75 | 110.33 | yes | 0.000000 | 0.000000 |
 
 ## Interpretation
 
@@ -40,7 +68,7 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 - `lossy-i4` is the original seed baseline.
 - `turboquant-q4` is QATQ's local reference TurboQuant-style q4 comparator: deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual signs for inner-product estimation, without the quaternion overlay. It is not an official Google implementation.
 - `phase1-q4` is a lossy training-free quaternion predictor/comparator path with a compact 1-bit residual-sign side channel.
-- `qatq-exact` is the primary QATQ exact path: it selects the smallest bit-identical QATQ exact candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, and the Phase 1 predictor residual path.
+- `qatq-exact` is the primary QATQ exact path: it adaptively selects an exact candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, sparsity-gated native f16/bf16 adjacent-XOR byte-plane zstd, and the Phase 1 predictor residual path.
 - `qatq-exact-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.
 - `qatq-exact-container` wraps exact QATQ exact payloads in the sequential `QATC` large-tensor file container.
 - Lossless QATQ claims are scoped to `qatq-exact` and `qatq-exact-container`; Phase 1 and TurboQuant-style rows are lossy comparator context.

@@ -71,7 +71,8 @@ The current implementation provides:
 
 `qatq-exact` and the `QATC` container are the main QATQ product surface.
 They are exact by construction and use a fast strategy policy:
-the encoder selects the smallest bit-identical QATQ exact candidate, including a
+the encoder selects the smallest applicable bit-identical QATQ exact candidate,
+including a
 reversible quaternion-chain residual path when it beats simpler byte-plane
 transforms. Phase 1 is still lossy and experimental; it is useful as an
 internal predictor and comparator, but lossless QATQ claims apply only to QATQ
