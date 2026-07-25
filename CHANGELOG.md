@@ -4,6 +4,18 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added a sparsity-gated adjacent-XOR byte-plane Zstd strategy for native f16
+  and bf16 tensors. A bounded sample of 4,096 words across 64 consecutive
+  windows avoids full residual allocation for unsuitable inputs; the reversible
+  predictor is selected only when both the sample and complete residual stream
+  contain more than half zero bytes.
+  Original bytes remain exact and the existing byte-plane Zstd path remains the
+  fallback.
+- Added a native f16/bf16 exact round-trip fuzz target and exhaustive ordered
+  coverage of every 16-bit word pattern.
+
 ## 0.1.5 - 2026-07-22
 
 ### Fixed

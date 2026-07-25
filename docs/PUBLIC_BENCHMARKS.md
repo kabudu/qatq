@@ -15,22 +15,22 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 
 | group | dataset | values | codec | exact strategy | encoded bytes | ratio vs raw f32 | encode us | decode us | exact bits | max abs error | RMSE |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | zstd-raw-f32le |  | 15285 | 0.4665 | 91.20 | 28.61 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lz4-raw-f32le |  | 22614 | 0.6901 | 43.39 | 10.86 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact | byte-plane-zstd | 12509 | 0.3817 | 365.67 | 61.08 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact-container | qatc-container | 12545 | 0.3828 | 377.87 | 73.98 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | zstd-raw-f32le |  | 19003 | 0.2900 | 121.52 | 39.41 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lz4-raw-f32le |  | 30757 | 0.4693 | 60.01 | 14.96 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact | quaternion-chain-zstd | 7554 | 0.1153 | 633.53 | 114.11 | yes | 0.000000 | 0.000000 |
-| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact-container | qatc-container | 7590 | 0.1158 | 643.76 | 123.10 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | zstd-raw-f32le |  | 44539 | 0.9061 | 43.99 | 35.97 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lz4-raw-f32le |  | 49350 | 1.0040 | 6.93 | 1.95 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact | byte-plane-zstd | 32108 | 0.6532 | 676.62 | 105.85 | yes | 0.000000 | 0.000000 |
-| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact-container | qatc-container | 32144 | 0.6540 | 723.47 | 139.11 | yes | 0.000000 | 0.000000 |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | zstd-raw-f32le |  | 676 | 0.0413 | 14.17 | 3.31 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | lz4-raw-f32le |  | 1103 | 0.0673 | 2.42 | 0.61 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact | quaternion-chain-zstd | 199 | 0.0121 | 166.19 | 28.67 | yes | 0.000000 | NaN |
-| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact-container | qatc-container | 235 | 0.0143 | 166.65 | 29.13 | yes | 0.000000 | NaN |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | zstd-raw-f32le |  | 15285 | 0.4665 | 90.83 | 28.19 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | lz4-raw-f32le |  | 22614 | 0.6901 | 42.89 | 10.61 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact | byte-plane-zstd | 12509 | 0.3817 | 364.47 | 60.94 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-ramp-64x8x16 | 8192 | qatq-exact-container | qatc-container | 12545 | 0.3828 | 379.78 | 73.29 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | zstd-raw-f32le |  | 19003 | 0.2900 | 123.22 | 38.79 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | lz4-raw-f32le |  | 30757 | 0.4693 | 60.00 | 14.90 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact | quaternion-chain-zstd | 7554 | 0.1153 | 630.77 | 116.25 | yes | 0.000000 | 0.000000 |
+| qatq-public | bf16-kv-wave-128x8x16 | 16384 | qatq-exact-container | qatc-container | 7590 | 0.1158 | 634.13 | 124.49 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | zstd-raw-f32le |  | 44539 | 0.9061 | 43.28 | 35.47 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | lz4-raw-f32le |  | 49350 | 1.0040 | 6.57 | 1.81 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact | byte-plane-zstd | 32108 | 0.6532 | 671.72 | 105.14 | yes | 0.000000 | 0.000000 |
+| qatq-public | f32-noisy-pass-through-64x12x16 | 12288 | qatq-exact-container | qatc-container | 32144 | 0.6540 | 701.21 | 137.65 | yes | 0.000000 | 0.000000 |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | zstd-raw-f32le |  | 676 | 0.0413 | 13.94 | 3.24 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | lz4-raw-f32le |  | 1103 | 0.0673 | 2.41 | 0.62 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact | quaternion-chain-zstd | 199 | 0.0121 | 164.65 | 28.37 | yes | 0.000000 | NaN |
+| qatq-public | stress-signed-zero-nan-inf | 4096 | qatq-exact-container | qatc-container | 235 | 0.0143 | 164.75 | 28.72 | yes | 0.000000 | NaN |
 
 ## Interpretation
 
@@ -40,7 +40,7 @@ These are deterministic microbenchmarks for codec-level comparison. Synthetic da
 - `lossy-i4` is the original seed baseline.
 - `turboquant-q4` is QATQ's local reference TurboQuant-style q4 comparator: deterministic data-oblivious orthogonal rotation, scalar q4 quantization, and QJL residual signs for inner-product estimation, without the quaternion overlay. It is not an official Google implementation.
 - `phase1-q4` is a lossy training-free quaternion predictor/comparator path with a compact 1-bit residual-sign side channel.
-- `qatq-exact` is the primary QATQ exact path: it selects the smallest bit-identical QATQ exact candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, and the Phase 1 predictor residual path.
+- `qatq-exact` is the primary QATQ exact path: it adaptively selects an exact candidate, including raw bits, byte-RLE, byte-plane RLE, compact byte-plane packed RLE, byte-plane zstd entropy coding, reversible quaternion-chain zstd, byte-plane blocks, delta-XOR byte-plane RLE, sparsity-gated native f16/bf16 adjacent-XOR byte-plane zstd, and the Phase 1 predictor residual path.
 - `qatq-exact-exhaustive` runs the deeper exact strategy search and is included to measure the latency/size tradeoff.
 - `qatq-exact-container` wraps exact QATQ exact payloads in the sequential `QATC` large-tensor file container.
 - Lossless QATQ claims are scoped to `qatq-exact` and `qatq-exact-container`; Phase 1 and TurboQuant-style rows are lossy comparator context.

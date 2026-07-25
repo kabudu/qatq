@@ -24,3 +24,10 @@ path = "fuzz_targets/qatq_exact_roundtrip.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "qatq_exact_typed_roundtrip"
+path = "fuzz_targets/qatq_exact_typed_roundtrip.rs"
+test = false
+doc = false
+bench = false

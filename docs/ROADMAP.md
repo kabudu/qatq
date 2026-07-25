@@ -41,8 +41,9 @@ QATQ foundation.
 QATQ exact is implemented as `qatq-exact` and is the primary QATQ
 implementation. It adaptively stores raw f32 bits, byte-RLE, byte-plane RLE,
 byte-plane zstd, reversible quaternion-chain zstd, adjacent-bit delta-XOR
-byte-plane residuals, or the Phase 1 predictor plus run-coded XOR residuals and
-verifies final reconstruction with the payload checksum. Lossless QATQ claims
+byte-plane residuals, sparsity-gated native f16/bf16 adjacent-XOR zstd, or the
+Phase 1 predictor plus run-coded XOR residuals and verifies final reconstruction
+with the payload checksum. Lossless QATQ claims
 are scoped to QATQ exact and its `QATC` container. zstd/lz4 comparison rows are
 included in benchmark reports as general-purpose byte-compression baselines over
 raw f32le, and the competitive compression gate rejects public fixture
