@@ -11,7 +11,7 @@ new freeze record and documenting the compatibility impact.
 | `qatq-exact` | primary | Default exact QATQ product mode. Lossless claims are scoped here. |
 | `QATC` v2 | primary | Sequential large-tensor container for exact QATQ chunks. |
 | native `f32`, `f16`, `bf16` exact tensor bytes | primary | `f16`/`bf16` are stored natively, not widened to f32. |
-| `qatq encode [--dtype f32|f16|bf16]` | primary | Single-payload exact tensor encode; `qatq-exact` is the default mode. |
+| `qatq encode [--dtype f32|f16|bf16] [--stride-elements N]` | primary | Single-payload exact tensor encode; `qatq-exact` is the default mode and the optional stride hint is valid for native f16/bf16. |
 | `qatq encode-chunked --max-values-per-chunk N [--dtype f32|f16|bf16]` | primary | Streaming file encode into QATC. |
 | `qatq decode` | primary | Decodes QATQ single payloads and QATC containers. |
 | `qatq fixture generate/add/verify` | support | Public fixture and release reproducibility tooling. |
@@ -69,6 +69,16 @@ compatible with all version-1 QATQ envelopes and QATC v2 containers. Older
 decoders reject payloads that select the new identifier rather than silently
 misdecoding them. Because adding a public Rust enum variant can break exhaustive
 downstream matches, this is released as 0.2.0 rather than a 0.1.x patch.
+
+QATQ 0.3.0 adds
+`try_encode_qatq_exact_tensor_le_with_stride_hint`,
+CLI `qatq encode --stride-elements`, error variant
+`QatqError::InvalidPredictorStride`,
+`QatqExactStrategy::StridedXorBytePlaneZstd`, and exact strategy identifier
+`10`. Existing no-hint encoding and previously encoded QATQ/QATC payloads remain
+compatible. Older decoders reject identifier `10` instead of misdecoding it.
+The public enum additions require a semver-minor release because exhaustive
+downstream matches may need updating.
 
 Before crates.io publication, any API or CLI rename must include:
 

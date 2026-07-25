@@ -4,6 +4,25 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.3.0 - 2026-07-25
+
+### Added
+
+- Added production shape-aware strided-XOR byte-plane Zstd encoding for native
+  f16/bf16 tensors through
+  `try_encode_qatq_exact_tensor_le_with_stride_hint` and CLI
+  `--stride-elements`.
+- Added exact strategy identifier `10`,
+  `QatqExactStrategy::StridedXorBytePlaneZstd`, validated stride metadata,
+  corruption coverage, deterministic experiment fixtures, and release
+  evidence.
+
+### Changed
+
+- The shape-aware path uses a conservative sample-compression classifier to
+  select ordinary byte-plane or strided-XOR Zstd before one full compression
+  pass. The default no-hint encoder performs no strided probing.
+
 ## 0.2.1 - 2026-07-25
 
 ### Changed

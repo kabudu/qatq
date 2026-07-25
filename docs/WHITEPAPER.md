@@ -135,6 +135,8 @@ its bounded strategy policy. The current strategy family includes:
 - byte-plane zstd entropy coding;
 - adjacent-bit delta-XOR byte-plane residual coding;
 - sparsity-gated adjacent-XOR byte-plane zstd for native f16 and bf16 tensors;
+- opt-in shape-aware strided-XOR byte-plane zstd for native f16 and bf16
+  tensors when the caller supplies a valid row/channel stride hint;
 - Phase 1 predictor plus coded XOR residuals;
 - reversible quaternion-chain residual coding followed by byte-plane zstd.
 

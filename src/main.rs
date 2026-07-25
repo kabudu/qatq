@@ -8,8 +8,8 @@ use qatq::{
     CodecMode, DEFAULT_MAX_QATC_CHUNK_BYTES, DEFAULT_MAX_QATC_CHUNKS, DEFAULT_MAX_QATC_VALUES,
     MAX_VALUES_PER_PAYLOAD, Phase1Config, TensorDType, decode, decode_qatq_exact,
     decode_qatq_exact_tensor_le, parse_mode, try_encode, try_encode_phase1_q4_with_config,
-    try_encode_qatq_exact_tensor_le, try_encode_qatq_exact_with_config,
-    try_encode_turboquant_q4_with_config,
+    try_encode_qatq_exact_tensor_le, try_encode_qatq_exact_tensor_le_with_stride_hint,
+    try_encode_qatq_exact_with_config, try_encode_turboquant_q4_with_config,
 };
 
 const QATC_MAGIC: &[u8; 4] = b"QATC";
@@ -45,7 +45,7 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     if args.len() < 2 {
         print_usage();
         return Err(
-            "usage: qatq encode [--mode <mode>] [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
+            "usage: qatq encode [--mode <mode>] [--dtype <f32|f16|bf16>] [--stride-elements <usize>] [--seed <u64>] <input> <output.qatq>"
                 .to_string(),
         );
     }
@@ -60,12 +60,20 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     };
     let mut dtype = TensorDType::F32;
     let mut seed = None;
+    let mut stride_elements = None;
     while index < args.len() && args[index].starts_with("--") {
         let value = args
             .get(index + 1)
             .ok_or_else(|| format!("{} requires a value", args[index]))?;
         match args[index].as_str() {
             "--dtype" => dtype = parse_dtype(value)?,
+            "--stride-elements" => {
+                stride_elements = Some(
+                    value
+                        .parse::<usize>()
+                        .map_err(|error| format!("invalid --stride-elements {value}: {error}"))?,
+                )
+            }
             "--seed" => seed = Some(parse_seed(value)?),
             other => return Err(format!("unknown encode option {other}")),
         }
@@ -73,7 +81,7 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     }
     if args.len() - index != 2 {
         print_usage();
-        return Err("usage: qatq encode [--mode <mode>] [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>".to_string());
+        return Err("usage: qatq encode [--mode <mode>] [--dtype <f32|f16|bf16>] [--stride-elements <usize>] [--seed <u64>] <input> <output.qatq>".to_string());
     }
     if dtype != TensorDType::F32 && mode != CodecMode::QatqExact {
         return Err("--dtype f16/bf16 is only supported with qatq-exact".to_string());
@@ -81,6 +89,11 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     if dtype != TensorDType::F32 && seed.is_some() {
         return Err(
             "--seed is only supported for f32 qatq-exact, turboquant-q4, and phase1-q4".to_string(),
+        );
+    }
+    if stride_elements.is_some() && (dtype == TensorDType::F32 || mode != CodecMode::QatqExact) {
+        return Err(
+            "--stride-elements is only supported for f16/bf16 qatq-exact encoding".to_string(),
         );
     }
     if seed.is_some()
@@ -96,8 +109,12 @@ fn encode_command(args: &[String]) -> Result<(), String> {
     let output_path = &args[index + 1];
     if dtype != TensorDType::F32 {
         let bytes = read_typed_tensor_bytes(input_path, dtype, Some(MAX_VALUES_PER_PAYLOAD))?;
-        let payload =
-            try_encode_qatq_exact_tensor_le(&bytes, dtype).map_err(|error| error.to_string())?;
+        let payload = if let Some(stride) = stride_elements {
+            try_encode_qatq_exact_tensor_le_with_stride_hint(&bytes, dtype, stride)
+        } else {
+            try_encode_qatq_exact_tensor_le(&bytes, dtype)
+        }
+        .map_err(|error| error.to_string())?;
         return write_bytes_atomic(output_path, &payload);
     }
     let values = read_f32le(input_path, Some(MAX_VALUES_PER_PAYLOAD))?;
@@ -1283,7 +1300,7 @@ fn parse_dtype(value: &str) -> Result<TensorDType, String> {
 fn print_usage() {
     eprintln!("usage:");
     eprintln!(
-        "  qatq encode [--mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|qatq-exact>] [--dtype <f32|f16|bf16>] [--seed <u64>] <input> <output.qatq>"
+        "  qatq encode [--mode <lossy-i4|lossless-f32|turboquant-q4|phase1-q4|qatq-exact>] [--dtype <f32|f16|bf16>] [--stride-elements <usize>] [--seed <u64>] <input> <output.qatq>"
     );
     eprintln!("    default mode: qatq-exact");
     eprintln!(

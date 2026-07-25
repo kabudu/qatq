@@ -30,8 +30,12 @@ const QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE: u8 = 6;
 const QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD: u8 = 7;
 const QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD: u8 = 8;
 const QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD: u8 = 9;
+const QATQ_EXACT_STRATEGY_STRIDED_XOR_BYTE_PLANE_ZSTD: u8 = 10;
 const NATIVE_U16_XOR_SAMPLE_WORDS: usize = 4_096;
 const NATIVE_U16_XOR_SAMPLE_BLOCKS: usize = 64;
+const STRIDED_U16_XOR_CLASSIFIER_WORDS: usize = 1_024;
+const STRIDED_U16_XOR_SAMPLE_WIN_PERCENT: usize = 90;
+const STRIDED_U16_XOR_METADATA_LEN: usize = 4;
 const BYTE_PLANE_BLOCK_ZERO: u8 = 0;
 const BYTE_PLANE_BLOCK_RAW: u8 = 1;
 const BYTE_PLANE_BLOCK_REPEAT: u8 = 2;
@@ -99,6 +103,7 @@ pub enum QatqError {
     InvalidTurboQuantBody,
     InvalidQatqExactBody,
     InvalidResidualStream,
+    InvalidPredictorStride(usize),
     InvalidChunkSize(usize),
     InvalidContainer,
     ContainerLimitExceeded(&'static str),
@@ -134,6 +139,9 @@ impl fmt::Display for QatqError {
             Self::InvalidTurboQuantBody => write!(f, "turboquant payload body is invalid"),
             Self::InvalidQatqExactBody => write!(f, "exact payload body is invalid"),
             Self::InvalidResidualStream => write!(f, "exact residual stream is invalid"),
+            Self::InvalidPredictorStride(stride) => {
+                write!(f, "predictor stride is invalid: {stride}")
+            }
             Self::InvalidChunkSize(size) => write!(f, "chunk size is invalid: {size}"),
             Self::InvalidContainer => write!(f, "chunked container is invalid"),
             Self::ContainerLimitExceeded(limit) => {
@@ -399,6 +407,7 @@ pub enum QatqExactStrategy {
     BytePlaneZstd,
     QuaternionChainZstd,
     AdjacentXorBytePlaneZstd,
+    StridedXorBytePlaneZstd,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -512,6 +521,7 @@ impl QatqExactStrategy {
             QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => Ok(Self::BytePlaneZstd),
             QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => Ok(Self::QuaternionChainZstd),
             QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD => Ok(Self::AdjacentXorBytePlaneZstd),
+            QATQ_EXACT_STRATEGY_STRIDED_XOR_BYTE_PLANE_ZSTD => Ok(Self::StridedXorBytePlaneZstd),
             _ => Err(QatqError::InvalidQatqExactBody),
         }
     }
@@ -528,6 +538,7 @@ impl QatqExactStrategy {
             Self::BytePlaneZstd => "byte-plane-zstd",
             Self::QuaternionChainZstd => "quaternion-chain-zstd",
             Self::AdjacentXorBytePlaneZstd => "adjacent-xor-byte-plane-zstd",
+            Self::StridedXorBytePlaneZstd => "strided-xor-byte-plane-zstd",
         }
     }
 }
@@ -716,15 +727,48 @@ pub fn try_encode_qatq_exact_tensor_le(
     bytes_le: &[u8],
     dtype: TensorDType,
 ) -> Result<Vec<u8>, QatqError> {
+    try_encode_qatq_exact_tensor_le_with_optional_stride(bytes_le, dtype, None)
+}
+
+/// Encodes a native tensor with a caller-supplied row/chunk stride for the
+/// reversible cross-chunk predictor.
+///
+/// The hint is expressed in tensor elements, not bytes. A conservative sample
+/// classifier chooses either ordinary byte-plane Zstd or the strided predictor
+/// before one full compression pass. Raw and run-coded exact fallbacks remain
+/// available, but this experimental API does not exhaustively prove which Zstd
+/// transform would produce the smaller complete payload.
+pub fn try_encode_qatq_exact_tensor_le_with_stride_hint(
+    bytes_le: &[u8],
+    dtype: TensorDType,
+    stride_elements: usize,
+) -> Result<Vec<u8>, QatqError> {
+    try_encode_qatq_exact_tensor_le_with_optional_stride(bytes_le, dtype, Some(stride_elements))
+}
+
+fn try_encode_qatq_exact_tensor_le_with_optional_stride(
+    bytes_le: &[u8],
+    dtype: TensorDType,
+    stride_hint: Option<usize>,
+) -> Result<Vec<u8>, QatqError> {
     let element_count = validate_typed_tensor_len(bytes_le, dtype)?;
     if dtype == TensorDType::F32 {
+        if let Some(stride) = stride_hint {
+            return Err(QatqError::InvalidPredictorStride(stride));
+        }
         let values = decode_f32le_bytes(bytes_le)?;
         return try_encode_qatq_exact_with_config(&values, Phase1Config::default());
+    }
+    if let Some(stride) = stride_hint
+        && (stride == 0 || stride >= element_count || u32::try_from(stride).is_err())
+    {
+        return Err(QatqError::InvalidPredictorStride(stride));
     }
     Ok(encode_qatq_exact_tensor_bytes_unchecked(
         bytes_le,
         dtype,
         element_count,
+        stride_hint,
     ))
 }
 
@@ -762,6 +806,23 @@ pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, Qatq
             let residual_planes = zstd::bulk::decompress(body, expected_len)
                 .map_err(|_| QatqError::InvalidResidualStream)?;
             decode_adjacent_xor_u16_byte_planes(&residual_planes, expected_len, header.value_count)?
+        }
+        QatqExactStrategy::StridedXorBytePlaneZstd => {
+            if body.len() < STRIDED_U16_XOR_METADATA_LEN {
+                return Err(QatqError::InvalidResidualStream);
+            }
+            let stride =
+                u32::from_be_bytes(body[..STRIDED_U16_XOR_METADATA_LEN].try_into().unwrap())
+                    as usize;
+            let residual_planes =
+                zstd::bulk::decompress(&body[STRIDED_U16_XOR_METADATA_LEN..], expected_len)
+                    .map_err(|_| QatqError::InvalidResidualStream)?;
+            decode_strided_xor_u16_byte_planes(
+                &residual_planes,
+                expected_len,
+                header.value_count,
+                stride,
+            )?
         }
         QatqExactStrategy::PredictorXor
         | QatqExactStrategy::DeltaXorBytePlaneRle
@@ -886,6 +947,7 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
     bytes_le: &[u8],
     dtype: TensorDType,
     element_count: usize,
+    stride_hint: Option<usize>,
 ) -> Vec<u8> {
     let canonical = canonicalize_le_elements(bytes_le, dtype);
     let raw_body_len = QATQ_EXACT_PREFIX_LEN + canonical.len();
@@ -901,10 +963,18 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
     );
     let byte_plane_packed_body_len = candidate_body_len(byte_plane_packed.as_ref());
     let adjacent_xor_planes = adjacent_xor_u16_byte_planes_if_sparse(&canonical);
-    let byte_plane_zstd = if adjacent_xor_planes.is_some() {
-        None
+    let strided_xor_planes = if adjacent_xor_planes.is_none() {
+        stride_hint.and_then(|stride| strided_xor_u16_byte_planes_if_sparse(&canonical, stride))
     } else {
+        None
+    };
+    let use_strided_xor = strided_xor_planes
+        .as_ref()
+        .is_some_and(|(_, planes)| strided_xor_wins_sample_compression(&canonical, planes));
+    let byte_plane_zstd = if adjacent_xor_planes.is_none() && !use_strided_xor {
         encode_byte_plane_zstd_bounded_width(&canonical, dtype.element_width(), canonical.len())
+    } else {
+        None
     };
     let byte_plane_zstd_body_len = candidate_body_len(byte_plane_zstd.as_ref());
     let adjacent_xor_byte_plane_zstd = adjacent_xor_planes
@@ -912,6 +982,23 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
         .and_then(|planes| encode_zstd_bounded(planes, canonical.len()));
     let adjacent_xor_byte_plane_zstd_body_len =
         candidate_body_len(adjacent_xor_byte_plane_zstd.as_ref());
+    let strided_xor_byte_plane_zstd =
+        strided_xor_planes
+            .filter(|_| use_strided_xor)
+            .and_then(|(stride, planes)| {
+                encode_zstd_bounded(
+                    &planes,
+                    canonical.len().saturating_sub(STRIDED_U16_XOR_METADATA_LEN),
+                )
+                .map(|encoded| {
+                    let mut body = Vec::with_capacity(STRIDED_U16_XOR_METADATA_LEN + encoded.len());
+                    body.extend_from_slice(&(stride as u32).to_be_bytes());
+                    body.extend_from_slice(&encoded);
+                    body
+                })
+            });
+    let strided_xor_byte_plane_zstd_body_len =
+        candidate_body_len(strided_xor_byte_plane_zstd.as_ref());
     let mut strategy = QATQ_EXACT_STRATEGY_RAW_BITS;
     let mut best_body_len = raw_body_len;
     for (candidate_strategy, candidate_len) in [
@@ -928,6 +1015,10 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
         (
             QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD,
             adjacent_xor_byte_plane_zstd_body_len,
+        ),
+        (
+            QATQ_EXACT_STRATEGY_STRIDED_XOR_BYTE_PLANE_ZSTD,
+            strided_xor_byte_plane_zstd_body_len,
         ),
     ] {
         if candidate_len < best_body_len {
@@ -967,6 +1058,11 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
             adjacent_xor_byte_plane_zstd
                 .as_ref()
                 .expect("selected adjacent-XOR zstd candidate"),
+        ),
+        QATQ_EXACT_STRATEGY_STRIDED_XOR_BYTE_PLANE_ZSTD => out.extend_from_slice(
+            strided_xor_byte_plane_zstd
+                .as_ref()
+                .expect("selected strided-XOR zstd candidate"),
         ),
         _ => unreachable!("typed exact strategy set"),
     }
@@ -1880,6 +1976,9 @@ pub fn decode_qatq_exact(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
         QatqExactStrategy::AdjacentXorBytePlaneZstd => {
             return Err(QatqError::InvalidQatqExactBody);
         }
+        QatqExactStrategy::StridedXorBytePlaneZstd => {
+            return Err(QatqError::InvalidQatqExactBody);
+        }
     };
 
     let actual = checksum_f32_bits(&values);
@@ -2113,6 +2212,34 @@ fn decode_adjacent_xor_u16_byte_planes(
         let word = previous ^ residual;
         canonical.extend_from_slice(&word.to_be_bytes());
         previous = word;
+    }
+    Ok(canonical)
+}
+
+fn decode_strided_xor_u16_byte_planes(
+    planes: &[u8],
+    expected_len: usize,
+    element_count: usize,
+    stride: usize,
+) -> Result<Vec<u8>, QatqError> {
+    if planes.len() != expected_len
+        || expected_len != element_count * 2
+        || stride == 0
+        || stride >= element_count
+    {
+        return Err(QatqError::InvalidResidualStream);
+    }
+    let mut canonical = vec![0_u8; expected_len];
+    for index in 0..element_count {
+        let residual = u16::from_be_bytes([planes[index], planes[element_count + index]]);
+        let predictor = if index < stride {
+            0
+        } else {
+            let predictor_offset = (index - stride) * 2;
+            u16::from_be_bytes([canonical[predictor_offset], canonical[predictor_offset + 1]])
+        };
+        let offset = index * 2;
+        canonical[offset..offset + 2].copy_from_slice(&(predictor ^ residual).to_be_bytes());
     }
     Ok(canonical)
 }
@@ -3293,6 +3420,98 @@ fn adjacent_xor_u16_sample_is_sparse(canonical: &[u8]) -> bool {
         }
     }
     zero_count > sampled_bytes / 2
+}
+
+fn strided_xor_u16_byte_planes_if_sparse(
+    canonical: &[u8],
+    stride: usize,
+) -> Option<(usize, Vec<u8>)> {
+    debug_assert_eq!(canonical.len() % 2, 0);
+    let (sampled_zero_count, sampled_bytes) = strided_xor_u16_sample_zero_count(canonical, stride)
+        .filter(|(zero_count, sampled_bytes)| *zero_count > *sampled_bytes / 2)?;
+    if sampled_zero_count == sampled_bytes {
+        return None;
+    }
+    let element_count = canonical.len() / 2;
+    let mut plane_bytes = vec![0_u8; canonical.len()];
+    let mut zero_count = 0;
+    for index in 0..element_count {
+        let offset = index * 2;
+        let word = u16::from_be_bytes([canonical[offset], canonical[offset + 1]]);
+        let predictor = if index < stride {
+            0
+        } else {
+            let predictor_offset = (index - stride) * 2;
+            u16::from_be_bytes([canonical[predictor_offset], canonical[predictor_offset + 1]])
+        };
+        let [high, low] = (word ^ predictor).to_be_bytes();
+        zero_count += usize::from(high == 0) + usize::from(low == 0);
+        plane_bytes[index] = high;
+        plane_bytes[element_count + index] = low;
+    }
+    (zero_count > canonical.len().div_ceil(2)).then_some((stride, plane_bytes))
+}
+
+fn strided_xor_u16_sample_zero_count(canonical: &[u8], stride: usize) -> Option<(usize, usize)> {
+    let element_count = canonical.len() / 2;
+    if stride == 0 || stride >= element_count {
+        return None;
+    }
+    let sample_count = element_count.min(STRIDED_U16_XOR_CLASSIFIER_WORDS);
+    let block_count = sample_count.min(NATIVE_U16_XOR_SAMPLE_BLOCKS);
+    let words_per_block = sample_count.div_ceil(block_count);
+    let mut sampled_bytes = 0;
+    let mut zero_count = 0;
+    for block in 0..block_count {
+        let start = (block * element_count / block_count).max(stride);
+        let end = (start + words_per_block).min(element_count);
+        for index in start..end {
+            let offset = index * 2;
+            let predictor_offset = (index - stride) * 2;
+            let word = u16::from_be_bytes([canonical[offset], canonical[offset + 1]]);
+            let predictor =
+                u16::from_be_bytes([canonical[predictor_offset], canonical[predictor_offset + 1]]);
+            let [high, low] = (word ^ predictor).to_be_bytes();
+            zero_count += usize::from(high == 0) + usize::from(low == 0);
+            sampled_bytes += 2;
+        }
+    }
+    (sampled_bytes > 0).then_some((zero_count, sampled_bytes))
+}
+
+fn strided_xor_wins_sample_compression(canonical: &[u8], residual_planes: &[u8]) -> bool {
+    debug_assert_eq!(canonical.len(), residual_planes.len());
+    debug_assert_eq!(canonical.len() % 2, 0);
+    let nonzero_residual_bytes = residual_planes.iter().filter(|byte| **byte != 0).count();
+    if nonzero_residual_bytes <= STRIDED_U16_XOR_CLASSIFIER_WORDS {
+        return false;
+    }
+    let element_count = canonical.len() / 2;
+    let sample_count = element_count.min(STRIDED_U16_XOR_CLASSIFIER_WORDS);
+    if sample_count < 2 {
+        return false;
+    }
+
+    let mut canonical_sample = vec![0_u8; sample_count * 2];
+    let mut residual_sample = vec![0_u8; sample_count * 2];
+    for sample_index in 0..sample_count {
+        let index = sample_index * element_count / sample_count;
+        canonical_sample[sample_index] = canonical[index * 2];
+        canonical_sample[sample_count + sample_index] = canonical[index * 2 + 1];
+        residual_sample[sample_index] = residual_planes[index];
+        residual_sample[sample_count + sample_index] = residual_planes[element_count + index];
+    }
+
+    let Ok(canonical_len) = zstd::bulk::compress(&canonical_sample, 3).map(|bytes| bytes.len())
+    else {
+        return false;
+    };
+    let Ok(residual_len) = zstd::bulk::compress(&residual_sample, 3).map(|bytes| bytes.len())
+    else {
+        return false;
+    };
+    residual_len.saturating_mul(100)
+        <= canonical_len.saturating_mul(STRIDED_U16_XOR_SAMPLE_WIN_PERCENT)
 }
 
 fn encode_zstd_bounded(bytes: &[u8], max_encoded_len: usize) -> Option<Vec<u8>> {
@@ -4680,6 +4899,7 @@ mod tests {
                 | Ok(QatqExactStrategy::BytePlanePackedRle)
                 | Ok(QatqExactStrategy::BytePlaneZstd)
                 | Ok(QatqExactStrategy::AdjacentXorBytePlaneZstd)
+                | Ok(QatqExactStrategy::StridedXorBytePlaneZstd)
         ));
     }
 
@@ -4770,6 +4990,146 @@ mod tests {
             .flat_map(|index| (index / 4).to_be_bytes())
             .collect();
         assert!(adjacent_xor_u16_sample_is_sparse(&smooth));
+    }
+
+    #[test]
+    fn qatq_exact_typed_bf16_uses_strided_xor_for_drifting_token_rows() {
+        const STRIDE: usize = 128;
+        let mut bytes = Vec::new();
+        for token in 0..512_u16 {
+            for channel in 0..STRIDE as u16 {
+                let word = 0x3e00_u16
+                    .wrapping_add(channel.wrapping_mul(101))
+                    .wrapping_add(token / 32);
+                bytes.extend_from_slice(&word.to_le_bytes());
+            }
+        }
+
+        let automatic = try_encode_qatq_exact_tensor_le(&bytes, TensorDType::BF16).unwrap();
+        let encoded =
+            try_encode_qatq_exact_tensor_le_with_stride_hint(&bytes, TensorDType::BF16, STRIDE)
+                .unwrap();
+        assert_eq!(
+            qatq_exact_strategy(&automatic),
+            Ok(QatqExactStrategy::BytePlaneZstd)
+        );
+        assert_eq!(
+            qatq_exact_strategy(&encoded),
+            Ok(QatqExactStrategy::StridedXorBytePlaneZstd)
+        );
+        let decoded = decode_qatq_exact_tensor_le(&encoded).unwrap();
+        assert_eq!(decoded.bytes_le, bytes);
+
+        let encoded_f16 =
+            try_encode_qatq_exact_tensor_le_with_stride_hint(&bytes, TensorDType::F16, STRIDE)
+                .unwrap();
+        assert_eq!(
+            qatq_exact_strategy(&encoded_f16),
+            Ok(QatqExactStrategy::StridedXorBytePlaneZstd)
+        );
+        let decoded_f16 = decode_qatq_exact_tensor_le(&encoded_f16).unwrap();
+        assert_eq!(decoded_f16.dtype, TensorDType::F16);
+        assert_eq!(decoded_f16.bytes_le, bytes);
+
+        let stride_offset = HEADER_LEN + QATQ_EXACT_PREFIX_LEN;
+        assert_eq!(
+            u32::from_be_bytes(
+                encoded[stride_offset..stride_offset + STRIDED_U16_XOR_METADATA_LEN]
+                    .try_into()
+                    .unwrap()
+            ) as usize,
+            STRIDE
+        );
+
+        let mut zero_stride = encoded.clone();
+        zero_stride[stride_offset..stride_offset + STRIDED_U16_XOR_METADATA_LEN].fill(0);
+        assert_eq!(
+            decode_qatq_exact_tensor_le(&zero_stride),
+            Err(QatqError::InvalidResidualStream)
+        );
+
+        let residual_offset = stride_offset + STRIDED_U16_XOR_METADATA_LEN;
+        let mut residual_planes =
+            zstd::bulk::decompress(&encoded[residual_offset..], bytes.len()).unwrap();
+        residual_planes[STRIDE] ^= 1;
+        let mut corrupted = encoded[..residual_offset].to_vec();
+        corrupted.extend_from_slice(&zstd::bulk::compress(&residual_planes, 3).unwrap());
+        assert!(matches!(
+            decode_qatq_exact_tensor_le(&corrupted),
+            Err(QatqError::ChecksumMismatch { .. })
+        ));
+
+        let mut truncated = encoded;
+        truncated.truncate(stride_offset + STRIDED_U16_XOR_METADATA_LEN - 1);
+        assert!(decode_qatq_exact_tensor_le(&truncated).is_err());
+    }
+
+    #[test]
+    fn qatq_exact_typed_stride_hint_rejects_invalid_layouts() {
+        let bytes = vec![0_u8; 256];
+        assert_eq!(
+            try_encode_qatq_exact_tensor_le_with_stride_hint(&bytes, TensorDType::BF16, 0),
+            Err(QatqError::InvalidPredictorStride(0))
+        );
+        assert_eq!(
+            try_encode_qatq_exact_tensor_le_with_stride_hint(&bytes, TensorDType::BF16, 128),
+            Err(QatqError::InvalidPredictorStride(128))
+        );
+        assert_eq!(
+            try_encode_qatq_exact_tensor_le_with_stride_hint(&bytes, TensorDType::F32, 32),
+            Err(QatqError::InvalidPredictorStride(32))
+        );
+    }
+
+    #[test]
+    fn strided_u16_xor_sample_accepts_period_and_rejects_random_words() {
+        let periodic: Vec<u8> = (0..16_384_u16)
+            .flat_map(|index| (index % 128).wrapping_mul(97).to_be_bytes())
+            .collect();
+        let (periodic_zeros, periodic_bytes) =
+            strided_xor_u16_sample_zero_count(&periodic, 128).unwrap();
+        assert!(periodic_zeros > periodic_bytes / 2);
+
+        let mut random = Vec::new();
+        let mut state = 0x5141_5451_c0de_f00d_u64;
+        for _ in 0..16_384 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            random.extend_from_slice(&(state as u16).to_be_bytes());
+        }
+        let (random_zeros, random_bytes) = strided_xor_u16_sample_zero_count(&random, 128).unwrap();
+        assert!(random_zeros <= random_bytes / 2);
+    }
+
+    #[test]
+    fn strided_u16_xor_compression_classifier_is_conservative() {
+        const STRIDE: usize = 128;
+        let repeated: Vec<u8> = (0..65_536)
+            .flat_map(|index| {
+                0x3d00_u16
+                    .wrapping_add(((index % STRIDE) as u16).wrapping_mul(101))
+                    .to_be_bytes()
+            })
+            .collect();
+        assert!(strided_xor_u16_byte_planes_if_sparse(&repeated, STRIDE).is_none());
+
+        let drifting: Vec<u8> = (0..65_536)
+            .flat_map(|index| {
+                let token = index / STRIDE;
+                let channel = index % STRIDE;
+                0x3d00_u16
+                    .wrapping_add((channel as u16).wrapping_mul(101))
+                    .wrapping_add((token / 32) as u16)
+                    .to_be_bytes()
+            })
+            .collect();
+        let (_, drifting_residual) =
+            strided_xor_u16_byte_planes_if_sparse(&drifting, STRIDE).unwrap();
+        assert!(strided_xor_wins_sample_compression(
+            &drifting,
+            &drifting_residual
+        ));
     }
 
     #[test]

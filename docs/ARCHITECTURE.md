@@ -156,6 +156,10 @@ QATQ exact can store:
   most 4,096 words in 64 distributed consecutive windows before allocating the
   full residual planes and requires both the sample and complete residual stream
   to contain more than half zero bytes;
+- shape-aware native f16/bf16 strided-XOR byte-plane zstd coding, which accepts
+  a validated caller-supplied row/chunk width, predicts each word from the word
+  one stride earlier, and uses a conservative 1,024-word sample-compression
+  classifier to choose one full Zstd transform;
 - Phase 1 prediction plus run-coded XOR residuals.
 
 The predictor strategy:
@@ -181,6 +185,7 @@ The QATQ exact body stores:
   - byte-plane block stream;
   - adjacent-bit delta-XOR byte-plane run stream;
   - native 16-bit adjacent-XOR byte-plane zstd stream;
+  - native 16-bit strided-XOR metadata and byte-plane zstd stream;
   - or deterministic rotation seed, residual magnitude scale, packed q4
     coordinates, packed Phase 1 residual sign bits, and run-coded XOR residuals.
 
@@ -191,6 +196,14 @@ Exhaustive selection can still be used when smallest payload search matters more
 than encode time. QATQ exact is compression-positive on the current real
 runtime KV fixtures, but the fixture set is still too small for broad
 production claims. The `lossless-f32` mode remains the exact envelope control.
+
+The strided predictor is opt-in because the byte-only tensor API cannot infer a
+semantic row, head, or token width. The normal encoder performs no strided
+probing. Shape-aware callers provide the width in elements through
+`try_encode_qatq_exact_tensor_le_with_stride_hint` or CLI
+`--stride-elements`. The hinted path remains bit-identical, but its sample
+classifier is a latency-oriented decision rather than an exhaustive comparison
+of both complete Zstd transforms.
 
 Production callers should use `encode_qatq_exact_decision` or
 `try_encode_qatq_exact_decision_with_config` when deciding what to store.

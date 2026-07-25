@@ -9,6 +9,7 @@ QATQ is release-candidate grade, not yet declared production-complete.
 | Exact codec | ready for v0.1.0 | `cargo test`, public fixtures, exact checksum verification. |
 | Native typed tensors | ready for v0.1.0 | f32/f16/bf16 encode/decode and QATC tests. |
 | Native 16-bit XOR strategy | ready for v0.2.0 | exhaustive u16-pattern tests, bounded sparsity preflight, typed fuzz target, deterministic benchmarks, and fresh f16/bf16 llama.cpp non-regression matrix. |
+| Shape-aware strided XOR strategy | ready for v0.3.0 | opt-in validated stride API/CLI, one-pass sample classifier, default-path non-regression, exact f16/bf16 tests, corruption coverage, deterministic performance gates, and fresh llama.cpp matrix. |
 | QATC container | hardened for v0.1.0 | decode limits, checksum validation, hostile count/length CLI tests. |
 | Public compression gates | ready for v0.1.0 | `docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md`. |
 | Deterministic KV stress | ready for v0.1.0 | ignored stress test plus scheduled workflow. |
