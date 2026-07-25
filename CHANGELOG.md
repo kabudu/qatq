@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-25
+
 ### Added
 
 - Added a sparsity-gated adjacent-XOR byte-plane Zstd strategy for native f16

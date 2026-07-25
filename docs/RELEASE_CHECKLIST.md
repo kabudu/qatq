@@ -144,8 +144,8 @@ workflow rejects tags that are cut from any other branch.
 Use annotated tags only:
 
 ```sh
-git tag -a v0.1.4 -m "QATQ v0.1.4"
-git push origin v0.1.4
+git tag -a vX.Y.Z -m "QATQ vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
 ## crates.io Publication
@@ -161,7 +161,7 @@ Publishing to crates.io is manual:
 5. Confirm the repository has a protected GitHub environment named `crates-io`
    with required reviewer approval.
 6. Run the `Publish crate` workflow from `master`.
-7. Enter the expected package version, for example `0.1.4`.
+7. Enter the expected package version, for example `0.2.0`.
 8. Approve the `crates-io` environment deployment.
 
 The workflow runs format, check, test, package, and `cargo publish --dry-run`
