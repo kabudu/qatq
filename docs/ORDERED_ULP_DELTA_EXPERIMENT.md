@@ -78,7 +78,9 @@ does not currently evaluate. It is the first tested candidate in this sequence
 to improve real K size, encode time, and decode time together. It should not be
 promoted from one capture or bypass QATQ's conservative 5% margin.
 
-The next evidence gate is a multi-model, multi-prompt f16/bf16 KV matrix. A
-production proposal is justified only if sample gating reliably selects gains,
-never enlarges output, and the aggregate benefit pays for the additional wire
-strategy and maintenance surface.
+The subsequent multi-model, multi-prompt f16/bf16 matrix is recorded in
+[`ORDERED_ULP_DELTA_MATRIX.md`](ORDERED_ULP_DELTA_MATRIX.md). It rejects a
+production proposal: the candidate wins only two of 24 K/V datasets, both
+short-prompt Qwen f16 K captures, and does not generalize to Phi, bf16, V, or
+the longer Qwen capture. The transform remains useful research evidence, but
+its narrow selection frequency cannot pay for another wire strategy.

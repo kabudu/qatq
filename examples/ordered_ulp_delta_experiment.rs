@@ -9,9 +9,6 @@ use qatq::{
     TensorDType, decode_qatq_exact_tensor_le, try_encode_qatq_exact_tensor_le_with_stride_hint,
 };
 
-const ROWS: usize = 17;
-const STRIDE: usize = 128;
-const LAYER_WORDS: usize = ROWS * STRIDE;
 const HEADER_BYTES: usize = 24;
 const WARMUP: usize = 8;
 const ITERATIONS: usize = 51;
@@ -27,22 +24,24 @@ impl Predictor {
     fn name(self) -> &'static str {
         match self {
             Self::Adjacent => "adjacent",
-            Self::Strided => "stride-128",
-            Self::StridedSecondOrder => "stride-128-second-order",
+            Self::Strided => "strided",
+            Self::StridedSecondOrder => "strided-second-order",
         }
     }
 }
 
 struct Candidate {
     predictor: Predictor,
+    layer_words: usize,
+    stride: usize,
     body: Vec<u8>,
 }
 
 fn main() {
-    let datasets = parse_inputs();
-    if datasets.is_empty() {
+    let (config, datasets) = parse_inputs();
+    if datasets.is_empty() || config.rows == 0 || config.stride == 0 {
         eprintln!(
-            "usage: ordered_ulp_delta_experiment --input-dir label:path [--input label:path]"
+            "usage: ordered_ulp_delta_experiment --rows N --stride N --dtype f16|bf16 --input-dir label:path"
         );
         std::process::exit(2);
     }
@@ -52,54 +51,90 @@ fn main() {
     );
     println!("| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |");
     for (label, bytes) in datasets {
-        evaluate(&label, &bytes);
+        evaluate(&label, &bytes, config);
     }
 }
 
-fn parse_inputs() -> Vec<(String, Vec<u8>)> {
+#[derive(Clone, Copy)]
+struct Config {
+    rows: usize,
+    stride: usize,
+    dtype: TensorDType,
+}
+
+fn parse_inputs() -> (Config, Vec<(String, Vec<u8>)>) {
     let mut args = env::args().skip(1);
     let mut datasets = Vec::new();
+    let mut rows = 0;
+    let mut stride = 0;
+    let mut dtype = TensorDType::F16;
     while let Some(flag) = args.next() {
         let spec = args
             .next()
             .unwrap_or_else(|| panic!("missing value after {flag}"));
-        let (label, path) = spec
-            .split_once(':')
-            .unwrap_or_else(|| panic!("expected label:path, got {spec}"));
-        let bytes = match flag.as_str() {
-            "--input" => fs::read(path).unwrap(),
-            "--input-dir" => read_directory(Path::new(path)),
+        match flag.as_str() {
+            "--rows" => rows = spec.parse().expect("rows must be an integer"),
+            "--stride" => stride = spec.parse().expect("stride must be an integer"),
+            "--dtype" => {
+                dtype = match spec.as_str() {
+                    "f16" => TensorDType::F16,
+                    "bf16" => TensorDType::BF16,
+                    _ => panic!("dtype must be f16 or bf16"),
+                }
+            }
+            "--input" | "--input-dir" => {
+                let (label, path) = spec
+                    .split_once(':')
+                    .unwrap_or_else(|| panic!("expected label:path, got {spec}"));
+                let bytes = if flag == "--input" {
+                    fs::read(path).unwrap()
+                } else {
+                    read_directory(Path::new(path), dtype)
+                };
+                datasets.push((label.to_owned(), bytes));
+            }
             _ => panic!("unknown argument {flag}"),
-        };
-        datasets.push((label.to_owned(), bytes));
+        }
     }
-    datasets
+    (
+        Config {
+            rows,
+            stride,
+            dtype,
+        },
+        datasets,
+    )
 }
 
-fn read_directory(path: &Path) -> Vec<u8> {
+fn read_directory(path: &Path, dtype: TensorDType) -> Vec<u8> {
+    let expected_extension = match dtype {
+        TensorDType::F16 => "f16le",
+        TensorDType::BF16 => "bf16le",
+        _ => unreachable!(),
+    };
     let mut files: Vec<PathBuf> = fs::read_dir(path)
         .unwrap()
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
             path.extension()
-                .is_some_and(|extension| extension == "f16le")
+                .is_some_and(|extension| extension == expected_extension)
         })
         .collect();
     files.sort();
     let mut bytes = Vec::new();
     for file in files {
-        let layer = fs::read(&file).unwrap();
-        assert_eq!(layer.len(), LAYER_WORDS * 2);
-        bytes.extend_from_slice(&layer);
+        bytes.extend_from_slice(&fs::read(&file).unwrap());
     }
     bytes
 }
 
-fn evaluate(label: &str, bytes: &[u8]) {
-    assert_eq!(bytes.len() % (LAYER_WORDS * 2), 0);
+fn evaluate(label: &str, bytes: &[u8], config: Config) {
+    let layer_words = config.rows * config.stride;
+    assert_eq!(bytes.len() % (layer_words * 2), 0);
     let production =
-        try_encode_qatq_exact_tensor_le_with_stride_hint(bytes, TensorDType::F16, STRIDE).unwrap();
+        try_encode_qatq_exact_tensor_le_with_stride_hint(bytes, config.dtype, config.stride)
+            .unwrap();
     assert_eq!(
         decode_qatq_exact_tensor_le(&production).unwrap().bytes_le,
         bytes
@@ -110,7 +145,7 @@ fn evaluate(label: &str, bytes: &[u8]) {
         Predictor::Strided,
         Predictor::StridedSecondOrder,
     ]
-    .map(|predictor| encode_candidate(bytes, predictor));
+    .map(|predictor| encode_candidate(bytes, predictor, layer_words, config.stride));
     for candidate in &candidates {
         assert_eq!(decode_candidate(candidate, bytes.len()), bytes);
     }
@@ -119,13 +154,18 @@ fn evaluate(label: &str, bytes: &[u8]) {
         black_box(
             try_encode_qatq_exact_tensor_le_with_stride_hint(
                 black_box(bytes),
-                TensorDType::F16,
-                STRIDE,
+                config.dtype,
+                config.stride,
             )
             .unwrap(),
         );
         for candidate in &candidates {
-            black_box(encode_candidate(black_box(bytes), candidate.predictor));
+            black_box(encode_candidate(
+                black_box(bytes),
+                candidate.predictor,
+                layer_words,
+                config.stride,
+            ));
             black_box(decode_candidate(black_box(candidate), bytes.len()));
         }
     }
@@ -139,8 +179,8 @@ fn evaluate(label: &str, bytes: &[u8]) {
         black_box(
             try_encode_qatq_exact_tensor_le_with_stride_hint(
                 black_box(bytes),
-                TensorDType::F16,
-                STRIDE,
+                config.dtype,
+                config.stride,
             )
             .unwrap(),
         );
@@ -152,7 +192,12 @@ fn evaluate(label: &str, bytes: &[u8]) {
 
         for (index, candidate) in candidates.iter().enumerate() {
             let start = Instant::now();
-            black_box(encode_candidate(black_box(bytes), candidate.predictor));
+            black_box(encode_candidate(
+                black_box(bytes),
+                candidate.predictor,
+                layer_words,
+                config.stride,
+            ));
             candidate_encode[index] += start.elapsed();
 
             let start = Instant::now();
@@ -182,12 +227,19 @@ fn evaluate(label: &str, bytes: &[u8]) {
     }
 }
 
-fn encode_candidate(bytes: &[u8], predictor: Predictor) -> Candidate {
+fn encode_candidate(
+    bytes: &[u8],
+    predictor: Predictor,
+    layer_words: usize,
+    stride: usize,
+) -> Candidate {
     let words = bytes_to_words(bytes);
-    let residuals = encode_residuals(&words, predictor);
+    let residuals = encode_residuals(&words, predictor, layer_words, stride);
     let planes = words_to_byte_planes(&residuals);
     Candidate {
         predictor,
+        layer_words,
+        stride,
         body: zstd::bulk::compress(&planes, 3).unwrap(),
     }
 }
@@ -195,17 +247,27 @@ fn encode_candidate(bytes: &[u8], predictor: Predictor) -> Candidate {
 fn decode_candidate(candidate: &Candidate, byte_len: usize) -> Vec<u8> {
     let planes = zstd::bulk::decompress(&candidate.body, byte_len).unwrap();
     let residuals = byte_planes_to_words(&planes);
-    words_to_bytes(&decode_residuals(&residuals, candidate.predictor))
+    words_to_bytes(&decode_residuals(
+        &residuals,
+        candidate.predictor,
+        candidate.layer_words,
+        candidate.stride,
+    ))
 }
 
-fn encode_residuals(words: &[u16], predictor: Predictor) -> Vec<u16> {
+fn encode_residuals(
+    words: &[u16],
+    predictor: Predictor,
+    layer_words: usize,
+    stride: usize,
+) -> Vec<u16> {
     let mut residuals = Vec::with_capacity(words.len());
-    for layer in words.chunks_exact(LAYER_WORDS) {
+    for layer in words.chunks_exact(layer_words) {
         for index in 0..layer.len() {
             let distance = if matches!(predictor, Predictor::Adjacent) {
                 1
             } else {
-                STRIDE
+                stride
             };
             let prefix = if matches!(predictor, Predictor::StridedSecondOrder) {
                 distance * 2
@@ -231,15 +293,20 @@ fn encode_residuals(words: &[u16], predictor: Predictor) -> Vec<u16> {
     residuals
 }
 
-fn decode_residuals(residuals: &[u16], predictor: Predictor) -> Vec<u16> {
+fn decode_residuals(
+    residuals: &[u16],
+    predictor: Predictor,
+    layer_words: usize,
+    stride: usize,
+) -> Vec<u16> {
     let mut words = vec![0; residuals.len()];
-    for layer_index in 0..residuals.len() / LAYER_WORDS {
-        let offset = layer_index * LAYER_WORDS;
-        for index in 0..LAYER_WORDS {
+    for layer_index in 0..residuals.len() / layer_words {
+        let offset = layer_index * layer_words;
+        for index in 0..layer_words {
             let distance = if matches!(predictor, Predictor::Adjacent) {
                 1
             } else {
-                STRIDE
+                stride
             };
             let prefix = if matches!(predictor, Predictor::StridedSecondOrder) {
                 distance * 2
@@ -344,9 +411,12 @@ mod tests {
 
     #[test]
     fn both_predictors_restore_arbitrary_words() {
+        const TEST_ROWS: usize = 17;
+        const TEST_STRIDE: usize = 128;
+        const TEST_LAYER_WORDS: usize = TEST_ROWS * TEST_STRIDE;
         let mut state = 0x554c_5044_5141_5451_u64;
-        let mut words = Vec::with_capacity(LAYER_WORDS * 2);
-        for _ in 0..LAYER_WORDS * 2 {
+        let mut words = Vec::with_capacity(TEST_LAYER_WORDS * 2);
+        for _ in 0..TEST_LAYER_WORDS * 2 {
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
@@ -357,8 +427,11 @@ mod tests {
             Predictor::Strided,
             Predictor::StridedSecondOrder,
         ] {
-            let residuals = encode_residuals(&words, predictor);
-            assert_eq!(decode_residuals(&residuals, predictor), words);
+            let residuals = encode_residuals(&words, predictor, TEST_LAYER_WORDS, TEST_STRIDE);
+            assert_eq!(
+                decode_residuals(&residuals, predictor, TEST_LAYER_WORDS, TEST_STRIDE),
+                words
+            );
         }
     }
 }
