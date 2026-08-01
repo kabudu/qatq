@@ -15,7 +15,7 @@ BLOCK_START = re.compile(r"^(?:#|[-*+] |\d+[.)] |>|\||<|```|~~~)")
 def validate(path: Path, product: str, tag: str) -> list[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     errors: list[str] = []
-    title_prefix = f"# {product} {tag} — "
+    title_prefix = f"# {product} {tag}: "
 
     if not lines or not lines[0].startswith(title_prefix) or lines[0] == title_prefix:
         errors.append(f"line 1 must be '{title_prefix}<release theme>'")
