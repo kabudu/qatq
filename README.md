@@ -9,7 +9,7 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
   <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
   <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
-  <img alt="Crate version 0.4.1" src="https://img.shields.io/badge/crate-0.4.1-2a4e66?style=flat-square">
+  <img alt="Crate version 0.4.2" src="https://img.shields.io/badge/crate-0.4.2-2a4e66?style=flat-square">
 </p>
 
 # QATQ
@@ -32,17 +32,17 @@ or translate observed KV distortion into mathematical separation automatically.
 
 ## Install
 
-Install all production CLIs from the v0.4.1 GitHub release:
+Install all production CLIs from the v0.4.2 GitHub release:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/kabudu/qatq/releases/download/v0.4.1/qatq-installer.sh | sh
+  https://github.com/kabudu/qatq/releases/download/v0.4.2/qatq-installer.sh | sh
 ```
 
 On Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.4.1/qatq-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.4.2/qatq-installer.ps1 | iex"
 ```
 
 Or build the codec from source:
@@ -158,6 +158,7 @@ integration matrix. The concise entry points are:
 - [production readiness](docs/PRODUCTION_READINESS.md)
 - [v0.4.0 release evidence](docs/PUBLIC_RELEASE_0_4_0_EVIDENCE.md)
 - [v0.4.1 independent reproduction evidence](docs/PUBLIC_RELEASE_0_4_1_EVIDENCE.md)
+- [v0.4.2 KV geometry release evidence](docs/PUBLIC_RELEASE_0_4_2_EVIDENCE.md)
 - [release checklist](docs/RELEASE_CHECKLIST.md)
 - [roadmap](docs/ROADMAP.md)
 

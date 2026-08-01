@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.4.2 - 2026-08-01
+
 ### Added
 
 - Added the feature-gated `qatq-kv-geometry` research binary with versioned capture and result contracts, bounded exact or deterministic-sampled pair analysis, norm, cosine, angular, duplicate, spectral, and descriptive binary metrics.
