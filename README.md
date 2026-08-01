@@ -51,10 +51,11 @@ Or build the codec from source:
 cargo install --path .
 ```
 
-To build the Capacity Oracle from source, enable its optional feature:
+To build the Capacity Oracle or research-only KV Geometry Profiler from source, enable the corresponding optional feature:
 
 ```sh
 cargo build --release --features oracle --bin qatq-oracle
+cargo build --release --features geometry --bin qatq-kv-geometry
 ```
 
 ## Exact tensor compression
@@ -121,6 +122,8 @@ The v0.4.1 evidence corpus is also independently reproduced by a separate,
 pinned SageMath implementation. See the
 [machine-readable validation results](validation/oracle-v0.4.1/evidence/results.json)
 and the [precise validation terminology](docs/PUBLIC_RELEASE_0_4_1_EVIDENCE.md).
+
+The research-only KV Geometry Profiler measures bounded observations from exported KV tensors without deriving a capacity requirement or emitting an Oracle verdict. The preregistered two-family study found high correlations and froze further theorem expansion. See the [decision report](docs/oracle/KV_GEOMETRY_RELEVANCE.md).
 
 ## Rust library
 

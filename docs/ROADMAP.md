@@ -138,16 +138,14 @@ items remain explicit future scope and do not broaden finite claims.
 
 ## Capacity Oracle - Geometry Reconnaissance Gate
 
-- [ ] Add a research-only, observation-only `profile-kv` command with bounded
-      exact and deterministic sampled pairwise analysis.
-- [ ] Profile at least two model families across prompt classes, context lengths,
-      dtypes, layers, heads, and pre/post-RoPE representations where exposed.
+- [x] Add a separate research-only, observation-only `qatq-kv-geometry` command with bounded exact and deterministic sampled pairwise analysis.
+- [x] Profile two model families across factual, conversational, and code prompts; short, medium, and long contexts; f16 and bf16; selected layers; all KV heads; and three partition layouts.
 - [ ] Preregister the application-level source of `required_states` and required
       separation rather than deriving either from observed vector count.
-- [ ] Choose positive-`s` finite bounds, freeze Oracle expansion, or pivot to
-      live KV paging based on whether preregistered scenarios receive non-vacuous
-      decisions.
+- [x] Freeze Oracle theorem expansion after the preregistered corpus found high maximum correlations, then prioritize live KV paging evidence.
 
 Geometry profiling must emit observations only. It cannot emit
 `INFEASIBLE_UNDER_MODEL`, derive a capacity requirement, or expand the v0.4.x
 certificate semantics.
+
+The pinned runtime exposed post-RoPE keys but not pre-RoPE keys, so the latter comparison remains an explicit corpus limitation. No application-level source for `required_states` or required separation was established. See [`oracle/KV_GEOMETRY_RELEVANCE.md`](oracle/KV_GEOMETRY_RELEVANCE.md).

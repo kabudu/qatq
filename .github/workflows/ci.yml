@@ -23,6 +23,8 @@ jobs:
         run: cargo check --all-targets --all-features
       - name: Test
         run: cargo test --all-features
+      - name: Verify KV geometry evidence
+        run: python3 scripts/verify_kv_geometry_corpus.py
       - name: Check fuzz targets
         run: cargo check --manifest-path fuzz/Cargo.toml
       - name: Verify public fixtures

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "capture_path": "/tmp/qatq-kv-geometry-v0.4.2/qwen2.5-0.5b-factual-short-bf16/capture/capture.kv",
+  "capture_sha256": "3e65fc2ffeae34969be0cca22eb07373b440b25ad5206db78cd37225d476e2ae",
+  "capture_bytes": 10752,
+  "metadata_path": "/tmp/qatq-kv-geometry-v0.4.2/qwen2.5-0.5b-factual-short-bf16/capture/capture.json",
+  "metadata_sha256": "9252fe40b4ee046d13b7d69ea9ac891e966fa5a428b5ff396a84a9e45cf18311",
+  "metadata": {
+    "schema_version": 1,
+    "capture_id": "qwen2.5-0.5b-factual-short-bf16",
+    "model": "qwen2.5-0.5b",
+    "model_family": "qwen2.5",
+    "runtime": "llama.cpp",
+    "runtime_version": "binary-sha256-a975d95b23598f1393e6f08d8fd219e48a567e1d699de4b8b27c883e8391b532",
+    "prompt_class": "factual",
+    "prompt_sha256": "1c044490d595d844e542aec2bd818affcd3617c4c2c61a788a8d4ff32b3470ba",
+    "context_length": 7,
+    "dtype": "bf16",
+    "tensors": [
+      {
+        "id": "cache_k_l0",
+        "offset_bytes": 0,
+        "byte_length": 1792,
+        "layer": 0,
+        "kind": "key",
+        "rope_stage": "post_rope",
+        "token_start": 0,
+        "token_count": 7,
+        "heads": 2,
+        "dimension": 64,
+        "layout": "token_head_dimension"
+      },
+      {
+        "id": "cache_v_l0",
+        "offset_bytes": 1792,
+        "byte_length": 1792,
+        "layer": 0,
+        "kind": "value",
+        "rope_stage": "not_applicable",
+        "token_start": 0,
+        "token_count": 7,
+        "heads": 2,
+        "dimension": 64,
+        "layout": "token_head_dimension"
+      },
+      {
+        "id": "cache_k_l12",
+        "offset_bytes": 3584,
+        "byte_length": 1792,
+        "layer": 12,
+        "kind": "key",
+        "rope_stage": "post_rope",
+        "token_start": 0,
+        "token_count": 7,
+        "heads": 2,
+        "dimension": 64,
+        "layout": "token_head_dimension"
+      },
+      {
+        "id": "cache_v_l12",
+        "offset_bytes": 5376,
+        "byte_length": 1792,
+        "layer": 12,
+        "kind": "value",
+        "rope_stage": "not_applicable",
+        "token_start": 0,
+        "token_count": 7,
+        "heads": 2,
+        "dimension": 64,
+        "layout": "token_head_dimension"
+      },
+      {
+        "id": "cache_k_l23",
+        "offset_bytes": 7168,
+        "byte_length": 1792,
+        "layer": 23,
+        "kind": "key",
+        "rope_stage": "post_rope",
+        "token_start": 0,
+        "token_count": 7,
+        "heads": 2,
+        "dimension": 64,
+        "layout": "token_head_dimension"
+      },
+      {
+        "id": "cache_v_l23",
+        "offset_bytes": 8960,
+        "byte_length": 1792,
+        "layer": 23,
+        "kind": "value",
+        "rope_stage": "not_applicable",
+        "token_start": 0,
+        "token_count": 7,
+        "heads": 2,
+        "dimension": 64,
+        "layout": "token_head_dimension"
+      }
+    ]
+  }
+}
