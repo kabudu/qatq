@@ -9,548 +9,169 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
   <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
   <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
-  <img alt="Crate version 0.3.0" src="https://img.shields.io/badge/crate-0.3.0-2a4e66?style=flat-square">
+  <img alt="Crate version 0.4.0" src="https://img.shields.io/badge/crate-0.4.0-2a4e66?style=flat-square">
 </p>
 
 # QATQ
 
-**QATQ makes live LLM memory smaller, exact, and portable.**
+**Exact, portable compression for LLM memory in motion—with a proof-carrying
+capacity analysis tool.**
 
-QATQ is a Rust codec toolkit for **Quaternion-Augmented TurboQuant**: exact
-tensor-aware compression for exported LLM KV caches and other high-dimensional
-tensor streams used during live agent/runtime migration.
+QATQ is a Rust toolkit for exported LLM KV caches and other typed tensor streams.
+Its main codec restores input bytes bit-for-bit, while its optional Capacity
+Oracle can prove that a requested state count is impossible under a precisely
+declared finite binary or spherical model.
 
-QATQ is standalone. It includes its own deterministic public fixture generator,
-public benchmark corpus, CLI, Rust library API, CI workflow, fuzzing scaffold,
-and release checklist. External runtime evidence can be attached through
-fixture manifests, but no external project is required to build, test, benchmark,
-or use QATQ.
-
-The initial release target is exact storage and transfer compression for
-exported KV/tensor bytes. Live GPU VRAM reduction is a separate experimental
-roadmap goal that would require runtime KV paging/offload integration and
-latency proof before it becomes a product claim.
+QATQ targets storage, transfer, and runtime migration artifacts. It is not a
+transparent GPU-memory layer, and it does not claim universal compression wins
+or translate observed KV distortion into mathematical separation automatically.
 
 <p align="center">
   <img src="assets/qatq-architecture.svg" alt="QATQ architecture diagram showing exported tensors flowing through exact strategy search, QATC transport, and bit-identical restore">
 </p>
 
-## Status
+## Install
 
-The current implementation provides:
-
-- deterministic public fixture generation with `qatq fixture generate`;
-- public CI-ready fixture, benchmark, paper-table, and gate reports;
-- the QATQ exact `qatq-exact` codec as the primary QATQ implementation:
-  adaptive exact storage over raw bits, byte-RLE, byte-plane RLE,
-  byte-plane zstd entropy coding, reversible quaternion-chain residual coding,
-  adjacent-bit delta-XOR byte-plane residuals, sparsity-gated adjacent-XOR zstd
-  for native f16/bf16 tensors, shape-aware strided-XOR zstd for native
-  f16/bf16 rows, or Phase 1 prediction plus coded XOR residuals for
-  bit-identical reconstruction;
-- a sequential `QATC` chunk container for exact QATQ exact transport of large
-  tensors through the CLI;
-- production chunk helpers for exact QATQ exact storage decisions and restore;
-- an exhaustive QATQ exact encoder variant for research comparisons when payload
-  size search is more important than encode latency;
-- a deterministic lossy signed-int4 tensor codec retained as a seed baseline;
-- a Phase 1 training-free `phase1-q4` codec with quaternion grouping,
-  deterministic Hamilton-product rotation, scalar q4 quantization, and a
-  compact 1-bit residual-sign side channel, retained as a lossy predictor and
-  research comparator rather than the product path;
-- a `turboquant-q4` reference baseline for measuring the base random-rotation
-  scalar quantization path plus structured QJL residual inner-product estimator
-  before the quaternion overlay, not an official Google implementation or the
-  default QATQ foundation;
-- an exact `lossless-f32` envelope for bit-identical f32 transport while the
-  residual-compression design is developed;
-- a small CLI for encoding, chunked encoding, and decoding raw f32, f16, and
-  bf16 little-endian tensor files;
-- tests for payload validation, lossy round trips, exact f32 round trips, Phase
-  1 deterministic/configured behavior, production chunk restore, CLI behavior,
-  and benchmark gate policy.
-
-`qatq-exact` and the `QATC` container are the main QATQ product surface.
-They are exact by construction and use a fast strategy policy:
-the encoder selects the smallest applicable bit-identical QATQ exact candidate,
-including a
-reversible quaternion-chain residual path when it beats simpler byte-plane
-transforms. Phase 1 is still lossy and experimental; it is useful as an
-internal predictor and comparator, but lossless QATQ claims apply only to QATQ
-exact and QATC. The exhaustive encoder remains available for research
-comparisons.
-The generated public fixtures are the default reproducible evidence set. Larger
-or private runtime captures can be added as optional external manifests. Current
-single payloads are bounded to `67,108,864` tensor values each; larger tensors
-should use the QATQ exact `QATC` chunk container.
-
-The current v0.1.0 API/CLI freeze record is in
-[`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md). Production-readiness status
-and remaining gates are tracked in
-[`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
-Runtime-agnostic external integration evidence is summarized in
-[`docs/EXTERNAL_RUNTIME_EVIDENCE.md`](docs/EXTERNAL_RUNTIME_EVIDENCE.md).
-The technical whitepaper is available at
-[`docs/WHITEPAPER.md`](docs/WHITEPAPER.md).
-Release packaging and publication are documented in
-[`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md): GitHub Release
-binaries are built by cargo-dist from annotated tags, while crates.io
-publication is a separate manually approved workflow.
-
-## Installation
-
-Until the first public release is tagged, build from source:
-
-```sh
-cargo install --path .
-```
-
-After a GitHub Release exists, install the prebuilt CLI with the generated
-cargo-dist installer:
+Install all production CLIs from the v0.4.0 GitHub release:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/kabudu/qatq/releases/download/v0.3.0/qatq-installer.sh | sh
+  https://github.com/kabudu/qatq/releases/download/v0.4.0/qatq-installer.sh | sh
 ```
 
 On Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.3.0/qatq-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.4.0/qatq-installer.ps1 | iex"
 ```
 
-## Attribution
-
-QATQ is an independent project. TurboQuant should be credited to the Google
-Research / Google DeepMind / NYU work by Amir Zandieh, Majid Daliri, Majid
-Hadian, and Vahab Mirrokni. The quaternion/Hamilton-product foundation traces
-to William Rowan Hamilton, with modern neural-network motivation from prior
-quaternion neural-network work such as Parcollet, Ravanelli, Morchid, Linarès,
-Trabelsi, De Mori, and Bengio. See [docs/CREDITS.md](docs/CREDITS.md).
-
-## What QATQ Is For
-
-QATQ is designed for structured numeric streams:
-
-- LLM KV caches;
-- activation-like tensor blocks;
-- vector database and embedding payloads;
-- runtime migration packets that can tolerate bounded numeric error or carry a
-  residual for exact reconstruction.
-
-For v0.1, QATQ is about exported-state compression: checkpoints, migration
-payloads, fixture captures, and cold storage for typed tensor bytes. It is not a
-transparent layer between an arbitrary LLM runtime and GPU memory. Live VRAM
-reduction would need a runtime adapter that compresses cold KV pages, restores
-them on demand, and proves lower peak VRAM without unacceptable token-latency or
-behavior regressions.
-
-It is not a general-purpose byte compressor like zstd or lz4. The practical
-question for this project is whether QATQ's tensor-aware exact strategy makes
-KV/tensor payloads smaller and fast enough to transmit for runtime migration and
-storage workloads.
-
-## CLI
-
-Encode a raw f32 little-endian tensor with QATQ exact reconstruction:
+Or build the codec from source:
 
 ```sh
-cargo run -- encode input.f32le output.qatq
+cargo install --path .
 ```
 
-`qatq-exact` is the default mode. QATQ automatically selects the applicable
-lossless internal strategy; users do not select byte-plane, adjacent-XOR,
-quaternion-chain, or other exact strategies themselves. Pass `--mode` only to
-explicitly choose a comparator or research mode.
-
-Decode back to raw f32 little-endian:
+To build the Capacity Oracle from source, enable its optional feature:
 
 ```sh
-cargo run -- decode output.qatq restored.f32le
+cargo build --release --features oracle --bin qatq-oracle
 ```
 
-Encode native raw bf16 or f16 little-endian tensors without widening to f32:
+## Exact tensor compression
+
+`qatq-exact` is the default codec. It selects the smallest applicable exact
+strategy automatically; users do not need to choose internal byte-plane,
+delta-XOR, strided-XOR, Zstd, or reversible quaternion-chain transforms.
 
 ```sh
-cargo run -- encode --dtype bf16 input.bf16le output.qatq
-cargo run -- encode --dtype f16 input.f16le output.qatq
+# f32 input
+qatq encode input.f32le output.qatq
+qatq decode output.qatq restored.f32le
+
+# Native half-precision input
+qatq encode --dtype bf16 input.bf16le output.qatq
+qatq encode --dtype f16 input.f16le output.qatq
+
+# Optional row width for the reversible cross-row predictor
+qatq encode --dtype bf16 --stride-elements 128 input.bf16le output.qatq
+
+# Bounded QATC container for large tensors
+qatq encode-chunked --max-values-per-chunk 65536 input.f32le output.qatc
+qatq decode output.qatc restored.f32le
 ```
 
-When the runtime knows the flattened row or chunk width, provide it in tensor
-elements to enable the reversible cross-row predictor:
+QATQ and QATC writes are atomic. QATC v2 provides bounded sequential chunks and
+an aggregate checksum. Comparator codecs remain available for research, but
+lossless product claims apply only to `qatq-exact` and QATC.
+
+For runtime capture integration, see
+[`docs/LLAMA_CPP_KV_CAPTURE.md`](docs/LLAMA_CPP_KV_CAPTURE.md). For the wire and
+strategy design, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Capacity Oracle
+
+`qatq-oracle` returns exactly one logical outcome:
+
+- `CONSTRUCTED`: a concrete construction passed every declared constraint;
+- `INFEASIBLE_UNDER_MODEL`: a checked finite certificate proves the request
+  exceeds an applicable upper bound;
+- `UNKNOWN`: supported analysis did not decide the request; or
+- `REFUSED`: input was malformed, unsupported, ambiguous, or over budget.
+
+The v0.4.0 finite-certified scope is deliberately narrow: exact binary Hamming
+bounds and exact spherical Rankin bounds for maximum inner product `s <= 0`.
+Positive-inner-product spherical requests and asymptotic rate results cannot produce
+finite impossibility claims in this release. Construction search and automatic
+KV-to-model derivation are also not shipped.
 
 ```sh
-cargo run -- encode --dtype bf16 --stride-elements 128 \
-  input.bf16le output.qatq
+qatq-oracle bound examples/oracle/binary-128-d48-48bit.json \
+  --output oracle-result
+
+qatq-oracle check oracle-result/certificate.json
 ```
 
-`--stride-elements` is valid only for native f16/bf16 `qatq-exact` encoding.
-QATQ validates the stride, samples both ordinary byte planes and strided XOR
-residual planes, and performs one full Zstd pass with the predicted winner.
-Omit the option when the layout is unknown; the default path remains fully
-automatic and incurs no cross-row probing cost.
+Completed runs publish a SHA-256-bound evidence bundle atomically. The checker
+uses a strict schema and independently recomputes the theorem witness and
+decisive inequality. Start with [`docs/oracle/README.md`](docs/oracle/README.md),
+then review the [claim boundary](docs/oracle/CLAIM_BOUNDARY.md) and
+[trust boundary](docs/oracle/TRUST_BOUNDARY.md).
 
-Decode writes the same native little-endian tensor bytes that were encoded:
-
-```sh
-cargo run -- decode output.qatq restored.bf16le
-```
-
-Use an explicit seed for reproducible QATQ exact sweeps:
-
-```sh
-cargo run -- encode --seed 0x51415451 input.f32le output.qatq
-```
-
-For large tensors, write a QATQ exact chunk container so each embedded payload
-stays inside the decoder safety bound while preserving bit-identical
-reconstruction across chunk boundaries:
-
-```sh
-cargo run -- encode-chunked --max-values-per-chunk 65536 input.f32le output.qatc
-```
-
-For native half-precision captures, pass `--dtype` to the same chunked path:
-
-```sh
-cargo run -- encode-chunked --max-values-per-chunk 65536 \
-  --dtype bf16 input.bf16le output.qatc
-```
-
-`encode-chunked` reads and encodes one raw tensor chunk at a time, so the CLI
-does not need to hold the full tensor in memory while building the `QATC`
-artifact. `QATC` uses the version `2` container header with an aggregate
-checksum over the ordered chunk length/payload stream.
-
-The normal decode command accepts both `QATQ` single payloads and `QATC`
-containers. CLI encode and decode writes go through a temporary file and replace
-the target only after the payload has been fully produced or validated and
-written successfully:
-
-```sh
-cargo run -- decode output.qatc restored.f32le
-```
-
-For runtime KV-cache capture work, the preferred route is a llama.cpp adapter
-that exports internal K/V cache tensors as raw `.f16le`, `.bf16le`, or `.f32le`
-files and then compresses them with QATQ exact. See
-[`docs/LLAMA_CPP_KV_CAPTURE.md`](docs/LLAMA_CPP_KV_CAPTURE.md).
-
-Use exact f32 envelope transport as a control baseline:
-
-```sh
-cargo run -- encode --mode lossless-f32 input.f32le output.qatq
-```
-
-Use the reference base TurboQuant-style q4 path only for lossy comparator
-experiments:
-
-```sh
-cargo run -- encode --mode turboquant-q4 input.f32le output.qatq
-```
-
-Use the Phase 1 quaternion path as a lossy predictor/comparator experiment:
-
-```sh
-cargo run -- encode --mode phase1-q4 input.f32le output.qatq
-```
-
-Generate the public fixture corpus:
-
-```sh
-cargo run --bin qatq -- fixture generate \
-  --manifest fixtures/public.manifest \
-  --dir fixtures/generated
-```
-
-Run the public benchmark report:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --exact-only \
-  --no-synthetic \
-  --output docs/PUBLIC_BENCHMARKS.md \
-  --paper-output docs/PUBLIC_PAPER_TABLES.md \
-  --manifest fixtures/public.manifest
-```
-
-The short release-facing compression table is maintained in
-[`docs/PUBLIC_COMPRESSION_SUMMARY.md`](docs/PUBLIC_COMPRESSION_SUMMARY.md).
-
-Run the public quality-proxy report:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --no-synthetic \
-  --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
-  --manifest fixtures/public.manifest
-```
-
-Run the public retrieval task-quality report. This verifies that QATQ exact
-transport preserves top-1 retrieval decisions on the public fixture corpus and
-keeps lossy comparator rows separate:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --no-synthetic \
-  --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md \
-  --manifest fixtures/public.manifest
-```
-
-Add optional raw f32 little-endian fixtures from any runtime. Native f16/bf16
-runtime captures should use the QATQ CLI `--dtype` path and carry dtype metadata
-in their runtime adapter manifest:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --output docs/BENCHMARKS.md \
-  --input runtime-kv:path/to/kv-cache.f32le
-```
-
-Use a fixture manifest and generate paper-ready summary tables:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --output docs/BENCHMARKS.md \
-  --paper-output docs/PAPER_TABLES.md \
-  --quality-output docs/PUBLIC_QUALITY_EXPERIMENTS.md \
-  --task-quality-output docs/PUBLIC_TASK_QUALITY_EXPERIMENTS.md \
-  --manifest fixtures/public.manifest
-```
-
-Add `--no-synthetic` when you want an external-fixture-only smoke run or gate.
-The benchmark harness preflights external fixture paths and raw `.f32le` byte
-lengths before running timing loops, so missing or malformed captures fail
-before report outputs are replaced.
-
-See [docs/FIXTURES.md](docs/FIXTURES.md) for the manifest format.
-
-Append a validated runtime/KV fixture entry:
-
-```sh
-cargo run -- fixture add \
-  --manifest fixtures/runtime.manifest \
-  --group runtime-kv \
-  --name llama-layer12-k \
-  --path captures/llama-layer12-k.f32le \
-  --shape "[layers=1, heads=32, tokens=128, dim=128]" \
-  --notes "runtime source capture"
-```
-
-Verify a manifest and write an audit report:
-
-```sh
-cargo run -- fixture verify \
-  --manifest fixtures/public.manifest \
-  --output docs/PUBLIC_FIXTURE_AUDIT.md
-```
-
-Run the production KV readiness gate. This is the primary gate for mixed-size
-external KV tensors because decode is judged by throughput-normalized
-nanoseconds per value:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --exact-only \
-  --no-synthetic \
-  --manifest fixtures/public.manifest \
-  --gate-output docs/PUBLIC_BENCHMARK_GATE.md \
-  --gate-require-external \
-  --gate-policy production-kv \
-  --max-exact-ratio 0.96 \
-  --max-exact-encode-us 5000 \
-  --max-exact-decode-ns-per-value 50.00 \
-  --max-exact-container-ratio 0.97 \
-  --max-exact-container-decode-ns-per-value 50.00
-```
-
-Run the competitive compression gate. This refuses regressions where a
-compression-positive QATQ exact row is larger than the best of the `zstd-raw-f32le`
-and `lz4-raw-f32le` baselines over the same public raw f32 fixture:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --exact-only \
-  --no-synthetic \
-  --manifest fixtures/public.manifest \
-  --gate-output docs/PUBLIC_COMPETITIVE_COMPRESSION_GATE.md \
-  --gate-require-external \
-  --gate-policy competitive-compression
-```
-
-Run the deterministic KV-cache stress matrix. This ignored integration test
-generates thousands of KV-shaped tensors, verifies QATQ exact bit identity through
-single payloads, production chunk decisions, `QATC` containers, dispatch decode,
-sampled corruption rejection, and default-vs-exhaustive payload size checks:
-
-```sh
-cargo test --test kv_stress -- --ignored --nocapture
-```
-
-Run the fixed absolute-latency gate only as service-budget analysis for small
-tensors or deployment-specific envelopes. It is intentionally not the
-large-tensor production readiness signal:
-
-```sh
-cargo run --release --bin qatq-bench -- \
-  --exact-only \
-  --no-synthetic \
-  --manifest fixtures/public.manifest \
-  --gate-output docs/BENCHMARK_GATE.md \
-  --gate-require-external \
-  --gate-policy latency-budget \
-  --max-exact-ratio 0.95 \
-  --max-exact-encode-us 5000 \
-  --max-exact-decode-us 1000 \
-  --max-exact-container-ratio 0.96 \
-  --max-exact-container-decode-us 1200
-```
-
-## Library
+## Rust library
 
 ```rust
 use qatq::{decode, try_encode, CodecMode};
 
 let values = [0.25_f32, -0.5, 1.0, 2.0];
-let payload = try_encode(&values, CodecMode::Phase1Q4)?;
+let payload = try_encode(&values, CodecMode::QatqExact)?;
 let decoded = decode(&payload)?;
+assert_eq!(values.as_slice(), decoded.as_slice());
 # Ok::<(), qatq::QatqError>(())
 ```
 
-Runtime integrations should prefer `try_encode` for single-payload artifacts so
-oversized inputs return `QatqError::ValueCountTooLarge` instead of panicking.
-Direct fallible helpers are also available for mode-specific callers:
-`try_encode_lossy_i4`, `try_encode_lossless_f32`,
-`try_encode_phase1_q4_with_config`, `try_encode_qatq_exact_with_config`,
-and `try_encode_qatq_exact_exhaustive_with_config`. Use the chunk APIs or
-`QATC` container for larger tensors. Use `qatq_exact_strategy` to inspect
-which exact QATQ exact strategy was selected for an encoded payload.
+Single payloads are bounded to 67,108,864 values. Use the chunk/container APIs
+for larger tensors. Native f16/bf16 callers can use
+`try_encode_qatq_exact_tensor_le_with_stride_hint`; opaque 32-bit state can use
+the exact u32 container APIs. The public compatibility contract is documented in
+[`docs/API_CLI_FREEZE.md`](docs/API_CLI_FREEZE.md).
 
-Shape-aware native tensor integrations may call
-`try_encode_qatq_exact_tensor_le_with_stride_hint(bytes, dtype, stride_elements)`.
-The stride is measured in tensor elements. The API is exact and checksum
-verified, rejects invalid layouts, and leaves the normal no-hint encoder
-unchanged. See
-[`docs/CROSS_CHUNK_XOR_EXPERIMENT.md`](docs/CROSS_CHUNK_XOR_EXPERIMENT.md)
-for selection boundaries and measured evidence.
+The additive Oracle API is available under `qatq::oracle` when the `oracle`
+feature is enabled.
 
-Chunk exact QATQ exact payloads for large tensor blocks:
+## Evidence and development
 
-```rust
-use qatq::{decode_qatq_exact_chunks, encode_qatq_exact_chunks};
+QATQ includes deterministic public fixtures, exactness and corruption tests,
+fuzz targets, benchmark gates, comparator reports, and a fresh llama.cpp
+integration matrix. The concise entry points are:
 
-let values = vec![0.0_f32; 1_000_000];
-let chunks = encode_qatq_exact_chunks(&values, 65_536)?;
-let decoded = decode_qatq_exact_chunks(chunks.iter().map(Vec::as_slice))?;
-assert_eq!(decoded, values);
-# Ok::<(), qatq::QatqError>(())
-```
+- [public compression summary](docs/PUBLIC_COMPRESSION_SUMMARY.md)
+- [benchmark and competitive gates](docs/PUBLIC_BENCHMARK_GATE.md)
+- [llama.cpp KV matrix](docs/LLAMA_CPP_KV_MATRIX.md)
+- [production readiness](docs/PRODUCTION_READINESS.md)
+- [v0.4.0 release evidence](docs/PUBLIC_RELEASE_0_4_0_EVIDENCE.md)
+- [release checklist](docs/RELEASE_CHECKLIST.md)
+- [roadmap](docs/ROADMAP.md)
 
-Use the sequential QATQ exact container when a single file artifact is needed:
-
-```rust
-use qatq::{decode, encode_qatq_exact_container};
-
-let values = vec![0.0_f32; 1_000_000];
-let payload = encode_qatq_exact_container(&values, 65_536)?;
-let decoded = decode(&payload)?;
-assert_eq!(decoded, values);
-# Ok::<(), qatq::QatqError>(())
-```
-
-Use the prevalidated container visitor when an integration wants to process
-chunks without allocating the full decoded tensor:
-
-```rust
-use qatq::{
-    decode_qatq_exact, encode_qatq_exact_container,
-    for_each_qatq_exact_container_payload_with_limits, QatcDecodeLimits,
-};
-
-let payload = encode_qatq_exact_container(&[1.0_f32, 2.0, 3.0], 2)?;
-let mut decoded_count = 0;
-let limits = QatcDecodeLimits {
-    max_total_values: 1_000_000,
-    ..QatcDecodeLimits::default()
-};
-
-for_each_qatq_exact_container_payload_with_limits(&payload, limits, |chunk| {
-    let values = decode_qatq_exact(chunk)?;
-    decoded_count += values.len();
-    Ok(())
-})?;
-assert_eq!(decoded_count, 3);
-# Ok::<(), qatq::QatqError>(())
-```
-
-Protocols that carry arbitrary 32-bit state can use the opaque-word API. It
-preserves every word exactly, including bit patterns that represent NaNs as
-`f32`, while retaining the existing QATC v2 wire format. Inspection validates
-aggregate limits, the container checksum, and each chunk's decoded word count
-before chunk bodies are decoded:
-
-```rust
-use qatq::{
-    decode_qatq_exact_u32_container, encode_qatq_exact_u32_container,
-    for_each_qatq_exact_u32_container_chunk_with_limits,
-    inspect_qatq_exact_container_with_limits, QatcDecodeLimits,
-};
-
-let words = [0_u32, 0x7fc0_0001, u32::MAX];
-let max_words_per_chunk = 2;
-let payload = encode_qatq_exact_u32_container(&words, max_words_per_chunk)?;
-let metadata = inspect_qatq_exact_container_with_limits(
-    &payload,
-    QatcDecodeLimits::default(),
-    max_words_per_chunk,
-)?;
-let decoded = decode_qatq_exact_u32_container(&payload, max_words_per_chunk)?;
-
-assert_eq!(metadata.total_values, words.len());
-assert_eq!(decoded, words);
-
-let mut visited = Vec::new();
-for_each_qatq_exact_u32_container_chunk_with_limits(
-    &payload,
-    QatcDecodeLimits::default(),
-    max_words_per_chunk,
-    |chunk| {
-        visited.extend_from_slice(chunk);
-        Ok(())
-    },
-)?;
-assert_eq!(visited, words);
-# Ok::<(), qatq::QatqError>(())
-```
-
-Byte-oriented protocols can use `encode_qatq_exact_bytes_container`,
-`decode_qatq_exact_bytes_container`, and
-`for_each_qatq_exact_bytes_container_chunk_with_limits`. The surrounding
-protocol supplies its authenticated decoded-byte length. QATQ then validates
-that length and canonical zero padding before returning bytes or invoking the
-first visitor callback. The byte API emits the same QATC v2 bytes as canonical
-little-endian packing through the opaque-word API.
-
-## External Validation
-
-QATQ does not depend on any external runtime. Historical runtime-integration
-evidence can be kept outside this repository as optional validation provenance.
-New runtime integrations should follow
-[docs/RUNTIME_ADAPTERS.md](docs/RUNTIME_ADAPTERS.md) and provide ordinary
-fixture manifests rather than runtime-specific project coupling.
-
-The strongest current external evidence is a 2026-06-22 Rust live-migration run
-that built standalone `qatq v0.1.0` from this repository on the target host,
-preserved exact continuation behavior through 128 tokens, and transferred
-14,004,990 QATQ bytes for the same streamed block artifacts that measured
-50,331,648 raw bytes, 20,405,381 zstd bytes, and 28,739,217 lz4 bytes. See
-[`docs/EXTERNAL_RUNTIME_EVIDENCE.md`](docs/EXTERNAL_RUNTIME_EVIDENCE.md).
-
-Run the local Ollama model-output task harness when Ollama is available. This
-captures model-produced task tensors under ignored `captures/`, ingests them
-through the fixture manifest path, QATQ-encodes and decodes them, and writes
-[`docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md`](docs/RUNTIME_TASK_QUALITY_EXPERIMENTS.md):
+Run the primary checks locally:
 
 ```sh
-python3 scripts/ollama_task_quality.py --model phi4-mini:latest
+cargo fmt --all -- --check
+cargo check --all-targets --all-features --locked
+cargo test --all-features --locked
+cargo test --test kv_stress -- --ignored --nocapture
 ```
+
+Detailed fixture, benchmark, release, and integration commands live in the
+linked documentation rather than on this front page.
+
+## Scope and attribution
+
+QATQ is independent. TurboQuant is credited to the Google Research / Google
+DeepMind / NYU work by Amir Zandieh, Majid Daliri, Majid Hadian, and Vahab
+Mirrokni. The quaternion/Hamilton-product foundation traces to William Rowan
+Hamilton and modern quaternion neural-network research. See
+[`docs/CREDITS.md`](docs/CREDITS.md).
+
+Apache-2.0 licensed. QATQ/QATC compatibility, claims, and evidence are versioned
+in this repository; historical research comparators are not the default product
+path.

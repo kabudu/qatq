@@ -16,12 +16,12 @@ Run from the repository root:
 
 ```sh
 cargo fmt --check
-cargo check --all-targets
-cargo test
+cargo check --all-targets --all-features
+cargo test --all-features
 cargo metadata --locked --format-version 1
 cargo tree -d
 cargo audit
-cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 75
+cargo llvm-cov --workspace --all-targets --all-features --locked --fail-under-lines 75
 cargo run --bin qatq -- fixture verify \
   --manifest fixtures/public.manifest \
   --output docs/PUBLIC_FIXTURE_AUDIT.md
@@ -133,8 +133,8 @@ submitted to Apple notarization with `xcrun notarytool` before they are uploaded
 to the GitHub Release.
 
 The binary archives also include auxiliary benchmark binaries from the crate.
-Only `qatq` is the supported end-user CLI; `qatq-bench` and `qatq-kv-bench` are
-developer/release validation utilities.
+`qatq` and the feature-gated `qatq-oracle` are supported end-user CLIs;
+`qatq-bench` and `qatq-kv-bench` are developer/release validation utilities.
 
 Release tags must point at commits reachable from `origin/master`; the release
 workflow rejects tags that are cut from any other branch.

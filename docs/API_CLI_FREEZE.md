@@ -80,6 +80,11 @@ compatible. Older decoders reject identifier `10` instead of misdecoding it.
 The public enum additions require a semver-minor release because exhaustive
 downstream matches may need updating.
 
+QATQ 0.4.0 additively introduces the optional `qatq::oracle` API and separate
+`qatq-oracle` executable. Existing `qatq` commands, codec APIs, QATQ payloads,
+and QATC v2 containers are unchanged. Oracle JSON and certificate schemas begin
+at version 1 and reject unknown critical fields.
+
 Before crates.io publication, any API or CLI rename must include:
 
 - an explicit changelog entry;

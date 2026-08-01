@@ -114,3 +114,22 @@ not just access to exported tensors.
 - [x] Add manual crates.io publication workflow with environment approval.
 - [ ] Publish to crates.io when the release owner performs and records the
       publication step.
+
+## Capacity Oracle - Finite Certified Scope
+
+- [x] Qualify the reviewed asymptotic results without deriving finite claims from
+      asymptotic
+      `o(n)` statements.
+- [x] Add strict binary and spherical request normalization with resource limits.
+- [x] Add exact finite binary Hamming certificates.
+- [x] Add exact finite spherical Rankin certificates for `s <= 0`.
+- [x] Add a smaller independent checker and adversarial certificate tests.
+- [x] Add atomic evidence bundles and a separate `qatq-oracle` CLI.
+- [ ] Add positive-`s` Gegenbauer certificates with a complete interval/root
+      proof.
+- [ ] Add construction search and an explicitly justified QATQ capture bridge.
+- [ ] Record external coding-theory verification after the first production
+      Oracle release.
+
+The checked items define the first production Capacity Oracle release. Unchecked
+items remain explicit future scope and do not broaden finite claims.

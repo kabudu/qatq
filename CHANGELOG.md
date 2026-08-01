@@ -4,6 +4,22 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added the feature-gated `qatq-oracle` binary and `qatq::oracle` library API for
+  strict binary/spherical capacity requests, deterministic normalization, and
+  SHA-256 request binding.
+- Added independently checkable finite impossibility certificates for the exact
+  binary Hamming bound and spherical Rankin bounds at maximum inner product
+  `s <= 0`.
+- Added fail-closed certificate checking, adversarial schema/arithmetic tests,
+  logical exit statuses, and atomically published evidence bundles.
+
+### Changed
+
+- Cargo-dist production archives now enable the `oracle` feature and include the
+  separate `qatq-oracle` executable without changing QATQ or QATC wire formats.
+
 ## 0.3.0 - 2026-07-25
 
 ### Added

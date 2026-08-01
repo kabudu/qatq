@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "request_id": "spherical-64-s025-planning",
+  "representation": {
+    "kind": "spherical",
+    "ambient_dimension": 64,
+    "required_states": "18446744073709551616",
+    "normalization": "unit_l2",
+    "separation": {
+      "maximum_inner_product": "0.25"
+    }
+  },
+  "construction": {
+    "enabled": false
+  },
+  "bounds": {
+    "engines": ["asymptotic-planning"],
+    "require_rigorous_certificate": false
+  },
+  "resources": {
+    "maximum_dimension": 1024,
+    "maximum_certificate_bytes": 16777216
+  }
+}

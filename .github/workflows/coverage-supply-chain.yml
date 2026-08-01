@@ -22,7 +22,7 @@ jobs:
           components: llvm-tools-preview
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Coverage gate
-        run: cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 75
+        run: cargo llvm-cov --workspace --all-targets --all-features --locked --fail-under-lines 75
 
   supply-chain:
     name: supply-chain
