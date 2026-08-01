@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "request_id": "binary-128-d48-48bit",
+  "representation": {
+    "kind": "binary",
+    "dimension": 128,
+    "required_states": "281474976710656",
+    "separation": {
+      "minimum_hamming_distance": 48
+    }
+  },
+  "construction": {
+    "enabled": false
+  },
+  "bounds": {
+    "engines": ["finite-binary-hamming"],
+    "require_rigorous_certificate": true
+  },
+  "resources": {
+    "maximum_dimension": 1024,
+    "maximum_certificate_bytes": 16777216
+  }
+}

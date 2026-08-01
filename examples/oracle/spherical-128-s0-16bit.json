@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "request_id": "spherical-128-s0-16bit",
+  "representation": {
+    "kind": "spherical",
+    "ambient_dimension": 128,
+    "required_states": "65536",
+    "normalization": "unit_l2",
+    "separation": {
+      "maximum_inner_product": "0"
+    }
+  },
+  "construction": {
+    "enabled": false
+  },
+  "bounds": {
+    "engines": ["finite-spherical-rankin"],
+    "require_rigorous_certificate": true
+  },
+  "resources": {
+    "maximum_dimension": 1024,
+    "maximum_certificate_bytes": 16777216
+  }
+}

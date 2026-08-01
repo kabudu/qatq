@@ -28,6 +28,7 @@ include = [
     "tests/**",
     "scripts/**",
     "docs/ARCHITECTURE.md",
+    "docs/oracle/**",
     "docs/CREDITS.md",
     "docs/FIXTURES.md",
     "docs/API_CLI_FREEZE.md",
@@ -57,9 +58,22 @@ path = "src/lib.rs"
 name = "qatq"
 path = "src/main.rs"
 
+[[bin]]
+name = "qatq-oracle"
+path = "src/bin/qatq-oracle.rs"
+required-features = ["oracle"]
+
+[features]
+default = []
+oracle = ["dep:num-bigint", "dep:serde", "dep:serde_json", "dep:sha2"]
+
 [dependencies]
 lz4_flex = "0.14.0"
 zstd = "0.13.3"
+num-bigint = { version = "0.4.6", features = ["serde"], optional = true }
+serde = { version = "1.0.219", features = ["derive"], optional = true }
+serde_json = { version = "1.0.140", optional = true }
+sha2 = { version = "0.10.8", optional = true }
 
 # The profile that 'dist' will build with
 [profile.dist]
