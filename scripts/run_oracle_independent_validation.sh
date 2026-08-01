@@ -25,6 +25,9 @@ python3 "$repo_root/scripts/oracle_validation/export_corpus.py" \
 docker run --rm \
   --platform linux/amd64 \
   --network none \
+  --user "$(id -u):$(id -g)" \
+  --group-add 1000 \
+  --env HOME=/tmp \
   --env PYTHONDONTWRITEBYTECODE=1 \
   --volume "$repo_root:/workspace:ro" \
   "$sage_image" \
@@ -33,6 +36,9 @@ docker run --rm \
 docker run --rm \
   --platform linux/amd64 \
   --network none \
+  --user "$(id -u):$(id -g)" \
+  --group-add 1000 \
+  --env HOME=/tmp \
   --volume "$repo_root:/workspace:ro" \
   --volume "$output_root:/evidence" \
   "$sage_image" \
