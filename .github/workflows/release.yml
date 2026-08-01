@@ -316,14 +316,30 @@ jobs:
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"
-          ANNOUNCEMENT_TITLE: "${{ fromJson(steps.host.outputs.manifest).announcement_title }}"
-          ANNOUNCEMENT_BODY: "${{ fromJson(steps.host.outputs.manifest).announcement_github_body }}"
           RELEASE_COMMIT: "${{ github.sha }}"
+          RELEASE_TAG: "${{ needs.plan.outputs.tag }}"
         run: |
-          # Write and read notes from a file to avoid quoting breaking things
-          echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
+          NOTES_FILE=".github/release-notes/${RELEASE_TAG}.md"
+          if [[ ! -f "$NOTES_FILE" ]]; then
+            echo "Missing curated release notes: $NOTES_FILE" >&2
+            exit 1
+          fi
 
-          gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
+          python3 scripts/validate_release_notes.py "$NOTES_FILE" --product QATQ --tag "$RELEASE_TAG"
+
+          RELEASE_TITLE="$(sed -n '1s/^# //p' "$NOTES_FILE")"
+          if [[ -z "$RELEASE_TITLE" || "$RELEASE_TITLE" != "QATQ ${RELEASE_TAG}"* ]]; then
+            echo "First line must be '# QATQ ${RELEASE_TAG} — <release theme>'" >&2
+            exit 1
+          fi
+
+          tail -n +3 "$NOTES_FILE" > "$RUNNER_TEMP/notes.md"
+          if [[ ! -s "$RUNNER_TEMP/notes.md" ]]; then
+            echo "Curated release body is empty: $NOTES_FILE" >&2
+            exit 1
+          fi
+
+          gh release create "$RELEASE_TAG" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$RELEASE_TITLE" --notes-file "$RUNNER_TEMP/notes.md" artifacts/*
 
   announce:
     needs:
