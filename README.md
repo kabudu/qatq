@@ -9,7 +9,7 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-c78a55?style=flat-square"></a>
   <img alt="Rust edition 2024" src="https://img.shields.io/badge/rust%20edition-2024-547182?style=flat-square">
   <img alt="MSRV 1.96" src="https://img.shields.io/badge/MSRV-1.96-8a8f90?style=flat-square">
-  <img alt="Crate version 0.4.0" src="https://img.shields.io/badge/crate-0.4.0-2a4e66?style=flat-square">
+  <img alt="Crate version 0.4.1" src="https://img.shields.io/badge/crate-0.4.1-2a4e66?style=flat-square">
 </p>
 
 # QATQ
@@ -32,17 +32,17 @@ or translate observed KV distortion into mathematical separation automatically.
 
 ## Install
 
-Install all production CLIs from the v0.4.0 GitHub release:
+Install all production CLIs from the v0.4.1 GitHub release:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/kabudu/qatq/releases/download/v0.4.0/qatq-installer.sh | sh
+  https://github.com/kabudu/qatq/releases/download/v0.4.1/qatq-installer.sh | sh
 ```
 
 On Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.4.0/qatq-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/kabudu/qatq/releases/download/v0.4.1/qatq-installer.ps1 | iex"
 ```
 
 Or build the codec from source:
@@ -98,7 +98,7 @@ strategy design, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - `UNKNOWN`: supported analysis did not decide the request; or
 - `REFUSED`: input was malformed, unsupported, ambiguous, or over budget.
 
-The v0.4.0 finite-certified scope is deliberately narrow: exact binary Hamming
+The v0.4.x finite-certified scope is deliberately narrow: exact binary Hamming
 bounds and exact spherical Rankin bounds for maximum inner product `s <= 0`.
 Positive-inner-product spherical requests and asymptotic rate results cannot produce
 finite impossibility claims in this release. Construction search and automatic
@@ -154,6 +154,7 @@ integration matrix. The concise entry points are:
 - [llama.cpp KV matrix](docs/LLAMA_CPP_KV_MATRIX.md)
 - [production readiness](docs/PRODUCTION_READINESS.md)
 - [v0.4.0 release evidence](docs/PUBLIC_RELEASE_0_4_0_EVIDENCE.md)
+- [v0.4.1 independent reproduction evidence](docs/PUBLIC_RELEASE_0_4_1_EVIDENCE.md)
 - [release checklist](docs/RELEASE_CHECKLIST.md)
 - [roadmap](docs/ROADMAP.md)
 
