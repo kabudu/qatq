@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.4.1 - 2026-08-01
+
 ### Added
 
 - Added a pinned, network-disabled SageMath 10.6 implementation that separately

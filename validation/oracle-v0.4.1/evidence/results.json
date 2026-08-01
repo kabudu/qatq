@@ -6,7 +6,7 @@
   "environment": {
     "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
     "host_platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
-    "qatq_oracle_binary_sha256": "c405464b77e55db0ec5e08896467dbfd8314f709da230095b6e1220b694883be",
+    "qatq_oracle_binary_sha256": "504f6389db6e0f3a06c7fae2bc88c7bb9f3c52b66fec84fe79587dfd97bc3b89",
     "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
     "sagemath": {
       "platform": "Linux-6.12.76-linuxkit-x86_64-with-glibc2.35",
