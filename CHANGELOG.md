@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.4.0 - 2026-08-01
+
 ### Added
 
 - Added the feature-gated `qatq-oracle` binary and `qatq::oracle` library API for
