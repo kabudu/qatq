@@ -1,0 +1,1277 @@
+{
+  "schema_version": 1,
+  "tool": "qatq-kv-geometry",
+  "capture_id": "qwen2.5-0.5b-code-long-f16",
+  "capture_sha256": "15e5f72f6054db933a18c0f81819e7d553370fe1393805b4c44d6ee0368fff89",
+  "metadata_sha256": "8dfaa51b1218c1245da46ba5d050313e8f4a6d74b0987df8f1eb15048de07879",
+  "policy": {
+    "partition": "layer_token",
+    "normalization": "unit_l2",
+    "seed": 42,
+    "max_pairs": 1000000,
+    "exact_vector_threshold": 2048,
+    "max_capture_bytes": 8589934592,
+    "max_vectors": 4000000,
+    "max_scalar_values": 32000000,
+    "max_dimension": 16384,
+    "max_spectral_dimension": 1024,
+    "chunk_tokens": 32,
+    "block_vectors": 256,
+    "near_duplicate_cosine": 0.9999,
+    "thresholds": [
+      0.0
+    ]
+  },
+  "status": "APPROXIMATE",
+  "refusal": null,
+  "groups": [
+    {
+      "group_id": "cache_k_l0:all-heads",
+      "tensor_id": "cache_k_l0",
+      "layer": 0,
+      "head": null,
+      "token_start": 0,
+      "token_end_exclusive": 67,
+      "kind": "key",
+      "rope_stage": "post_rope",
+      "dimension": 128,
+      "vector_count": 67,
+      "finite_vector_count": 67,
+      "zero_vectors": 0,
+      "non_finite_vectors": 0,
+      "normalization_failures": 0,
+      "exact_duplicate_classes": 0,
+      "exact_duplicate_vectors": 0,
+      "l2_norm": {
+        "count": 67,
+        "minimum": 365.45119350139714,
+        "p01": 365.696461828163,
+        "p05": 366.36541881427223,
+        "p25": 366.9920781571727,
+        "p50": 367.4319781005659,
+        "p75": 367.6230816912795,
+        "p95": 367.96949199576306,
+        "p99": 368.1313507340378,
+        "maximum": 368.1522868383778,
+        "mean": 367.2949916935856
+      },
+      "token_position_l2_norm": [
+        {
+          "segment": "early",
+          "token_start": 0,
+          "token_end_exclusive": 22,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 366.28817637122023,
+            "p01": 366.3037534907656,
+            "p05": 366.3719171116351,
+            "p25": 367.1271589797872,
+            "p50": 367.4515314844927,
+            "p75": 367.75789747320493,
+            "p95": 368.1039157257666,
+            "p99": 368.11855281467956,
+            "maximum": 368.1205654681657,
+            "mean": 367.3504045607312
+          }
+        },
+        {
+          "segment": "middle",
+          "token_start": 22,
+          "token_end_exclusive": 44,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 365.45119350139714,
+            "p01": 365.7479476114438,
+            "p05": 366.87618873597455,
+            "p25": 367.4111153597838,
+            "p50": 367.60468300334026,
+            "p75": 367.62325224799724,
+            "p95": 367.9547658601502,
+            "p99": 368.11381375757736,
+            "maximum": 368.1522868383778,
+            "mean": 367.44295980433395
+          }
+        },
+        {
+          "segment": "late",
+          "token_start": 44,
+          "token_end_exclusive": 67,
+          "l2_norm": {
+            "count": 23,
+            "minimum": 365.82281217831513,
+            "p01": 365.9437593556594,
+            "p05": 366.3727962750396,
+            "p25": 366.77365475292316,
+            "p50": 367.135160807982,
+            "p75": 367.5393573252393,
+            "p95": 367.86327092102437,
+            "p99": 367.86726432697054,
+            "maximum": 367.86836758027914,
+            "mean": 367.1004533669047
+          }
+        }
+      ],
+      "pairwise": {
+        "plan": {
+          "status": "EXACT",
+          "population_pairs": 2211,
+          "evaluated_pairs": 2211,
+          "coverage_fraction": 1.0,
+          "seed": 42,
+          "mean_standard_error": 0.0
+        },
+        "cosine_similarity": {
+          "count": 2211,
+          "minimum": 0.9442423071245309,
+          "p01": 0.9464502324276519,
+          "p05": 0.9486882203149005,
+          "p25": 0.9572935106788125,
+          "p50": 0.971396854044795,
+          "p75": 0.9867900784109669,
+          "p95": 0.9909556816968332,
+          "p99": 0.9948693719724518,
+          "maximum": 0.9955395480424915,
+          "mean": 0.9711323579336735
+        },
+        "angular_distance_radians": {
+          "count": 2211,
+          "minimum": 0.09448567982439639,
+          "p01": 0.10133509938100416,
+          "p05": 0.13459551913417883,
+          "p25": 0.1627212473360628,
+          "p50": 0.23975217344851665,
+          "p75": 0.29330521091065187,
+          "p95": 0.32173498793766797,
+          "p99": 0.3287389286266733,
+          "maximum": 0.3355106299696596,
+          "mean": 0.2317566481058405
+        },
+        "nearest_neighbor_cosine": {
+          "count": 67,
+          "minimum": 0.993475918392928,
+          "p01": 0.9935380134527814,
+          "p05": 0.9939639555645221,
+          "p25": 0.9941394631962613,
+          "p50": 0.9950634426419865,
+          "p75": 0.9953767815216837,
+          "p95": 0.9954651889631407,
+          "p99": 0.9955395480424915,
+          "maximum": 0.9955395480424915,
+          "mean": 0.9947747515906223
+        },
+        "nearest_neighbor_angular_distance_radians": {
+          "count": 67,
+          "minimum": 0.09448567982439639,
+          "p01": 0.09448567982439639,
+          "p05": 0.0952705860050356,
+          "p25": 0.09619547024533598,
+          "p50": 0.09940446984942425,
+          "p75": 0.10831685078429183,
+          "p95": 0.109928358625099,
+          "p99": 0.1137442879868901,
+          "maximum": 0.11429075128694803,
+          "mean": 0.10209485022479567
+        },
+        "nearest_neighbor_scope": "full_population",
+        "near_duplicate_pairs": 0,
+        "near_duplicate_rate": 0.0
+      },
+      "spectral": {
+        "status": "APPROXIMATE",
+        "centered_covariance_trace": 0.028436781736977838,
+        "effective_rank_participation_ratio": 3.5744984563088082,
+        "top_eigenvalue_fraction_estimate": 0.36598222750199305,
+        "power_iterations": 64,
+        "reason": "top eigenvalue uses deterministic power iteration"
+      },
+      "binary": [
+        {
+          "rule": "sign_bit",
+          "threshold": null,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 4.0,
+            "p01": 8.0,
+            "p05": 14.0,
+            "p25": 20.0,
+            "p50": 24.0,
+            "p75": 29.0,
+            "p95": 33.0,
+            "p99": 36.0,
+            "maximum": 41.0,
+            "mean": 23.92401628222524
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        },
+        {
+          "rule": "threshold",
+          "threshold": 0.0,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 4.0,
+            "p01": 8.0,
+            "p05": 14.0,
+            "p25": 20.0,
+            "p50": 24.0,
+            "p75": 29.0,
+            "p95": 33.0,
+            "p99": 36.0,
+            "maximum": 41.0,
+            "mean": 23.92401628222524
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        }
+      ],
+      "status": "APPROXIMATE"
+    },
+    {
+      "group_id": "cache_v_l0:all-heads",
+      "tensor_id": "cache_v_l0",
+      "layer": 0,
+      "head": null,
+      "token_start": 0,
+      "token_end_exclusive": 67,
+      "kind": "value",
+      "rope_stage": "not_applicable",
+      "dimension": 128,
+      "vector_count": 67,
+      "finite_vector_count": 67,
+      "zero_vectors": 0,
+      "non_finite_vectors": 0,
+      "normalization_failures": 0,
+      "exact_duplicate_classes": 4,
+      "exact_duplicate_vectors": 17,
+      "l2_norm": {
+        "count": 67,
+        "minimum": 0.24312284115046534,
+        "p01": 0.2522053047129391,
+        "p05": 0.26118139392365564,
+        "p25": 0.27771459391527875,
+        "p50": 0.29703629291030875,
+        "p75": 0.32453183804056923,
+        "p95": 0.3949047945796872,
+        "p99": 0.3949047945796872,
+        "maximum": 0.3949047945796872,
+        "mean": 0.30926066874602487
+      },
+      "token_position_l2_norm": [
+        {
+          "segment": "early",
+          "token_start": 0,
+          "token_end_exclusive": 22,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 0.2642932667647815,
+            "p01": 0.2646381876200408,
+            "p05": 0.266044047800754,
+            "p25": 0.2765822329076396,
+            "p50": 0.2925711094377584,
+            "p75": 0.3193038149569812,
+            "p95": 0.3936312884437718,
+            "p99": 0.3949047945796872,
+            "maximum": 0.3949047945796872,
+            "mean": 0.30390458057659114
+          }
+        },
+        {
+          "segment": "middle",
+          "token_start": 22,
+          "token_end_exclusive": 44,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 0.24312284115046534,
+            "p01": 0.24705629950557514,
+            "p05": 0.2618677048940354,
+            "p25": 0.28002158134956756,
+            "p50": 0.30748639700670066,
+            "p75": 0.3949047945796872,
+            "p95": 0.3949047945796872,
+            "p99": 0.3949047945796872,
+            "maximum": 0.3949047945796872,
+            "mean": 0.32393858028156164
+          }
+        },
+        {
+          "segment": "late",
+          "token_start": 44,
+          "token_end_exclusive": 67,
+          "l2_norm": {
+            "count": 23,
+            "minimum": 0.25688414957845596,
+            "p01": 0.25766922310552126,
+            "p05": 0.26049672981478966,
+            "p25": 0.27913385545588015,
+            "p50": 0.2956295456786939,
+            "p75": 0.3089651316953845,
+            "p95": 0.36943467186137957,
+            "p99": 0.38930136758165956,
+            "maximum": 0.3949047945796872,
+            "mean": 0.30034414204801285
+          }
+        }
+      ],
+      "pairwise": {
+        "plan": {
+          "status": "EXACT",
+          "population_pairs": 2211,
+          "evaluated_pairs": 2211,
+          "coverage_fraction": 1.0,
+          "seed": 42,
+          "mean_standard_error": 0.0
+        },
+        "cosine_similarity": {
+          "count": 2211,
+          "minimum": -0.39682462287151765,
+          "p01": -0.36099459625864677,
+          "p05": -0.27627788264061515,
+          "p25": -0.13126829517297012,
+          "p50": 0.1667652426747434,
+          "p75": 0.36567619562384635,
+          "p95": 0.6582927355901749,
+          "p99": 1.0,
+          "maximum": 1.0,
+          "mean": 0.1441792449821416
+        },
+        "angular_distance_radians": {
+          "count": 2211,
+          "minimum": 0.0,
+          "p01": 0.0,
+          "p05": 0.8522478216614213,
+          "p25": 1.1964371134010388,
+          "p50": 1.403248272411138,
+          "p75": 1.702444564178008,
+          "p95": 1.8507154105274555,
+          "p99": 1.9401325449564675,
+          "maximum": 1.978851160912058,
+          "mean": 1.4070632717639384
+        },
+        "nearest_neighbor_cosine": {
+          "count": 67,
+          "minimum": 0.2959140017352927,
+          "p01": 0.35896587764969756,
+          "p05": 0.4165421038405055,
+          "p25": 0.536281368968826,
+          "p50": 0.5817988524404261,
+          "p75": 0.9016163996429281,
+          "p95": 1.0,
+          "p99": 1.0,
+          "maximum": 1.0,
+          "mean": 0.6726775188942923
+        },
+        "nearest_neighbor_angular_distance_radians": {
+          "count": 67,
+          "minimum": 0.0,
+          "p01": 0.0,
+          "p05": 0.0,
+          "p25": 0.3190468158237643,
+          "p50": 0.9498576756066169,
+          "p75": 1.004771171524412,
+          "p95": 1.1411504185044774,
+          "p99": 1.2032017188800719,
+          "maximum": 1.2703840948753313,
+          "mean": 0.7243790406604153
+        },
+        "nearest_neighbor_scope": "full_population",
+        "near_duplicate_pairs": 50,
+        "near_duplicate_rate": 0.022614201718679332
+      },
+      "spectral": {
+        "status": "APPROXIMATE",
+        "centered_covariance_trace": 0.8430473109131139,
+        "effective_rank_participation_ratio": 7.111547831504353,
+        "top_eigenvalue_fraction_estimate": 0.35229935862255757,
+        "power_iterations": 64,
+        "reason": "top eigenvalue uses deterministic power iteration"
+      },
+      "binary": [
+        {
+          "rule": "sign_bit",
+          "threshold": null,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 0.0,
+            "p01": 0.0,
+            "p05": 46.0,
+            "p25": 57.0,
+            "p50": 63.0,
+            "p75": 69.0,
+            "p95": 76.0,
+            "p99": 81.0,
+            "maximum": 84.0,
+            "mean": 61.62369968340118
+          },
+          "collision_classes": 4,
+          "colliding_vectors": 17,
+          "collision_rate": 0.2537313432835821,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        },
+        {
+          "rule": "threshold",
+          "threshold": 0.0,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 0.0,
+            "p01": 0.0,
+            "p05": 46.0,
+            "p25": 57.0,
+            "p50": 63.0,
+            "p75": 69.0,
+            "p95": 76.0,
+            "p99": 81.0,
+            "maximum": 84.0,
+            "mean": 61.62369968340118
+          },
+          "collision_classes": 4,
+          "colliding_vectors": 17,
+          "collision_rate": 0.2537313432835821,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        }
+      ],
+      "status": "APPROXIMATE"
+    },
+    {
+      "group_id": "cache_k_l12:all-heads",
+      "tensor_id": "cache_k_l12",
+      "layer": 12,
+      "head": null,
+      "token_start": 0,
+      "token_end_exclusive": 67,
+      "kind": "key",
+      "rope_stage": "post_rope",
+      "dimension": 128,
+      "vector_count": 67,
+      "finite_vector_count": 67,
+      "zero_vectors": 0,
+      "non_finite_vectors": 0,
+      "normalization_failures": 0,
+      "exact_duplicate_classes": 0,
+      "exact_duplicate_vectors": 0,
+      "l2_norm": {
+        "count": 67,
+        "minimum": 6.2539970218843255,
+        "p01": 14.887012449309697,
+        "p05": 20.42653832346692,
+        "p25": 21.478086547145914,
+        "p50": 22.47075729875446,
+        "p75": 23.415487331253054,
+        "p95": 24.093722597167638,
+        "p99": 24.30254274859731,
+        "maximum": 24.421529274682392,
+        "mean": 22.18112368583
+      },
+      "token_position_l2_norm": [
+        {
+          "segment": "early",
+          "token_start": 0,
+          "token_end_exclusive": 22,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 6.2539970218843255,
+            "p01": 9.000865566974216,
+            "p05": 19.385881837570132,
+            "p25": 20.483210036216576,
+            "p50": 21.220240581053986,
+            "p75": 21.937078269882146,
+            "p95": 22.4625549788012,
+            "p99": 23.103006688303175,
+            "maximum": 23.271072981727514,
+            "mean": 20.62304906606292
+          }
+        },
+        {
+          "segment": "middle",
+          "token_start": 22,
+          "token_end_exclusive": 44,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 21.46713257433581,
+            "p01": 21.469217619414778,
+            "p05": 21.47716387909811,
+            "p25": 21.9555953403873,
+            "p50": 22.873385602657315,
+            "p75": 23.56115436640165,
+            "p95": 24.114951184753572,
+            "p99": 24.216928904505078,
+            "maximum": 24.241246659401963,
+            "mean": 22.796300349890455
+          }
+        },
+        {
+          "segment": "late",
+          "token_start": 44,
+          "token_end_exclusive": 67,
+          "l2_norm": {
+            "count": 23,
+            "minimum": 20.4876307314242,
+            "p01": 20.69625462233875,
+            "p05": 21.4678419401302,
+            "p25": 22.55157660389837,
+            "p50": 23.34155262718123,
+            "p75": 23.73333123197244,
+            "p95": 24.11225507712181,
+            "p99": 24.355527524014022,
+            "maximum": 24.421529274682392,
+            "mean": 23.083026078245034
+          }
+        }
+      ],
+      "pairwise": {
+        "plan": {
+          "status": "EXACT",
+          "population_pairs": 2211,
+          "evaluated_pairs": 2211,
+          "coverage_fraction": 1.0,
+          "seed": 42,
+          "mean_standard_error": 0.0
+        },
+        "cosine_similarity": {
+          "count": 2211,
+          "minimum": -0.18837077924941417,
+          "p01": -0.13252981652472584,
+          "p05": 0.4836335844093378,
+          "p25": 0.6036341311179172,
+          "p50": 0.6772976236665746,
+          "p75": 0.748389124866458,
+          "p95": 0.8474031328230797,
+          "p99": 0.912437683590775,
+          "maximum": 0.957214192630059,
+          "mean": 0.6575989722983855
+        },
+        "angular_distance_radians": {
+          "count": 2211,
+          "minimum": 0.29357943151559684,
+          "p01": 0.421591221474974,
+          "p05": 0.5597211649590501,
+          "p25": 0.7251663090368988,
+          "p50": 0.8267130905978112,
+          "p75": 0.9227447724411721,
+          "p95": 1.0659949312161712,
+          "p99": 1.7037172051971905,
+          "maximum": 1.7602992898154879,
+          "mean": 0.837452711530392
+        },
+        "nearest_neighbor_cosine": {
+          "count": 67,
+          "minimum": -0.07249742937718515,
+          "p01": 0.5329146168152674,
+          "p05": 0.8595780560971489,
+          "p25": 0.8959927985226268,
+          "p50": 0.9169827339338662,
+          "p75": 0.9344036069725907,
+          "p95": 0.9448976921065828,
+          "p99": 0.957214192630059,
+          "maximum": 0.957214192630059,
+          "mean": 0.8984387799673085
+        },
+        "nearest_neighbor_angular_distance_radians": {
+          "count": 67,
+          "minimum": 0.29357943151559684,
+          "p01": 0.29357943151559684,
+          "p05": 0.33351273725083175,
+          "p25": 0.36421430901111596,
+          "p50": 0.41034628867702533,
+          "p75": 0.46009266980326424,
+          "p95": 0.536352943354893,
+          "p99": 0.9313888058635251,
+          "maximum": 1.64335741311034,
+          "mean": 0.43390723838865414
+        },
+        "nearest_neighbor_scope": "full_population",
+        "near_duplicate_pairs": 0,
+        "near_duplicate_rate": 0.0
+      },
+      "spectral": {
+        "status": "APPROXIMATE",
+        "centered_covariance_trace": 0.3372905646015907,
+        "effective_rank_participation_ratio": 11.818382201392282,
+        "top_eigenvalue_fraction_estimate": 0.19387890095770136,
+        "power_iterations": 64,
+        "reason": "top eigenvalue uses deterministic power iteration"
+      },
+      "binary": [
+        {
+          "rule": "sign_bit",
+          "threshold": null,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 6.0,
+            "p01": 17.0,
+            "p05": 24.0,
+            "p25": 33.0,
+            "p50": 39.0,
+            "p75": 44.0,
+            "p95": 54.0,
+            "p99": 68.0,
+            "maximum": 76.0,
+            "mean": 38.7670737222976
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        },
+        {
+          "rule": "threshold",
+          "threshold": 0.0,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 6.0,
+            "p01": 17.0,
+            "p05": 24.0,
+            "p25": 33.0,
+            "p50": 39.0,
+            "p75": 44.0,
+            "p95": 54.0,
+            "p99": 68.0,
+            "maximum": 76.0,
+            "mean": 38.7670737222976
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        }
+      ],
+      "status": "APPROXIMATE"
+    },
+    {
+      "group_id": "cache_v_l12:all-heads",
+      "tensor_id": "cache_v_l12",
+      "layer": 12,
+      "head": null,
+      "token_start": 0,
+      "token_end_exclusive": 67,
+      "kind": "value",
+      "rope_stage": "not_applicable",
+      "dimension": 128,
+      "vector_count": 67,
+      "finite_vector_count": 67,
+      "zero_vectors": 0,
+      "non_finite_vectors": 0,
+      "normalization_failures": 0,
+      "exact_duplicate_classes": 0,
+      "exact_duplicate_vectors": 0,
+      "l2_norm": {
+        "count": 67,
+        "minimum": 1.744354861255375,
+        "p01": 4.123470592758394,
+        "p05": 5.615367665314516,
+        "p25": 6.217113281348016,
+        "p50": 6.6276901489142785,
+        "p75": 7.12887583393549,
+        "p95": 8.15656433821487,
+        "p99": 8.791540782853676,
+        "maximum": 9.138244687701548,
+        "mean": 6.662762457613121
+      },
+      "token_position_l2_norm": [
+        {
+          "segment": "early",
+          "token_start": 0,
+          "token_end_exclusive": 22,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 1.744354861255375,
+            "p01": 2.501346230369972,
+            "p05": 5.35990353847581,
+            "p25": 5.753298129623744,
+            "p50": 6.265302444049782,
+            "p75": 6.400435481213224,
+            "p95": 7.248022291541998,
+            "p99": 8.016830042713625,
+            "maximum": 8.216097509267044,
+            "mean": 6.058106370978433
+          }
+        },
+        {
+          "segment": "middle",
+          "token_start": 22,
+          "token_end_exclusive": 44,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 5.82104049024685,
+            "p01": 5.841957965691474,
+            "p05": 5.925434073009672,
+            "p25": 6.245587725417195,
+            "p50": 6.704148486088936,
+            "p75": 7.039370542150042,
+            "p95": 7.379873522089069,
+            "p99": 8.256968739137754,
+            "maximum": 8.488350907674567,
+            "mean": 6.704172327392943
+          }
+        },
+        {
+          "segment": "late",
+          "token_start": 44,
+          "token_end_exclusive": 67,
+          "l2_norm": {
+            "count": 23,
+            "minimum": 6.087170102423,
+            "p01": 6.118805903019006,
+            "p05": 6.255362807481135,
+            "p25": 6.6149540879179,
+            "p50": 6.984388569360898,
+            "p75": 7.624243210206379,
+            "p95": 8.55340752744209,
+            "p99": 9.022676719418923,
+            "maximum": 9.138244687701548,
+            "mean": 7.201519708517774
+          }
+        }
+      ],
+      "pairwise": {
+        "plan": {
+          "status": "EXACT",
+          "population_pairs": 2211,
+          "evaluated_pairs": 2211,
+          "coverage_fraction": 1.0,
+          "seed": 42,
+          "mean_standard_error": 0.0
+        },
+        "cosine_similarity": {
+          "count": 2211,
+          "minimum": -0.26926542822188004,
+          "p01": -0.18577479632816787,
+          "p05": -0.09760006876745544,
+          "p25": 0.053312584735302225,
+          "p50": 0.16894009542396185,
+          "p75": 0.29191860675136755,
+          "p95": 0.4826901122927528,
+          "p99": 0.7168395527778185,
+          "maximum": 0.9479960991589668,
+          "mean": 0.1812415022037199
+        },
+        "angular_distance_radians": {
+          "count": 2211,
+          "minimum": 0.32391663195805576,
+          "p01": 0.7715287234926986,
+          "p05": 1.0670725561343857,
+          "p25": 1.2745641083497083,
+          "p50": 1.4010421184742667,
+          "p75": 1.5174584548447645,
+          "p95": 1.6685520162660266,
+          "p99": 1.7576566533896003,
+          "maximum": 1.8434265339192981,
+          "mean": 1.3837625026352507
+        },
+        "nearest_neighbor_cosine": {
+          "count": 67,
+          "minimum": 0.1417655219113408,
+          "p01": 0.31424570457391593,
+          "p05": 0.45154104588587185,
+          "p25": 0.540857568415281,
+          "p50": 0.6220647394099224,
+          "p75": 0.7007919096888856,
+          "p95": 0.9336426102775652,
+          "p99": 0.9479960991589667,
+          "maximum": 0.9479960991589668,
+          "mean": 0.6334035779807031
+        },
+        "nearest_neighbor_angular_distance_radians": {
+          "count": 67,
+          "minimum": 0.32391663195805576,
+          "p01": 0.32391663195805576,
+          "p05": 0.36585440795548796,
+          "p25": 0.794289331286183,
+          "p50": 0.899419302508766,
+          "p75": 0.9993399404673173,
+          "p95": 1.1023041479796118,
+          "p99": 1.2485986051058702,
+          "maximum": 1.4285516037185466,
+          "mean": 0.8641582219614501
+        },
+        "nearest_neighbor_scope": "full_population",
+        "near_duplicate_pairs": 0,
+        "near_duplicate_rate": 0.0
+      },
+      "spectral": {
+        "status": "APPROXIMATE",
+        "centered_covariance_trace": 0.8065382217097689,
+        "effective_rank_participation_ratio": 18.72393809822136,
+        "top_eigenvalue_fraction_estimate": 0.13630287481363265,
+        "power_iterations": 64,
+        "reason": "top eigenvalue uses deterministic power iteration"
+      },
+      "binary": [
+        {
+          "rule": "sign_bit",
+          "threshold": null,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 14.0,
+            "p01": 30.0,
+            "p05": 43.0,
+            "p25": 52.0,
+            "p50": 58.0,
+            "p75": 63.0,
+            "p95": 70.0,
+            "p99": 74.0,
+            "maximum": 81.0,
+            "mean": 57.3441881501583
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        },
+        {
+          "rule": "threshold",
+          "threshold": 0.0,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 14.0,
+            "p01": 30.0,
+            "p05": 43.0,
+            "p25": 52.0,
+            "p50": 58.0,
+            "p75": 63.0,
+            "p95": 70.0,
+            "p99": 74.0,
+            "maximum": 81.0,
+            "mean": 57.3441881501583
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        }
+      ],
+      "status": "APPROXIMATE"
+    },
+    {
+      "group_id": "cache_k_l23:all-heads",
+      "tensor_id": "cache_k_l23",
+      "layer": 23,
+      "head": null,
+      "token_start": 0,
+      "token_end_exclusive": 67,
+      "kind": "key",
+      "rope_stage": "post_rope",
+      "dimension": 128,
+      "vector_count": 67,
+      "finite_vector_count": 67,
+      "zero_vectors": 0,
+      "non_finite_vectors": 0,
+      "normalization_failures": 0,
+      "exact_duplicate_classes": 0,
+      "exact_duplicate_vectors": 0,
+      "l2_norm": {
+        "count": 67,
+        "minimum": 20.224448752605827,
+        "p01": 20.378787590357643,
+        "p05": 20.717262930076107,
+        "p25": 22.177060714398074,
+        "p50": 23.29385976995972,
+        "p75": 24.39385460417882,
+        "p95": 26.50826263121738,
+        "p99": 27.772144031200845,
+        "maximum": 29.598978516895528,
+        "mean": 23.452079636116046
+      },
+      "token_position_l2_norm": [
+        {
+          "segment": "early",
+          "token_start": 0,
+          "token_end_exclusive": 22,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 20.224448752605827,
+            "p01": 20.273556564617767,
+            "p05": 20.46699690572987,
+            "p25": 22.186025350831233,
+            "p50": 23.147028236112128,
+            "p75": 23.957014070060662,
+            "p95": 26.508076304655532,
+            "p99": 26.775865325202986,
+            "maximum": 26.82952713116699,
+            "mean": 23.260941438008928
+          }
+        },
+        {
+          "segment": "middle",
+          "token_start": 22,
+          "token_end_exclusive": 44,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 21.2766135290655,
+            "p01": 21.355831988544796,
+            "p05": 21.66822937167083,
+            "p25": 22.387738215118873,
+            "p50": 23.43549882787822,
+            "p75": 24.399363859616926,
+            "p95": 25.045149645876396,
+            "p99": 25.96798749449148,
+            "maximum": 26.211528937740745,
+            "mean": 23.39611581623902
+          }
+        },
+        {
+          "segment": "late",
+          "token_start": 44,
+          "token_end_exclusive": 67,
+          "l2_norm": {
+            "count": 23,
+            "minimum": 20.537754901505743,
+            "p01": 20.620848620262606,
+            "p05": 20.95418071812405,
+            "p25": 22.06736501014499,
+            "p50": 23.337464930162515,
+            "p75": 24.733844852062827,
+            "p95": 26.783431505483478,
+            "p99": 28.990033688330634,
+            "maximum": 29.598978516895528,
+            "mean": 23.688438088100877
+          }
+        }
+      ],
+      "pairwise": {
+        "plan": {
+          "status": "EXACT",
+          "population_pairs": 2211,
+          "evaluated_pairs": 2211,
+          "coverage_fraction": 1.0,
+          "seed": 42,
+          "mean_standard_error": 0.0
+        },
+        "cosine_similarity": {
+          "count": 2211,
+          "minimum": 0.27896776779473187,
+          "p01": 0.44722629777055223,
+          "p05": 0.5414514572206381,
+          "p25": 0.6478399500042917,
+          "p50": 0.7082349244612564,
+          "p75": 0.7694058461867381,
+          "p95": 0.8995739659072843,
+          "p99": 0.9526676426239596,
+          "maximum": 0.9810502205799756,
+          "mean": 0.7099269652869088
+        },
+        "angular_distance_radians": {
+          "count": 2211,
+          "minimum": 0.19498683407623987,
+          "p01": 0.3089029709414256,
+          "p05": 0.45200321256840903,
+          "p25": 0.6928858540957499,
+          "p50": 0.7838014524569469,
+          "p75": 0.8660508502372426,
+          "p95": 0.9986337013817255,
+          "p99": 1.107133847568751,
+          "maximum": 1.2880772911224614,
+          "mean": 0.768163303145112
+        },
+        "nearest_neighbor_cosine": {
+          "count": 67,
+          "minimum": 0.6528373278740143,
+          "p01": 0.7417681982615172,
+          "p05": 0.8032055831949609,
+          "p25": 0.8585319444539303,
+          "p50": 0.8777605589121286,
+          "p75": 0.9399933242514011,
+          "p95": 0.9733515985397329,
+          "p99": 0.9810502205799756,
+          "maximum": 0.9810502205799756,
+          "mean": 0.890970987994633
+        },
+        "nearest_neighbor_angular_distance_radians": {
+          "count": 67,
+          "minimum": 0.19498683407623987,
+          "p01": 0.19498683407623987,
+          "p05": 0.23137444641394578,
+          "p25": 0.3479209185618348,
+          "p50": 0.4996286022818112,
+          "p75": 0.5383634469396423,
+          "p95": 0.6380937288384223,
+          "p99": 0.7304095637364949,
+          "maximum": 0.8594722510898769,
+          "mean": 0.4513009371302096
+        },
+        "nearest_neighbor_scope": "full_population",
+        "near_duplicate_pairs": 0,
+        "near_duplicate_rate": 0.0
+      },
+      "spectral": {
+        "status": "APPROXIMATE",
+        "centered_covariance_trace": 0.28574358643379066,
+        "effective_rank_participation_ratio": 13.114817502762275,
+        "top_eigenvalue_fraction_estimate": 0.18013430459090668,
+        "power_iterations": 64,
+        "reason": "top eigenvalue uses deterministic power iteration"
+      },
+      "binary": [
+        {
+          "rule": "sign_bit",
+          "threshold": null,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 6.0,
+            "p01": 19.0,
+            "p05": 26.0,
+            "p25": 36.0,
+            "p50": 41.0,
+            "p75": 46.0,
+            "p95": 54.0,
+            "p99": 58.0,
+            "maximum": 65.0,
+            "mean": 40.8493894165536
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        },
+        {
+          "rule": "threshold",
+          "threshold": 0.0,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 6.0,
+            "p01": 19.0,
+            "p05": 26.0,
+            "p25": 36.0,
+            "p50": 41.0,
+            "p75": 46.0,
+            "p95": 54.0,
+            "p99": 58.0,
+            "maximum": 65.0,
+            "mean": 40.8493894165536
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        }
+      ],
+      "status": "APPROXIMATE"
+    },
+    {
+      "group_id": "cache_v_l23:all-heads",
+      "tensor_id": "cache_v_l23",
+      "layer": 23,
+      "head": null,
+      "token_start": 0,
+      "token_end_exclusive": 67,
+      "kind": "value",
+      "rope_stage": "not_applicable",
+      "dimension": 128,
+      "vector_count": 67,
+      "finite_vector_count": 67,
+      "zero_vectors": 0,
+      "non_finite_vectors": 0,
+      "normalization_failures": 0,
+      "exact_duplicate_classes": 0,
+      "exact_duplicate_vectors": 0,
+      "l2_norm": {
+        "count": 67,
+        "minimum": 6.678569305196973,
+        "p01": 6.741462887462971,
+        "p05": 6.918403451566588,
+        "p25": 9.126759531479188,
+        "p50": 20.35439030668691,
+        "p75": 23.482262274122473,
+        "p95": 27.063716760948246,
+        "p99": 33.632083045142686,
+        "maximum": 34.6512189138601,
+        "mean": 17.970877255444158
+      },
+      "token_position_l2_norm": [
+        {
+          "segment": "early",
+          "token_start": 0,
+          "token_end_exclusive": 22,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 7.172608048582947,
+            "p01": 7.343464425043827,
+            "p05": 8.008152615674705,
+            "p25": 12.005874376442973,
+            "p50": 21.497065576109726,
+            "p75": 23.378409632851973,
+            "p95": 24.34412552781538,
+            "p99": 24.50211698274748,
+            "maximum": 24.542698108093386,
+            "mean": 18.26427475183316
+          }
+        },
+        {
+          "segment": "middle",
+          "token_start": 22,
+          "token_end_exclusive": 44,
+          "l2_norm": {
+            "count": 22,
+            "minimum": 6.678569305196973,
+            "p01": 6.698580899554336,
+            "p05": 6.7797471014868265,
+            "p25": 7.332116544854781,
+            "p50": 21.694488208196773,
+            "p75": 25.104429133400643,
+            "p95": 32.820277544993615,
+            "p99": 34.32694841017728,
+            "maximum": 34.6512189138601,
+            "mean": 18.959494739306336
+          }
+        },
+        {
+          "segment": "late",
+          "token_start": 44,
+          "token_end_exclusive": 67,
+          "l2_norm": {
+            "count": 23,
+            "minimum": 6.902838921734491,
+            "p01": 6.914252910278029,
+            "p05": 6.999171126753068,
+            "p25": 9.631579142170585,
+            "p50": 18.600288493528815,
+            "p75": 23.073515953229396,
+            "p95": 25.550215814354136,
+            "p99": 27.55689563025573,
+            "maximum": 28.085244248605775,
+            "mean": 16.744602056943027
+          }
+        }
+      ],
+      "pairwise": {
+        "plan": {
+          "status": "EXACT",
+          "population_pairs": 2211,
+          "evaluated_pairs": 2211,
+          "coverage_fraction": 1.0,
+          "seed": 42,
+          "mean_standard_error": 0.0
+        },
+        "cosine_similarity": {
+          "count": 2211,
+          "minimum": -0.2987527447524296,
+          "p01": -0.1690226457695122,
+          "p05": -0.08182407310287826,
+          "p25": 0.0397114094672104,
+          "p50": 0.1256796978934471,
+          "p75": 0.23160969424969763,
+          "p95": 0.5205862916578872,
+          "p99": 0.7782962487606296,
+          "maximum": 0.9525249839865217,
+          "mean": 0.15561671988092882
+        },
+        "angular_distance_radians": {
+          "count": 2211,
+          "minimum": 0.3093719176173204,
+          "p01": 0.678820391300751,
+          "p05": 1.0232588393141202,
+          "p25": 1.3370642814159623,
+          "p50": 1.4447833949232114,
+          "p75": 1.5310744724510772,
+          "p95": 1.652711981906929,
+          "p99": 1.7406344146332184,
+          "maximum": 1.8741817703706456,
+          "mean": 1.4093417900858596
+        },
+        "nearest_neighbor_cosine": {
+          "count": 67,
+          "minimum": 0.24049277103321962,
+          "p01": 0.25193281804403067,
+          "p05": 0.28355686595755714,
+          "p25": 0.3795867993915182,
+          "p50": 0.506236022612109,
+          "p75": 0.7468355831788105,
+          "p95": 0.9245258509138472,
+          "p99": 0.9525249839865217,
+          "maximum": 0.9525249839865217,
+          "mean": 0.5616477527568356
+        },
+        "nearest_neighbor_angular_distance_radians": {
+          "count": 67,
+          "minimum": 0.3093719176173204,
+          "p01": 0.3093719176173204,
+          "p05": 0.39013870702239467,
+          "p25": 0.7275055079870324,
+          "p50": 1.0399817191713352,
+          "p75": 1.1814466731139825,
+          "p95": 1.2832948512528812,
+          "p99": 1.316110061164246,
+          "maximum": 1.3279228369619853,
+          "mean": 0.9421223156429489
+        },
+        "nearest_neighbor_scope": "full_population",
+        "near_duplicate_pairs": 0,
+        "near_duplicate_rate": 0.0
+      },
+      "spectral": {
+        "status": "APPROXIMATE",
+        "centered_covariance_trace": 0.831780544594906,
+        "effective_rank_participation_ratio": 24.82171386949579,
+        "top_eigenvalue_fraction_estimate": 0.10657830932039693,
+        "power_iterations": 64,
+        "reason": "top eigenvalue uses deterministic power iteration"
+      },
+      "binary": [
+        {
+          "rule": "sign_bit",
+          "threshold": null,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 16.0,
+            "p01": 33.1,
+            "p05": 46.0,
+            "p25": 54.5,
+            "p50": 60.0,
+            "p75": 64.0,
+            "p95": 71.0,
+            "p99": 75.0,
+            "maximum": 84.0,
+            "mean": 58.9914066033469
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        },
+        {
+          "rule": "threshold",
+          "threshold": 0.0,
+          "status": "EXACT",
+          "hamming_distance": {
+            "count": 2211,
+            "minimum": 16.0,
+            "p01": 33.1,
+            "p05": 46.0,
+            "p25": 54.5,
+            "p50": 60.0,
+            "p75": 64.0,
+            "p95": 71.0,
+            "p99": 75.0,
+            "maximum": 84.0,
+            "mean": 58.9914066033469
+          },
+          "collision_classes": 0,
+          "colliding_vectors": 0,
+          "collision_rate": 0.0,
+          "sensitivity_note": "Descriptive only. This mapping does not establish application-level distinguishability."
+        }
+      ],
+      "status": "APPROXIMATE"
+    }
+  ],
+  "claim_boundary": [
+    "Observed capture geometry is not an application-required geometry.",
+    "Observed vector count is not a required capacity.",
+    "Binary mappings are descriptive and do not prove semantic distinguishability.",
+    "This profiler does not emit Capacity Oracle verdicts."
+  ]
+}

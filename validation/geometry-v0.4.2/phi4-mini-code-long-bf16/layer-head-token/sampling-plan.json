@@ -1,0 +1,537 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "max_pairs": 1000000,
+  "exact_vector_threshold": 2048,
+  "block_vectors": 256,
+  "groups": [
+    {
+      "group_id": "cache_k_l0:head:0",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:1",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:2",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:3",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:4",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:5",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:6",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l0:head:7",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:0",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:1",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:2",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:3",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:4",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:5",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:6",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l0:head:7",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:0",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:1",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:2",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:3",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:4",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:5",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:6",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l16:head:7",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:0",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:1",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:2",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:3",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:4",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:5",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:6",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l16:head:7",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:0",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:1",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:2",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:3",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:4",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:5",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:6",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_k_l31:head:7",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:0",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:1",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:2",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:3",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:4",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:5",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:6",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    },
+    {
+      "group_id": "cache_v_l31:head:7",
+      "plan": {
+        "status": "EXACT",
+        "population_pairs": 2211,
+        "evaluated_pairs": 2211,
+        "coverage_fraction": 1.0,
+        "seed": 42,
+        "mean_standard_error": 0.0
+      }
+    }
+  ]
+}

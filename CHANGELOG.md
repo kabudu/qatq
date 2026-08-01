@@ -4,6 +4,15 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added the feature-gated `qatq-kv-geometry` research binary with versioned capture and result contracts, bounded exact or deterministic-sampled pair analysis, norm, cosine, angular, duplicate, spectral, and descriptive binary metrics.
+- Added a reproducible 36-profile llama.cpp evidence corpus spanning Qwen2.5 and Phi3 families, three prompt and context regimes, f16 and bf16, selected layers, all KV heads, and three partition layouts.
+
+### Changed
+
+- Froze further Capacity Oracle theorem expansion after the geometry gate found high real-capture correlations and no defensible application capacity requirement; Capacity Oracle certificate semantics remain unchanged.
+
 ## 0.4.1 - 2026-08-01
 
 ### Added

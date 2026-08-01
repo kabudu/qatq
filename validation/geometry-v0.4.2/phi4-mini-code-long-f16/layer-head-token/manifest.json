@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "path": "capture-manifest.json",
+      "bytes": 2861,
+      "sha256": "6e5de62837a6b3b12cf45000adb5577f47e90cd65456e50dcfc012b72b2770c9"
+    },
+    {
+      "path": "geometry.json",
+      "bytes": 316817,
+      "sha256": "a0d887ee7aca5e344b9e263c2a77335b8fe35ec41cdcd22c8b6885420f97d9e0"
+    },
+    {
+      "path": "summary.md",
+      "bytes": 4330,
+      "sha256": "cf94e47f50529f7020c9ef55ebc7ff8eadf895b8637540961b60a9ee507ac1d2"
+    },
+    {
+      "path": "sampling-plan.json",
+      "bytes": 12603,
+      "sha256": "a097500cfca71e15ba802e58a3bad66cf87c2852b41739733d5ef3c63b9e408b"
+    },
+    {
+      "path": "metrics.json",
+      "bytes": 252,
+      "sha256": "0963aeca3b53592d5238af35acc651c9bdff6f805e3f93617e8a2348e9cdb130"
+    }
+  ]
+}

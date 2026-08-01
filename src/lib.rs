@@ -3,6 +3,9 @@ use std::fmt;
 #[cfg(feature = "oracle")]
 pub mod oracle;
 
+#[cfg(feature = "geometry")]
+pub mod geometry;
+
 const MAGIC: &[u8; 4] = b"QATQ";
 const CONTAINER_MAGIC: &[u8; 4] = b"QATC";
 const VERSION: u8 = 1;

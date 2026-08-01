@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "APPROXIMATE",
+  "group_count": 48,
+  "vector_count": 1440,
+  "finite_vector_count": 1440,
+  "evaluated_pairs": 20880,
+  "exact_groups": 0,
+  "sampled_groups": 0,
+  "approximate_groups": 48,
+  "refused_groups": 0
+}
