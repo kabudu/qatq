@@ -14,7 +14,7 @@ decoding, or runtime adapter behavior.
 
 The checker recomputes request identity, witness arithmetic, the integer upper
 bound, and the strict decisive inequality. Positive-`s` spherical requests,
-Asymptotic rate results, construction search, and KV constraint derivation do not
+asymptotic rate results, construction search, and KV constraint derivation do not
 produce finite impossibility outcomes in this release.
 
 ## Validation
