@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "path": "request.normalized.json",
+      "sha256": "44515cc78e070d650b79f143839e5e0833b62d38625c963743be5c4215a151ed",
+      "bytes": 1174
+    },
+    {
+      "path": "outcome.json",
+      "sha256": "98afdcb56d02b1aac752b2a80896e4dbe4ea9498aa660c523fc65c215f99b4c1",
+      "bytes": 2747
+    },
+    {
+      "path": "certificate.json",
+      "sha256": "34c06396155964906691d06d82f0bf815c8f88b9cf682b98fb1b8b58df5b3a96",
+      "bytes": 2147
+    },
+    {
+      "path": "report.md",
+      "sha256": "61ba84236ede61c3d693b0f86ce72e858c61f637403a55bc410adde4df152580",
+      "bytes": 423
+    },
+    {
+      "path": "metrics.json",
+      "sha256": "0030c0ba14a07b7df6c1f197cfc8feb96f7c31c57db15e4a2d71b1af55116a91",
+      "bytes": 79
+    }
+  ]
+}

@@ -18,6 +18,10 @@ Run from the repository root:
 cargo fmt --check
 cargo check --all-targets --all-features
 cargo test --all-features
+scripts/run_oracle_independent_validation.sh /tmp/qatq-oracle-evidence
+python3 scripts/oracle_validation/compare_results.py \
+  --expected validation/oracle-v0.4.1/evidence/results.json \
+  --actual /tmp/qatq-oracle-evidence/results.json
 cargo metadata --locked --format-version 1
 cargo tree -d
 cargo audit
@@ -115,6 +119,8 @@ Do not tag a public release if:
 - the public competitive compression gate fails;
 - docs claim external runtime data is required for QATQ to operate;
 - raw private captures are staged.
+- the independent SageMath corpus does not reproduce every published finite
+  certificate row or differs semantically from the committed results.
 
 ## GitHub Release
 

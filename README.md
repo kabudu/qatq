@@ -117,6 +117,11 @@ decisive inequality. Start with [`docs/oracle/README.md`](docs/oracle/README.md)
 then review the [claim boundary](docs/oracle/CLAIM_BOUNDARY.md) and
 [trust boundary](docs/oracle/TRUST_BOUNDARY.md).
 
+The v0.4.1 evidence corpus is also independently reproduced by a separate,
+pinned SageMath implementation. See the
+[machine-readable validation results](validation/oracle-v0.4.1/evidence/results.json)
+and the [precise validation terminology](docs/PUBLIC_RELEASE_0_4_1_EVIDENCE.md).
+
 ## Rust library
 
 ```rust

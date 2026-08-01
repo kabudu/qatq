@@ -16,3 +16,13 @@ QATQ/QATC encoding and decoding do not depend on Oracle code unless the Cargo
 `oracle` feature is explicitly enabled. The cargo-dist production build enables
 that feature so release archives contain `qatq-oracle`; the codec wire formats
 remain unchanged.
+
+QATQ v0.4.1 adds a separate evidence layer outside this production checker
+boundary. A pinned SageMath implementation consumes public certificate JSON and
+reproduces the finite witness and upper bound without importing QATQ code. Its
+agreement is evidence about the checker and producer; SageMath is not a runtime
+dependency and is not added to the trusted production path.
+
+Automated agreement is not human review. A claim of external review additionally
+requires the attributable record defined in
+[`validation/oracle-v0.4.1/external-review.json`](../../validation/oracle-v0.4.1/external-review.json).

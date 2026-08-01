@@ -4,6 +4,21 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Added
+
+- Added a pinned, network-disabled SageMath 10.6 implementation that separately
+  reproduces all 27 published binary Hamming and spherical Rankin certificate
+  rows without importing QATQ code or expected numeric answers.
+- Added a deterministic differential corpus with requests, certificates,
+  SHA-256 manifests, exact per-row comparisons, environment versions, and a CI
+  gate against the published machine-readable results.
+
+### Changed
+
+- Distinguished certificates that are checkable by QATQ, reproduced by
+  separate software, and externally reviewed by a person. No completed external
+  human review is claimed.
+
 ## 0.4.0 - 2026-08-01
 
 ### Added

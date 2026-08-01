@@ -1,0 +1,19 @@
+{
+  "bounds": {
+    "engines": [
+      "finite-spherical-rankin"
+    ],
+    "require_rigorous_certificate": true
+  },
+  "representation": {
+    "ambient_dimension": 64,
+    "kind": "spherical",
+    "normalization": "unit_l2",
+    "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "separation": {
+      "maximum_inner_product": "-1"
+    }
+  },
+  "request_id": "validation-spherical-d64-sneg1",
+  "schema_version": 1
+}
