@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "request_digest": "01517474050529d026645a59b414dffad710767bd13202daee2cdd2a206261d2",
+  "normalized_request": {
+    "schema_version": 1,
+    "request_id": "validation-spherical-d64-sneg05",
+    "model": {
+      "kind": "spherical",
+      "ambient_dimension": 64,
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "maximum_inner_product": "-0.5"
+    },
+    "storage": null,
+    "construction": {
+      "enabled": false,
+      "input_artifact": null,
+      "codec_candidates": [],
+      "maximum_search_seconds": 0
+    },
+    "bounds": {
+      "engines": [
+        "finite-spherical-rankin"
+      ],
+      "maximum_degree": 0,
+      "maximum_seconds": 0,
+      "require_rigorous_certificate": true
+    },
+    "resource_limits": {
+      "maximum_dimension": 1024,
+      "maximum_polynomial_degree": 128,
+      "maximum_memory_bytes": 1073741824,
+      "maximum_certificate_bytes": 16777216,
+      "maximum_input_bytes": 1073741824,
+      "maximum_captured_states": 65536,
+      "maximum_pairwise_comparisons": 10000000,
+      "maximum_interval_subdivisions": 1000000,
+      "maximum_runtime_seconds": 60
+    },
+    "digest": "01517474050529d026645a59b414dffad710767bd13202daee2cdd2a206261d2"
+  },
+  "theorem": "spherical-rankin-negative-v1",
+  "claimed_upper_bound": "3",
+  "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "witness": {
+    "kind": "spherical_rankin_negative",
+    "separation_magnitude_numerator": "5",
+    "separation_denominator": "10"
+  },
+  "arithmetic": {
+    "integer_arithmetic": "arbitrary_precision_unsigned",
+    "rounding": "floor_upper_bound",
+    "floating_point_used": false
+  },
+  "checker_requirements": {
+    "checker": "qatq-oracle",
+    "minimum_checker_schema_version": 1,
+    "complete_domain_check": true
+  }
+}

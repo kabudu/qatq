@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "request_digest": "61a6e4a8b7f3af5abd815fc40cdf3deb4c68b12c301a9d2c5db66450eeecf717",
+  "normalized_request": {
+    "schema_version": 1,
+    "request_id": "validation-binary-n128-d48",
+    "model": {
+      "kind": "binary",
+      "dimension": 128,
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "minimum_hamming_distance": 48
+    },
+    "storage": null,
+    "construction": {
+      "enabled": false,
+      "input_artifact": null,
+      "codec_candidates": [],
+      "maximum_search_seconds": 0
+    },
+    "bounds": {
+      "engines": [
+        "finite-binary-hamming"
+      ],
+      "maximum_degree": 0,
+      "maximum_seconds": 0,
+      "require_rigorous_certificate": true
+    },
+    "resource_limits": {
+      "maximum_dimension": 1024,
+      "maximum_polynomial_degree": 128,
+      "maximum_memory_bytes": 1073741824,
+      "maximum_certificate_bytes": 16777216,
+      "maximum_input_bytes": 1073741824,
+      "maximum_captured_states": 65536,
+      "maximum_pairwise_comparisons": 10000000,
+      "maximum_interval_subdivisions": 1000000,
+      "maximum_runtime_seconds": 60
+    },
+    "digest": "61a6e4a8b7f3af5abd815fc40cdf3deb4c68b12c301a9d2c5db66450eeecf717"
+  },
+  "theorem": "binary-hamming-bound-v1",
+  "claimed_upper_bound": "19391329499178",
+  "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "witness": {
+    "kind": "binary_hamming",
+    "correction_radius": 23,
+    "hamming_ball_volume": "17548171049094564377621833",
+    "ambient_space_size": "340282366920938463463374607431768211456"
+  },
+  "arithmetic": {
+    "integer_arithmetic": "arbitrary_precision_unsigned",
+    "rounding": "floor_upper_bound",
+    "floating_point_used": false
+  },
+  "checker_requirements": {
+    "checker": "qatq-oracle",
+    "minimum_checker_schema_version": 1,
+    "complete_domain_check": true
+  }
+}

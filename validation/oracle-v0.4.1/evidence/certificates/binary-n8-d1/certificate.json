@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "request_digest": "a1328e3106dd2c24fb69f7b5ad20568f8d5f5e431bb9559cb075c5949ab2b65d",
+  "normalized_request": {
+    "schema_version": 1,
+    "request_id": "validation-binary-n8-d1",
+    "model": {
+      "kind": "binary",
+      "dimension": 8,
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "minimum_hamming_distance": 1
+    },
+    "storage": null,
+    "construction": {
+      "enabled": false,
+      "input_artifact": null,
+      "codec_candidates": [],
+      "maximum_search_seconds": 0
+    },
+    "bounds": {
+      "engines": [
+        "finite-binary-hamming"
+      ],
+      "maximum_degree": 0,
+      "maximum_seconds": 0,
+      "require_rigorous_certificate": true
+    },
+    "resource_limits": {
+      "maximum_dimension": 1024,
+      "maximum_polynomial_degree": 128,
+      "maximum_memory_bytes": 1073741824,
+      "maximum_certificate_bytes": 16777216,
+      "maximum_input_bytes": 1073741824,
+      "maximum_captured_states": 65536,
+      "maximum_pairwise_comparisons": 10000000,
+      "maximum_interval_subdivisions": 1000000,
+      "maximum_runtime_seconds": 60
+    },
+    "digest": "a1328e3106dd2c24fb69f7b5ad20568f8d5f5e431bb9559cb075c5949ab2b65d"
+  },
+  "theorem": "binary-hamming-bound-v1",
+  "claimed_upper_bound": "256",
+  "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "witness": {
+    "kind": "binary_hamming",
+    "correction_radius": 0,
+    "hamming_ball_volume": "1",
+    "ambient_space_size": "256"
+  },
+  "arithmetic": {
+    "integer_arithmetic": "arbitrary_precision_unsigned",
+    "rounding": "floor_upper_bound",
+    "floating_point_used": false
+  },
+  "checker_requirements": {
+    "checker": "qatq-oracle",
+    "minimum_checker_schema_version": 1,
+    "complete_domain_check": true
+  }
+}

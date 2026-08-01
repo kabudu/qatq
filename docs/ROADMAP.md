@@ -125,6 +125,8 @@ not just access to exported tensors.
 - [x] Add exact finite spherical Rankin certificates for `s <= 0`.
 - [x] Add a smaller independent checker and adversarial certificate tests.
 - [x] Add atomic evidence bundles and a separate `qatq-oracle` CLI.
+- [x] Reproduce the published finite-certificate corpus with a separate pinned
+      SageMath implementation and publish machine-readable differential results.
 - [ ] Add positive-`s` Gegenbauer certificates with a complete interval/root
       proof.
 - [ ] Add construction search and an explicitly justified QATQ capture bridge.
@@ -133,3 +135,19 @@ not just access to exported tensors.
 
 The checked items define the first production Capacity Oracle release. Unchecked
 items remain explicit future scope and do not broaden finite claims.
+
+## Capacity Oracle - Geometry Reconnaissance Gate
+
+- [ ] Add a research-only, observation-only `profile-kv` command with bounded
+      exact and deterministic sampled pairwise analysis.
+- [ ] Profile at least two model families across prompt classes, context lengths,
+      dtypes, layers, heads, and pre/post-RoPE representations where exposed.
+- [ ] Preregister the application-level source of `required_states` and required
+      separation rather than deriving either from observed vector count.
+- [ ] Choose positive-`s` finite bounds, freeze Oracle expansion, or pivot to
+      live KV paging based on whether preregistered scenarios receive non-vacuous
+      decisions.
+
+Geometry profiling must emit observations only. It cannot emit
+`INFEASIBLE_UNDER_MODEL`, derive a capacity requirement, or expand the v0.4.x
+certificate semantics.

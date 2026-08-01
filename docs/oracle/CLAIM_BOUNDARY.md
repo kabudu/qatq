@@ -1,6 +1,6 @@
 # QATQ Capacity Oracle: claim boundary
 
-Status: production finite-certificate contract for QATQ 0.4.0 (2026-08-01).
+Status: production finite-certificate contract for QATQ 0.4.x (2026-08-01).
 This contract covers the Hamming and Rankin engines described below. It does not
 alter the QATQ/QATC formats.
 
@@ -70,3 +70,9 @@ product claims. The scoped novelty claim is:
 > QATQ Capacity Oracle emits independently checkable finite infeasibility
 > certificates under an explicit binary or spherical representation model and
 > fails closed outside its declared finite theorem scope.
+
+QATQ v0.4.1 does not broaden this contract. It adds separate SageMath
+reproduction evidence for the published rows. “Independently checkable by
+QATQ,” “independently reproduced by separate software,” and “externally reviewed
+by a person” are distinct statements; see
+[`PUBLIC_RELEASE_0_4_1_EVIDENCE.md`](../PUBLIC_RELEASE_0_4_1_EVIDENCE.md).

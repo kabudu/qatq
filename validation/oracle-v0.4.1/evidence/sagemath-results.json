@@ -1,0 +1,455 @@
+{
+  "all_rows_agree": true,
+  "environment": {
+    "platform": "Linux-6.12.76-linuxkit-x86_64-with-glibc2.35",
+    "python": "3.12.5",
+    "sagemath": "SageMath version 10.6, Release Date: 2025-03-31"
+  },
+  "implementation": "independent-sagemath-finite-bounds-v1",
+  "implementation_sha256": "dc7aaa928e5393c40de5e50de82823620ef21b3355be0e6b057fc36948b8f373",
+  "row_count": 27,
+  "rows": [
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "2a5112df5bd50ff90031f0d721e76f1f9a61182a90e01f40c9528dbb56a1908f",
+      "claimed_upper_bound": "256",
+      "decisive_inequality_holds": true,
+      "id": "binary-n8-d1",
+      "reproduced_upper_bound": "256",
+      "reproduction_witness": {
+        "ambient_space_size": "256",
+        "correction_radius": "0",
+        "hamming_ball_volume": "1"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "e23633fdbda72bf4b4a422889b0267329906c67225d2deb80c9c36d24e384b13",
+      "claimed_upper_bound": "256",
+      "decisive_inequality_holds": true,
+      "id": "binary-n8-d2",
+      "reproduced_upper_bound": "256",
+      "reproduction_witness": {
+        "ambient_space_size": "256",
+        "correction_radius": "0",
+        "hamming_ball_volume": "1"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "0453eacad9ab7592e1a78c84dc76de1f8ecb2f864980748340eefa598729357e",
+      "claimed_upper_bound": "28",
+      "decisive_inequality_holds": true,
+      "id": "binary-n8-d3",
+      "reproduced_upper_bound": "28",
+      "reproduction_witness": {
+        "ambient_space_size": "256",
+        "correction_radius": "1",
+        "hamming_ball_volume": "9"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "ea7f27aaeadb860d20dfbf1774731f493fbca7e703ab32143347e1a7f345cb78",
+      "claimed_upper_bound": "28",
+      "decisive_inequality_holds": true,
+      "id": "binary-n8-d4",
+      "reproduced_upper_bound": "28",
+      "reproduction_witness": {
+        "ambient_space_size": "256",
+        "correction_radius": "1",
+        "hamming_ball_volume": "9"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "58f86f5c21dc45888dff75f4fd2b040958c964f7987df1fa12cd854cb8248c52",
+      "claimed_upper_bound": "2",
+      "decisive_inequality_holds": true,
+      "id": "binary-n8-d8",
+      "reproduced_upper_bound": "2",
+      "reproduction_witness": {
+        "ambient_space_size": "256",
+        "correction_radius": "3",
+        "hamming_ball_volume": "93"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "34c06396155964906691d06d82f0bf815c8f88b9cf682b98fb1b8b58df5b3a96",
+      "claimed_upper_bound": "421688057462785",
+      "decisive_inequality_holds": true,
+      "id": "binary-n64-d8",
+      "reproduced_upper_bound": "421688057462785",
+      "reproduction_witness": {
+        "ambient_space_size": "18446744073709551616",
+        "correction_radius": "3",
+        "hamming_ball_volume": "43745"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "36fb295b138ab71eacbe27f343f1e7e05bcc9fca41b774d4c10ab2e20016b65d",
+      "claimed_upper_bound": "26184380591",
+      "decisive_inequality_holds": true,
+      "id": "binary-n64-d16",
+      "reproduced_upper_bound": "26184380591",
+      "reproduction_witness": {
+        "ambient_space_size": "18446744073709551616",
+        "correction_radius": "7",
+        "hamming_ball_volume": "704494193"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "6bef5ec7d28ada8f371c10c8dc427ec0fc8850b991458107c289e794772e349d",
+      "claimed_upper_bound": "19883522",
+      "decisive_inequality_holds": true,
+      "id": "binary-n64-d24",
+      "reproduced_upper_bound": "19883522",
+      "reproduction_witness": {
+        "ambient_space_size": "18446744073709551616",
+        "correction_radius": "11",
+        "hamming_ball_volume": "927740240713"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "26aa751bbbeec14abf3a7d7b69d5c8ccc97fd0f52596fc615c6e834f1a6fd8ee",
+      "claimed_upper_bound": "3395184828163349608402497490",
+      "decisive_inequality_holds": true,
+      "id": "binary-n128-d16",
+      "reproduced_upper_bound": "3395184828163349608402497490",
+      "reproduction_witness": {
+        "ambient_space_size": "340282366920938463463374607431768211456",
+        "correction_radius": "7",
+        "hamming_ball_volume": "100224990433"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "0bc2dd96095f0d9b9467f50f788e21be04a0579b02a60cf6e036994764684f60",
+      "claimed_upper_bound": "22396032652922403638",
+      "decisive_inequality_holds": true,
+      "id": "binary-n128-d32",
+      "reproduced_upper_bound": "22396032652922403638",
+      "reproduction_witness": {
+        "ambient_space_size": "340282366920938463463374607431768211456",
+        "correction_radius": "15",
+        "hamming_ball_volume": "15193868137021842033"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "9e493849460d9c57b428d9b389228753e8a0de112920b4c7d0d84960de51b785",
+      "claimed_upper_bound": "19391329499178",
+      "decisive_inequality_holds": true,
+      "id": "binary-n128-d48",
+      "reproduced_upper_bound": "19391329499178",
+      "reproduction_witness": {
+        "ambient_space_size": "340282366920938463463374607431768211456",
+        "correction_radius": "23",
+        "hamming_ball_volume": "17548171049094564377621833"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "769d415aa749af72e1db9281c737b925f6b2a5e98402434182b9c62f9445d44f",
+      "claimed_upper_bound": "162372326214067081141448504628655429554456941526568067",
+      "decisive_inequality_holds": true,
+      "id": "binary-n256-d32",
+      "reproduced_upper_bound": "162372326214067081141448504628655429554456941526568067",
+      "reproduction_witness": {
+        "ambient_space_size": "115792089237316195423570985008687907853269984665640564039457584007913129639936",
+        "correction_radius": "15",
+        "hamming_ball_volume": "713126996066184214744289"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "e9bcaaa820114a250bca8f194b7cc2cccd3833b70467ee5a787ddba3878ba951",
+      "claimed_upper_bound": "12071934357881141822097984615890981597",
+      "decisive_inequality_holds": true,
+      "id": "binary-n256-d64",
+      "reproduced_upper_bound": "12071934357881141822097984615890981597",
+      "reproduction_witness": {
+        "ambient_space_size": "115792089237316195423570985008687907853269984665640564039457584007913129639936",
+        "correction_radius": "31",
+        "hamming_ball_volume": "9591842185732357534120615672136854626929"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "77069c87e9ee8f0a94ae4ce821f537348aac279abce3e80bbd45db701020ec07",
+      "claimed_upper_bound": "13683528021137272041170604",
+      "decisive_inequality_holds": true,
+      "id": "binary-n256-d96",
+      "reproduced_upper_bound": "13683528021137272041170604",
+      "reproduction_witness": {
+        "ambient_space_size": "115792089237316195423570985008687907853269984665640564039457584007913129639936",
+        "correction_radius": "47",
+        "hamming_ball_volume": "8462151651127501176600653778812689925328982062105929"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "binary-hamming-bound-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "fba645966a200d9dea0317fcb93c7920bf75c1664e3578799c2a1c4727e2454c",
+      "claimed_upper_bound": "4",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d2-s0",
+      "reproduced_upper_bound": "4",
+      "reproduction_witness": {
+        "ambient_dimension": "2"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-orthoplex-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "56de913fd971473372f6c66110dd45a6a39c43a93d54d305457c1d3fc88e8bb6",
+      "claimed_upper_bound": "16",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d8-s0",
+      "reproduced_upper_bound": "16",
+      "reproduction_witness": {
+        "ambient_dimension": "8"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-orthoplex-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "966c849ed479ef9077e316316a703d7773bde1da2d9b1d5b0817cdb2aa788be4",
+      "claimed_upper_bound": "128",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d64-s0",
+      "reproduced_upper_bound": "128",
+      "reproduction_witness": {
+        "ambient_dimension": "64"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-orthoplex-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "bce703045e88c06e3a05cfbaec7007f92c564ae93bb54aa5a8f456a514cb30bf",
+      "claimed_upper_bound": "256",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d128-s0",
+      "reproduced_upper_bound": "256",
+      "reproduction_witness": {
+        "ambient_dimension": "128"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-orthoplex-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "1076550cab10ae2914c777272c649835587ae4420961202cae2eacc3fb2176b7",
+      "claimed_upper_bound": "512",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d256-s0",
+      "reproduced_upper_bound": "512",
+      "reproduction_witness": {
+        "ambient_dimension": "256"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-orthoplex-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "74dc1e777d34e3f52a2721206e44e4ab5fd2196d3f51edc40cffc0bdea4b9eca",
+      "claimed_upper_bound": "2",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d64-sneg1",
+      "reproduced_upper_bound": "2",
+      "reproduction_witness": {
+        "separation_denominator": "1",
+        "separation_magnitude_numerator": "1"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "3cbc6a26a8b0e1ce941c1216ff7010f0d9814a54dd2515392b53486e03e5d075",
+      "claimed_upper_bound": "3",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d64-sneg05",
+      "reproduced_upper_bound": "3",
+      "reproduction_witness": {
+        "separation_denominator": "10",
+        "separation_magnitude_numerator": "5"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "a131961929c3a0978d117e9931963c36727e40f4c2decddbb365cd9d3eb8ccc4",
+      "claimed_upper_bound": "5",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d64-sneg025",
+      "reproduced_upper_bound": "5",
+      "reproduction_witness": {
+        "separation_denominator": "100",
+        "separation_magnitude_numerator": "25"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "6c3ca72bef51b9d78a46b3737938c6071ed155622fdd8a6f42473d594d4b3a6e",
+      "claimed_upper_bound": "9",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d64-sneg0125",
+      "reproduced_upper_bound": "9",
+      "reproduction_witness": {
+        "separation_denominator": "1000",
+        "separation_magnitude_numerator": "125"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "7d0847863d3c5a84445d8a5cba0618b884f79025823cd3faf8522b63382ae68e",
+      "claimed_upper_bound": "11",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d128-sneg01",
+      "reproduced_upper_bound": "11",
+      "reproduction_witness": {
+        "separation_denominator": "10",
+        "separation_magnitude_numerator": "1"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "494658f79ed19461380aafcdcb93634eac9191cf1a78f37ae33aed3ba9708242",
+      "claimed_upper_bound": "4",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d128-sneg03",
+      "reproduced_upper_bound": "4",
+      "reproduction_witness": {
+        "separation_denominator": "10",
+        "separation_magnitude_numerator": "3"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "bc6f239faae64f1a21784db071137710c6cd6d53d65478445b4f6b8834253ae9",
+      "claimed_upper_bound": "2",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d128-sneg07",
+      "reproduced_upper_bound": "2",
+      "reproduction_witness": {
+        "separation_denominator": "10",
+        "separation_magnitude_numerator": "7"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    },
+    {
+      "certificate_agrees": true,
+      "certificate_sha256": "48fdee2fa0d5445befd5a8bb95e889637b3e1001a214bdeffa032512f08000ee",
+      "claimed_upper_bound": "101",
+      "decisive_inequality_holds": true,
+      "id": "spherical-d256-sneg001",
+      "reproduced_upper_bound": "101",
+      "reproduction_witness": {
+        "separation_denominator": "100",
+        "separation_magnitude_numerator": "1"
+      },
+      "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "status": "AGREE",
+      "theorem": "spherical-rankin-negative-v1",
+      "witness_matches": true
+    }
+  ],
+  "schema_version": 1
+}

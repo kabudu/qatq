@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "request_id": "validation-binary-n128-d16",
+  "model": {
+    "kind": "binary",
+    "dimension": 128,
+    "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "minimum_hamming_distance": 16
+  },
+  "storage": null,
+  "construction": {
+    "enabled": false,
+    "input_artifact": null,
+    "codec_candidates": [],
+    "maximum_search_seconds": 0
+  },
+  "bounds": {
+    "engines": [
+      "finite-binary-hamming"
+    ],
+    "maximum_degree": 0,
+    "maximum_seconds": 0,
+    "require_rigorous_certificate": true
+  },
+  "resource_limits": {
+    "maximum_dimension": 1024,
+    "maximum_polynomial_degree": 128,
+    "maximum_memory_bytes": 1073741824,
+    "maximum_certificate_bytes": 16777216,
+    "maximum_input_bytes": 1073741824,
+    "maximum_captured_states": 65536,
+    "maximum_pairwise_comparisons": 10000000,
+    "maximum_interval_subdivisions": 1000000,
+    "maximum_runtime_seconds": 60
+  },
+  "digest": "8454e430af9905dc28afdc9b3e214663d00c8616d9bab8071f0bf012b2cf6dfd"
+}

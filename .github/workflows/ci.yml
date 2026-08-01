@@ -46,3 +46,17 @@ jobs:
           --gate-policy competitive-compression
       - name: Package
         run: cargo package --allow-dirty
+
+  independent-oracle-validation:
+    name: independent Oracle validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reproduce every finite certificate row with SageMath
+        run: scripts/run_oracle_independent_validation.sh "$RUNNER_TEMP/oracle-evidence"
+      - name: Compare with published machine-readable results
+        run: >
+          python3 scripts/oracle_validation/compare_results.py
+          --expected validation/oracle-v0.4.1/evidence/results.json
+          --actual "$RUNNER_TEMP/oracle-evidence/results.json"

@@ -1,0 +1,18 @@
+{
+  "bounds": {
+    "engines": [
+      "finite-binary-hamming"
+    ],
+    "require_rigorous_certificate": true
+  },
+  "representation": {
+    "dimension": 256,
+    "kind": "binary",
+    "required_states": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "separation": {
+      "minimum_hamming_distance": 32
+    }
+  },
+  "request_id": "validation-binary-n256-d32",
+  "schema_version": 1
+}
