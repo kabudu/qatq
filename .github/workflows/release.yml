@@ -325,11 +325,12 @@ jobs:
             exit 1
           fi
 
+          python3 scripts/check_no_em_dash.py
           python3 scripts/validate_release_notes.py "$NOTES_FILE" --product QATQ --tag "$RELEASE_TAG"
 
           RELEASE_TITLE="$(sed -n '1s/^# //p' "$NOTES_FILE")"
           if [[ -z "$RELEASE_TITLE" || "$RELEASE_TITLE" != "QATQ ${RELEASE_TAG}"* ]]; then
-            echo "First line must be '# QATQ ${RELEASE_TAG} — <release theme>'" >&2
+            echo "First line must be '# QATQ ${RELEASE_TAG}: <release theme>'" >&2
             exit 1
           fi
 

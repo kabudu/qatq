@@ -96,7 +96,7 @@ uses it for package history, but QATQ does not publish the generated changelog
 excerpt as the GitHub Release description.
 
 Create `.github/release-notes/vX.Y.Z.md` before tagging. Its first line must be
-`# QATQ vX.Y.Z — <release theme>`; the remaining Markdown is the exact public
+`# QATQ vX.Y.Z: <release theme>`; the remaining Markdown is the exact public
 release body. Keep it concise and product-facing: one opening summary, three to
 five high-signal changes, an explicit claim/validation boundary when relevant,
 one primary install path, and links to detailed evidence. Do not repeat the
@@ -119,6 +119,7 @@ hard-wrapped. Run the same validation locally:
 ```sh
 python3 scripts/validate_release_notes.py \
   .github/release-notes/vX.Y.Z.md --product QATQ --tag vX.Y.Z
+python3 scripts/check_no_em_dash.py
 ```
 
 Optional external runtime validation:

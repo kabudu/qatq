@@ -14,7 +14,7 @@
 
 # QATQ
 
-**Exact, portable compression for LLM memory in motion—with a proof-carrying
+**Exact, portable compression for LLM memory in motion, with a proof-carrying
 capacity analysis tool.**
 
 QATQ is a Rust toolkit for exported LLM KV caches and other typed tensor streams.
