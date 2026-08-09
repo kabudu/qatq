@@ -60,7 +60,10 @@ fn evidence_bundle_is_atomic_and_certificate_checks() {
         assert_eq!(entry["bytes"].as_u64().unwrap(), bytes.len() as u64);
         assert_eq!(
             entry["sha256"].as_str().unwrap(),
-            format!("{:x}", Sha256::digest(bytes))
+            Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
         );
     }
 

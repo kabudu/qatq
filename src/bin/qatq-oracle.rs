@@ -179,7 +179,10 @@ fn write_bundle_contents(
             .map_err(|error| format!("failed to write {name}: {error}"))?;
         entries.push(ManifestEntry {
             path: name.into(),
-            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            sha256: Sha256::digest(&bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
             bytes: bytes.len(),
         });
     }

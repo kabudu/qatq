@@ -180,7 +180,10 @@ pub fn normalize_request(request: OracleRequest) -> Result<NormalizedRequest, Or
     };
     let canonical = serde_json::to_vec(&normalized)
         .map_err(|error| OracleError::Malformed(error.to_string()))?;
-    normalized.digest = format!("{:x}", Sha256::digest(canonical));
+    normalized.digest = Sha256::digest(canonical)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     Ok(normalized)
 }
 
@@ -444,7 +447,10 @@ pub fn recompute_request_digest(normalized: &NormalizedRequest) -> Result<String
     unsigned.digest.clear();
     let canonical =
         serde_json::to_vec(&unsigned).map_err(|error| OracleError::Malformed(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(canonical)))
+    Ok(Sha256::digest(canonical)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>())
 }
 
 fn metadata(
