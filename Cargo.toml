@@ -78,7 +78,7 @@ geometry = ["dep:half", "dep:serde", "dep:serde_json", "dep:sha2"]
 [dependencies]
 lz4_flex = "0.14.0"
 zstd = "0.13.3"
-num-bigint = { version = "0.4.6", features = ["serde"], optional = true }
+num-bigint = { version = "0.5.1", features = ["serde"], optional = true }
 serde = { version = "1.0.219", features = ["derive"], optional = true }
 serde_json = { version = "1.0.140", optional = true }
 sha2 = { version = "0.10.8", optional = true }
