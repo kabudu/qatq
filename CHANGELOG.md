@@ -4,6 +4,14 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.4.3 - 2026-10-22
+
+### Changed
+
+- Updated Zstd to 0.14.2, num-bigint to 0.5.1, SHA-2 to 0.11.1, and serde_json to 1.0.154.
+- Updated release artifact upload and download actions to 7.0.2 and 8.0.2.
+- Retained the existing QATQ and QATC wire formats, public APIs, and Capacity Oracle certificate semantics.
+
 ## 0.4.2 - 2026-08-01
 
 ### Added
