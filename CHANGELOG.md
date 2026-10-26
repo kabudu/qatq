@@ -4,6 +4,13 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.4.4 - 2026-10-26
+
+### Changed
+
+- Updated the locked Zstd dependency from 0.14.2 to 0.14.3.
+- Retained existing compression interfaces, QATQ and QATC formats, and research tool contracts.
+
 ## 0.4.3 - 2026-10-22
 
 ### Changed
