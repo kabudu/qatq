@@ -160,6 +160,15 @@ QATQ exact can store:
   a validated caller-supplied row/chunk width, predicts each word from the word
   one stride earlier, and uses a conservative 1,024-word sample-compression
   classifier to choose one full Zstd transform;
+- bit-split byte-plane zstd coding (`bit-split-plane-zstd`, strategy ID `11`),
+  which optionally applies a reversible 1-bit left rotation on the high 16 bits
+  (`transform = 1`, `hi16.rotate_left(1)` for `f32` and `bf16` only;
+  `transform = 0` identity for `f32`, `f16`, and `bf16`), classifies each
+  plane independently as `Zero` (`0`), `Repeat` (`1`), `Raw` (`2`, stored
+  uncompressed to skip Zstd on incompressible mantissa/low planes), or
+  `Zstd` (`3`, concatenated and compressed together at sample-selected Zstd
+  level 1 or 3), and falls back cleanly to wire-compatible `byte-plane-zstd`
+  (`7`) whenever `transform = 0` and all planes use `Zstd`;
 - Phase 1 prediction plus run-coded XOR residuals.
 
 The predictor strategy:
@@ -186,6 +195,7 @@ The QATQ exact body stores:
   - adjacent-bit delta-XOR byte-plane run stream;
   - native 16-bit adjacent-XOR byte-plane zstd stream;
   - native 16-bit strided-XOR metadata and byte-plane zstd stream;
+  - bit-split byte-plane zstd stream (`[transform: u8][mode_0..mode_{W-1}][inline repeat/raw plane bytes][zstd(concat zstd planes)]`, strategy ID `11`; backward-compatible with all `0..=10` payloads and rejected deterministically with `InvalidQatqExactBody` by older decoders that predate ID `11`);
   - or deterministic rotation seed, residual magnitude scale, packed q4
     coordinates, packed Phase 1 residual sign bits, and run-coded XOR residuals.
 

@@ -17,6 +17,7 @@ const QATC_VERSION: u8 = 2;
 const QATC_HEADER_LEN: usize = 32;
 const QATC_CHUNK_LEN: usize = 4;
 const QATQ_EXACT_MODE_ID: u8 = 4;
+const STREAM_IO_BUF_BYTES: usize = 256 * 1024;
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
@@ -190,6 +191,14 @@ fn encode_chunked_command(args: &[String]) -> Result<(), String> {
     }
 }
 
+fn is_native_typed_exact_payload(payload: &[u8]) -> bool {
+    payload.len() >= 36
+        && &payload[0..4] == b"QATQ"
+        && payload[5] == QATQ_EXACT_MODE_ID
+        && &payload[28..32] == b"QEX1"
+        && matches!(payload[33], 1 | 2)
+}
+
 fn decode_command(args: &[String]) -> Result<(), String> {
     if args.len() != 2 {
         print_usage();
@@ -200,7 +209,8 @@ fn decode_command(args: &[String]) -> Result<(), String> {
     }
     let payload =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
-    if let Ok(tensor) = decode_qatq_exact_tensor_le(&payload) {
+    if is_native_typed_exact_payload(&payload) {
+        let tensor = decode_qatq_exact_tensor_le(&payload).map_err(|error| error.to_string())?;
         return write_bytes_atomic(&args[1], &tensor.bytes_le);
     }
     let values = decode(&payload).map_err(|error| error.to_string())?;
@@ -226,8 +236,8 @@ fn decode_qatc_file_to_f32le_atomic(
     let output_path = output_path.as_ref();
     let file = fs::File::open(input_path)
         .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-    let mut reader = BufReader::new(file);
-    write_atomic_with(output_path, |writer| {
+    let mut reader = BufReader::with_capacity(STREAM_IO_BUF_BYTES, file);
+    write_atomic_with_capacity(output_path, STREAM_IO_BUF_BYTES, |writer| {
         decode_qatc_reader_to_f32le(&mut reader, writer, input_path, output_path)
     })
 }
@@ -273,6 +283,8 @@ fn decode_qatc_reader_to_f32le(
     let mut output_dtype = None;
     let mut container_checksum = FNV_OFFSET;
     let mut len_buf = [0_u8; QATC_CHUNK_LEN];
+    let mut chunk = Vec::new();
+    let mut f32_write_buf = Vec::new();
     for _ in 0..chunk_count {
         reader
             .read_exact(&mut len_buf)
@@ -284,16 +296,18 @@ fn decode_qatc_reader_to_f32le(
         if chunk_len > DEFAULT_MAX_QATC_CHUNK_BYTES {
             return Err("chunked container exceeds decode limit: chunk bytes".to_string());
         }
-        let mut chunk = Vec::new();
-        chunk
-            .try_reserve_exact(chunk_len)
-            .map_err(|_| "chunked container exceeds decode limit: allocation".to_string())?;
+        if chunk.capacity() < chunk_len {
+            chunk
+                .try_reserve_exact(chunk_len - chunk.capacity())
+                .map_err(|_| "chunked container exceeds decode limit: allocation".to_string())?;
+        }
         chunk.resize(chunk_len, 0);
         reader
             .read_exact(&mut chunk)
             .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
         container_checksum = qatc_checksum_chunk(container_checksum, &chunk);
-        if let Ok(tensor) = decode_qatq_exact_tensor_le(&chunk) {
+        if is_native_typed_exact_payload(&chunk) {
+            let tensor = decode_qatq_exact_tensor_le(&chunk).map_err(|error| error.to_string())?;
             if let Some(existing) = output_dtype {
                 if existing != tensor.dtype {
                     return Err("chunked container has mixed tensor dtypes".to_string());
@@ -326,7 +340,7 @@ fn decode_qatc_reader_to_f32le(
             if decoded_values > total_values {
                 return Err("chunked container is invalid".to_string());
             }
-            write_f32le_values(writer, &values)
+            write_f32le_values_buffered(writer, &values, &mut f32_write_buf)
                 .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
         }
     }
@@ -1039,7 +1053,7 @@ fn encode_f32le_file_to_qatc_atomic(
 
     let file = fs::File::open(input_path)
         .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::with_capacity(STREAM_IO_BUF_BYTES, file);
     let chunk_byte_len = max_values_per_chunk
         .checked_mul(4)
         .ok_or_else(|| format!("chunk size is invalid: {max_values_per_chunk}"))?;
@@ -1051,7 +1065,8 @@ fn encode_f32le_file_to_qatc_atomic(
         )
     })?;
     bytes.resize(chunk_byte_len, 0);
-    write_atomic_with(output_path, |writer| {
+    let mut values = Vec::with_capacity(max_values_per_chunk);
+    write_atomic_with_capacity(output_path, STREAM_IO_BUF_BYTES, |writer| {
         write_qatc_header(writer, value_count, chunk_count, 0)
             .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
         let mut container_checksum = FNV_OFFSET;
@@ -1068,7 +1083,7 @@ fn encode_f32le_file_to_qatc_atomic(
                 reader
                     .read_exact(&mut bytes[..chunk_bytes])
                     .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-                let values = decode_f32le_chunk(&bytes[..chunk_bytes]);
+                decode_f32le_chunk_into(&bytes[..chunk_bytes], &mut values);
                 let payload = try_encode_qatq_exact_with_config(&values, config)
                     .map_err(|error| error.to_string())?;
                 container_checksum = qatc_checksum_chunk(container_checksum, &payload);
@@ -1104,7 +1119,7 @@ fn encode_typed_file_to_qatc_atomic(
 
     let file = fs::File::open(input_path)
         .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::with_capacity(STREAM_IO_BUF_BYTES, file);
     let chunk_byte_len = max_values_per_chunk
         .checked_mul(dtype.element_width())
         .ok_or_else(|| format!("chunk size is invalid: {max_values_per_chunk}"))?;
@@ -1116,7 +1131,7 @@ fn encode_typed_file_to_qatc_atomic(
         )
     })?;
     bytes.resize(chunk_byte_len, 0);
-    write_atomic_with(output_path, |writer| {
+    write_atomic_with_capacity(output_path, STREAM_IO_BUF_BYTES, |writer| {
         write_qatc_header(writer, value_count, chunk_count, 0)
             .map_err(|error| format!("failed to write {}: {error}", output_path.display()))?;
         let mut container_checksum = FNV_OFFSET;
@@ -1145,12 +1160,14 @@ fn encode_typed_file_to_qatc_atomic(
     })
 }
 
-fn decode_f32le_chunk(bytes: &[u8]) -> Vec<f32> {
+fn decode_f32le_chunk_into(bytes: &[u8], values: &mut Vec<f32>) {
     debug_assert_eq!(bytes.len() % 4, 0);
-    bytes
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunk size checked")))
-        .collect()
+    values.clear();
+    values.extend(
+        bytes
+            .chunks_exact(4)
+            .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunk size checked"))),
+    );
 }
 
 fn write_qatc_header(
@@ -1183,12 +1200,16 @@ fn patch_qatc_checksum(
 
 fn qatc_checksum_chunk(mut hash: u64, payload: &[u8]) -> u64 {
     for byte in (payload.len() as u32).to_be_bytes() {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
+        hash = (hash ^ (byte as u64)).wrapping_mul(FNV_PRIME);
     }
-    for byte in payload {
-        hash ^= *byte as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
+    let mut chunks = payload.chunks_exact(8);
+    for chunk in &mut chunks {
+        for &byte in chunk {
+            hash = (hash ^ (byte as u64)).wrapping_mul(FNV_PRIME);
+        }
+    }
+    for &byte in chunks.remainder() {
+        hash = (hash ^ (byte as u64)).wrapping_mul(FNV_PRIME);
     }
     hash
 }
@@ -1228,11 +1249,19 @@ fn write_atomic_with(
     path: &Path,
     write: impl FnOnce(&mut BufWriter<fs::File>) -> Result<(), String>,
 ) -> Result<(), String> {
+    write_atomic_with_capacity(path, 8 * 1024, write)
+}
+
+fn write_atomic_with_capacity(
+    path: &Path,
+    buf_capacity: usize,
+    write: impl FnOnce(&mut BufWriter<fs::File>) -> Result<(), String>,
+) -> Result<(), String> {
     let temp_path = temp_output_path(path);
     let result = (|| {
         let file = fs::File::create(&temp_path)
             .map_err(|error| format!("failed to create {}: {error}", temp_path.display()))?;
-        let mut writer = BufWriter::new(file);
+        let mut writer = BufWriter::with_capacity(buf_capacity, file);
         write(&mut writer)?;
         writer
             .flush()
@@ -1252,17 +1281,31 @@ fn write_atomic_with(
 }
 
 fn write_f32le_values(writer: &mut impl Write, values: &[f32]) -> std::io::Result<()> {
-    const BUFFER_VALUES: usize = 1024;
-    let mut bytes = Vec::with_capacity(BUFFER_VALUES * 4);
+    let mut buf = Vec::new();
+    write_f32le_values_buffered(writer, values, &mut buf)
+}
+
+fn write_f32le_values_buffered(
+    writer: &mut impl Write,
+    values: &[f32],
+    bytes: &mut Vec<u8>,
+) -> std::io::Result<()> {
+    const BUFFER_VALUES: usize = 16_384;
+    let max_bytes = BUFFER_VALUES * 4;
+    if bytes.capacity() < max_bytes {
+        bytes.reserve(max_bytes - bytes.capacity());
+    }
+    bytes.clear();
     for value in values {
         bytes.extend_from_slice(&value.to_le_bytes());
-        if bytes.len() == BUFFER_VALUES * 4 {
-            writer.write_all(&bytes)?;
+        if bytes.len() == max_bytes {
+            writer.write_all(bytes)?;
             bytes.clear();
         }
     }
     if !bytes.is_empty() {
-        writer.write_all(&bytes)?;
+        writer.write_all(bytes)?;
+        bytes.clear();
     }
     Ok(())
 }
