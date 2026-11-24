@@ -85,6 +85,14 @@ QATQ 0.4.0 additively introduces the optional `qatq::oracle` API and separate
 and QATC v2 containers are unchanged. Oracle JSON and certificate schemas begin
 at version 1 and reject unknown critical fields.
 
+The default single-payload and QATC chunked encoders use strategy identifiers
+`0..=10`. Byte-plane compression can flush each plane into a separate block
+within the standard Zstd frame for strategy `7`. QATQ 0.4.4 can decode these
+outputs. The decoder also accepts internal strategy `11` in experimental
+QATQ v1 and QATC v2 artifacts. The public `QatqExactStrategy` enum continues to
+describe identifiers `0..=10`. For an experimental strategy `11` payload,
+`qatq_exact_strategy` returns `QatqError::InvalidQatqExactBody`.
+
 Before crates.io publication, any API or CLI rename must include:
 
 - an explicit changelog entry;

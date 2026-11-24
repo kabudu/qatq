@@ -4,6 +4,11 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+### Changed
+
+- Accelerated exact tensor encode and decode with byte-plane transforms, reusable Zstd contexts, and buffered QATC I/O.
+- Improved lossless compression by flushing byte planes within a standard Zstd frame. Default QATQ and QATC output remains readable by QATQ 0.4.4.
+
 ## 0.4.4 - 2026-10-26
 
 ### Changed
