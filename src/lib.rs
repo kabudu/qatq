@@ -46,7 +46,6 @@ const BIT_SPLIT_MODE_ZERO: u8 = 0;
 const BIT_SPLIT_MODE_REPEAT: u8 = 1;
 const BIT_SPLIT_MODE_RAW: u8 = 2;
 const BIT_SPLIT_MODE_ZSTD: u8 = 3;
-const BIT_SPLIT_SAMPLE_ELEMENTS: usize = 2_048;
 const NATIVE_U16_XOR_SAMPLE_WORDS: usize = 4_096;
 const NATIVE_U16_XOR_SAMPLE_BLOCKS: usize = 64;
 const STRIDED_U16_XOR_CLASSIFIER_WORDS: usize = 1_024;
@@ -984,7 +983,7 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
     let mut best_payload: Option<Vec<u8>> = None;
     let mut best_payload_len = raw_len;
 
-    let try_rle = raw_len <= 8_192 || fast_paths::sample_has_rle_potential(&planes_t0, 20);
+    let try_rle = raw_len < 512 || fast_paths::sample_has_rle_potential(&planes_t0, 20);
     if try_rle {
         if let Some(byte_rle) =
             encode_byte_runs_be_pairs_bounded(bytes_le, best_payload_len.saturating_sub(1))
@@ -1039,15 +1038,14 @@ fn encode_qatq_exact_tensor_bytes_unchecked(
                 best_payload = Some(body);
             }
         }
-    } else if let Some((z_strategy, z_payload)) = choose_zstd_plane_candidate_u16(
-        bytes_le,
+    } else if let Some(z_payload) = encode_byte_plane_zstd_flushed_bounded(
         &planes_t0,
-        dtype,
         element_count,
+        2,
         best_payload_len.saturating_sub(1),
     ) {
         best_payload_len = z_payload.len();
-        best_strategy = z_strategy;
+        best_strategy = QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD;
         best_payload = Some(z_payload);
     }
 
@@ -1127,34 +1125,23 @@ fn encode_qatq_exact_exhaustive_unchecked(values: &[f32], config: Phase1Config) 
         best_payload = Some(byte_plane_packed);
     }
     for level in [3, 1] {
+        if let Some(bp_flushed) = fast_paths::zstd_compress_planes_flushed_bounded(
+            &planes_t0,
+            values.len(),
+            4,
+            level,
+            best_payload_len.saturating_sub(1),
+        ) {
+            best_payload_len = bp_flushed.len();
+            best_strategy = QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD;
+            best_payload = Some(bp_flushed);
+        }
         if let Some(bp_zstd) =
             encode_zstd_level_bounded(&planes_t0, level, best_payload_len.saturating_sub(1))
         {
             best_payload_len = bp_zstd.len();
             best_strategy = QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD;
             best_payload = Some(bp_zstd);
-        }
-        if let Some(bs_t0) = encode_bit_split_from_planes_bounded(
-            &planes_t0,
-            values.len(),
-            4,
-            BIT_SPLIT_TRANSFORM_IDENTITY,
-            level,
-            best_payload_len.saturating_sub(1),
-        ) {
-            best_payload_len = bs_t0.len();
-            best_strategy = QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD;
-            best_payload = Some(bs_t0);
-        }
-        if let Some(bs_t1) = encode_bit_split_f32_rot1_bounded(
-            &planes_t0,
-            values.len(),
-            level,
-            best_payload_len.saturating_sub(1),
-        ) {
-            best_payload_len = bs_t1.len();
-            best_strategy = QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD;
-            best_payload = Some(bs_t1);
         }
         if let Some(qc_zstd) = encode_quaternion_chain_zstd_level_bounded(
             values,
@@ -1288,13 +1275,14 @@ fn encode_qatq_exact_fast(values: &[f32], config: Phase1Config) -> Vec<u8> {
         best_payload = Some(delta_xor);
     }
 
-    if let Some((z_strategy, z_payload)) = choose_zstd_plane_candidate_f32(
+    if let Some(z_payload) = encode_byte_plane_zstd_flushed_bounded(
         &planes_t0,
         values.len(),
+        4,
         best_payload_len.saturating_sub(1),
     ) {
         best_payload_len = z_payload.len();
-        best_strategy = z_strategy;
+        best_strategy = QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD;
         best_payload = Some(z_payload);
     }
 
@@ -3138,20 +3126,92 @@ fn encode_quaternion_chain_zstd_level_bounded(
     Some(encoded)
 }
 
+fn encode_byte_plane_zstd_flushed_bounded(
+    planes_t0: &[u8],
+    element_count: usize,
+    width: usize,
+    max_encoded_len: usize,
+) -> Option<Vec<u8>> {
+    if element_count == 0 || max_encoded_len == 0 {
+        return None;
+    }
+    let raw_len = planes_t0.len();
+    if raw_len < 1_024 {
+        let mut best: Option<Vec<u8>> = None;
+        let mut limit = max_encoded_len;
+        for level in [3, 1] {
+            if let Some(flushed) = fast_paths::zstd_compress_planes_flushed_bounded(
+                planes_t0,
+                element_count,
+                width,
+                level,
+                limit,
+            ) {
+                limit = flushed.len().saturating_sub(1);
+                best = Some(flushed);
+            }
+            if let Some(comp) = encode_zstd_level_bounded(planes_t0, level, limit) {
+                limit = comp.len().saturating_sub(1);
+                best = Some(comp);
+            }
+        }
+        return best;
+    }
+    let mut best = fast_paths::zstd_compress_planes_flushed_bounded(
+        planes_t0,
+        element_count,
+        width,
+        1,
+        max_encoded_len,
+    );
+    let best_len = best.as_ref().map_or(max_encoded_len, Vec::len);
+    if raw_len <= 262_144 && best_len < raw_len * 3 / 5 {
+        let l3_limit = best
+            .as_ref()
+            .map_or(max_encoded_len, |b| b.len().saturating_sub(1));
+        if l3_limit > 0
+            && let Some(l3) = fast_paths::zstd_compress_planes_flushed_bounded(
+                planes_t0,
+                element_count,
+                width,
+                3,
+                l3_limit,
+            )
+        {
+            best = Some(l3);
+        }
+        if let Some(current) = best.as_ref()
+            && ((raw_len <= 8_192 && current.len() < raw_len / 2) || current.len() < raw_len / 8)
+        {
+            let mut limit = current.len().saturating_sub(1);
+            for level in [3, 1] {
+                if let Some(unsplit) = encode_zstd_level_bounded(planes_t0, level, limit) {
+                    limit = unsplit.len().saturating_sub(1);
+                    best = Some(unsplit);
+                }
+            }
+        }
+    }
+    best
+}
+
 fn quaternion_chain_wins_sample(values: &[f32], planes_t0: &[u8]) -> bool {
     let n = values.len();
     if n < 256 {
         return true;
     }
-    const BLOCKS: usize = 16;
-    const BLOCK_LEN: usize = 32;
-    let sample_n = BLOCKS * BLOCK_LEN;
+    let (blocks, block_len) = if n <= 2_048 {
+        (8_usize, 16_usize)
+    } else {
+        (16_usize, 32_usize)
+    };
+    let sample_n = blocks * block_len;
     let mut raw_sample = vec![0_u8; sample_n * 4];
     let mut chain_sample = vec![0_u8; sample_n * 4];
     let mut out_idx = 0_usize;
-    for block in 0..BLOCKS {
-        let start = block * n / BLOCKS;
-        let end = (start + BLOCK_LEN).min(n);
+    for block in 0..blocks {
+        let start = block * n / blocks;
+        let end = (start + block_len).min(n);
         let mut prev = if start == 0 {
             0_u32
         } else {
@@ -3173,10 +3233,10 @@ fn quaternion_chain_wins_sample(values: &[f32], planes_t0: &[u8]) -> bool {
             out_idx += 1;
         }
     }
-    let Ok(raw_len) = fast_paths::zstd_compress(&raw_sample, 3).map(|b| b.len()) else {
+    let Ok(raw_len) = fast_paths::zstd_compress(&raw_sample, 1).map(|b| b.len()) else {
         return false;
     };
-    let Ok(chain_len) = fast_paths::zstd_compress(&chain_sample, 3).map(|b| b.len()) else {
+    let Ok(chain_len) = fast_paths::zstd_compress(&chain_sample, 1).map(|b| b.len()) else {
         return false;
     };
     chain_len < raw_len
@@ -3214,56 +3274,7 @@ fn words_to_byte_planes_be(words: &[u32]) -> Vec<u8> {
     out
 }
 
-fn sample_plane_bytes(plane: &[u8], sample_count: usize) -> Vec<u8> {
-    let n = plane.len();
-    if n <= sample_count {
-        return plane.to_vec();
-    }
-    const WINDOWS: usize = 16;
-    let window_len = (sample_count / WINDOWS).max(1);
-    let mut out = Vec::with_capacity(WINDOWS * window_len);
-    for w in 0..WINDOWS {
-        let start = (w * n / WINDOWS).min(n.saturating_sub(window_len));
-        out.extend_from_slice(&plane[start..start + window_len]);
-    }
-    out
-}
-
-fn classify_plane_zstd_or_raw(plane: &[u8]) -> (u8, usize, usize) {
-    match fast_paths::classify_plane(plane) {
-        fast_paths::PlaneStat::Zero => (BIT_SPLIT_MODE_ZERO, 0, 0),
-        fast_paths::PlaneStat::Repeat(_) => (BIT_SPLIT_MODE_REPEAT, 1, 1),
-        fast_paths::PlaneStat::Varying => {
-            let samp = sample_plane_bytes(plane, BIT_SPLIT_SAMPLE_ELEMENTS);
-            let s1 = fast_paths::zstd_compress(&samp, 1)
-                .map(|b| b.len())
-                .unwrap_or(samp.len());
-            let s3 = fast_paths::zstd_compress(&samp, 3)
-                .map(|b| b.len())
-                .unwrap_or(samp.len());
-            let best_s = s1.min(s3);
-            if best_s.saturating_mul(100) >= samp.len().saturating_mul(98) {
-                (BIT_SPLIT_MODE_RAW, plane.len(), plane.len())
-            } else {
-                let est1 = s1.saturating_mul(plane.len()) / samp.len().max(1);
-                let est3 = s3.saturating_mul(plane.len()) / samp.len().max(1);
-                (BIT_SPLIT_MODE_ZSTD, est1, est3)
-            }
-        }
-    }
-}
-
-fn resolve_full_plane_mode(plane: &[u8], sampled_mode: u8) -> u8 {
-    match fast_paths::classify_plane(plane) {
-        fast_paths::PlaneStat::Zero => BIT_SPLIT_MODE_ZERO,
-        fast_paths::PlaneStat::Repeat(_) => BIT_SPLIT_MODE_REPEAT,
-        fast_paths::PlaneStat::Varying => match sampled_mode {
-            BIT_SPLIT_MODE_RAW => BIT_SPLIT_MODE_RAW,
-            _ => BIT_SPLIT_MODE_ZSTD,
-        },
-    }
-}
-
+#[cfg(test)]
 fn build_bit_split_payload_from_plane_slices(
     planes: &[&[u8]],
     modes: &[u8],
@@ -3334,306 +3345,6 @@ fn build_bit_split_payload_from_plane_slices(
         out.extend_from_slice(&comp);
     }
     Some(out)
-}
-
-fn encode_bit_split_from_planes_bounded(
-    planes_flat: &[u8],
-    element_count: usize,
-    width: usize,
-    transform: u8,
-    level: i32,
-    max_encoded_len: usize,
-) -> Option<Vec<u8>> {
-    if element_count == 0 {
-        return None;
-    }
-    let mut planes = Vec::with_capacity(width);
-    let mut modes = Vec::with_capacity(width);
-    for p in 0..width {
-        let slice = &planes_flat[p * element_count..(p + 1) * element_count];
-        let (mode, _, _) = classify_plane_zstd_or_raw(slice);
-        planes.push(slice);
-        modes.push(mode);
-    }
-    build_bit_split_payload_from_plane_slices(&planes, &modes, transform, level, max_encoded_len)
-}
-
-fn encode_bit_split_f32_rot1_bounded(
-    planes_t0: &[u8],
-    element_count: usize,
-    level: i32,
-    max_encoded_len: usize,
-) -> Option<Vec<u8>> {
-    if element_count == 0 {
-        return None;
-    }
-    let (src0, rest) = planes_t0.split_at(element_count);
-    let (src1, rest) = rest.split_at(element_count);
-    let (src2, src3) = rest.split_at(element_count);
-    let mut r0 = vec![0_u8; element_count];
-    let mut r1 = vec![0_u8; element_count];
-    fast_paths::rot1_hi16_planes(src0, src1, &mut r0, &mut r1);
-    let planes: [&[u8]; 4] = [&r0, &r1, src2, src3];
-    let mut modes = [0_u8; 4];
-    for p in 0..4 {
-        modes[p] = classify_plane_zstd_or_raw(planes[p]).0;
-    }
-    build_bit_split_payload_from_plane_slices(
-        &planes,
-        &modes,
-        BIT_SPLIT_TRANSFORM_HI16_ROT1,
-        level,
-        max_encoded_len,
-    )
-}
-
-fn choose_zstd_plane_candidate_u16(
-    bytes_le: &[u8],
-    planes_t0: &[u8],
-    dtype: TensorDType,
-    element_count: usize,
-    max_encoded_len: usize,
-) -> Option<(u8, Vec<u8>)> {
-    if element_count == 0 || max_encoded_len == 0 {
-        return None;
-    }
-    let (p0, p1) = planes_t0.split_at(element_count);
-    let (m0_0, e0_l1, e0_l3) = classify_plane_zstd_or_raw(p0);
-    let (m0_1, e1_l1, e1_l3) = classify_plane_zstd_or_raw(p1);
-    let t0_l1 = 3 + e0_l1 + e1_l1;
-    let t0_l3 = 3 + e0_l3 + e1_l3;
-    let (t0_lvl, t0_est) = if t0_l1 < t0_l3 {
-        (1, t0_l1)
-    } else {
-        (3, t0_l3)
-    };
-
-    let mut use_rot1 = false;
-    let mut best_lvl = t0_lvl;
-    let mut best_modes = [m0_0, m0_1];
-    let mut best_est = t0_est;
-
-    if dtype == TensorDType::BF16 {
-        let samp_n = element_count.min(BIT_SPLIT_SAMPLE_ELEMENTS);
-        let mut samp_le = Vec::with_capacity(samp_n * 2);
-        if samp_n == element_count {
-            samp_le.extend_from_slice(bytes_le);
-        } else {
-            const WINDOWS: usize = 16;
-            let win_len = samp_n / WINDOWS;
-            for w in 0..WINDOWS {
-                let start =
-                    (w * element_count / WINDOWS).min(element_count.saturating_sub(win_len));
-                samp_le.extend_from_slice(&bytes_le[start * 2..(start + win_len) * 2]);
-            }
-        }
-        let actual_samp_n = samp_le.len() / 2;
-        let mut sp0 = vec![0_u8; actual_samp_n];
-        let mut sp1 = vec![0_u8; actual_samp_n];
-        fast_paths::transpose_u16_le_rot1_planes(&samp_le, &mut sp0, &mut sp1);
-        let (m1_0, s1_0_l1, s1_0_l3) = classify_plane_zstd_or_raw(&sp0);
-        let (m1_1, s1_1_l1, s1_1_l3) = classify_plane_zstd_or_raw(&sp1);
-        let scale = |est: usize| {
-            if actual_samp_n == element_count {
-                est
-            } else {
-                est.saturating_mul(element_count) / actual_samp_n.max(1)
-            }
-        };
-        let t1_l1 = 3 + scale(s1_0_l1) + scale(s1_1_l1);
-        let t1_l3 = 3 + scale(s1_0_l3) + scale(s1_1_l3);
-        let (t1_lvl, t1_est) = if t1_l1 < t1_l3 {
-            (1, t1_l1)
-        } else {
-            (3, t1_l3)
-        };
-        if t1_est < best_est {
-            use_rot1 = true;
-            best_lvl = t1_lvl;
-            best_modes = [m1_0, m1_1];
-            best_est = t1_est;
-        }
-    }
-    let _ = best_est;
-
-    if !use_rot1 && best_modes == [BIT_SPLIT_MODE_ZSTD, BIT_SPLIT_MODE_ZSTD] {
-        return encode_zstd_level_bounded(planes_t0, best_lvl, max_encoded_len)
-            .map(|b| (QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD, b));
-    }
-    if best_modes == [BIT_SPLIT_MODE_RAW, BIT_SPLIT_MODE_RAW] {
-        return None;
-    }
-
-    if use_rot1 {
-        let mut r0 = vec![0_u8; element_count];
-        let mut r1 = vec![0_u8; element_count];
-        fast_paths::transpose_u16_le_rot1_planes(bytes_le, &mut r0, &mut r1);
-        let m0 = resolve_full_plane_mode(&r0, best_modes[0]);
-        let m1 = resolve_full_plane_mode(&r1, best_modes[1]);
-        build_bit_split_payload_from_plane_slices(
-            &[&r0, &r1],
-            &[m0, m1],
-            BIT_SPLIT_TRANSFORM_HI16_ROT1,
-            best_lvl,
-            max_encoded_len,
-        )
-        .map(|b| (QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD, b))
-    } else {
-        build_bit_split_payload_from_plane_slices(
-            &[p0, p1],
-            &best_modes,
-            BIT_SPLIT_TRANSFORM_IDENTITY,
-            best_lvl,
-            max_encoded_len,
-        )
-        .map(|b| (QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD, b))
-    }
-}
-
-fn choose_zstd_plane_candidate_f32(
-    planes_t0: &[u8],
-    element_count: usize,
-    max_encoded_len: usize,
-) -> Option<(u8, Vec<u8>)> {
-    if element_count == 0 || max_encoded_len == 0 {
-        return None;
-    }
-    if element_count <= 2_048 {
-        let mut best: Option<(u8, Vec<u8>)> = None;
-        let mut limit = max_encoded_len;
-        for level in [3, 1] {
-            if let Some(bp) = encode_zstd_level_bounded(planes_t0, level, limit) {
-                limit = bp.len().saturating_sub(1);
-                best = Some((QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD, bp));
-            }
-            if let Some(bs0) = encode_bit_split_from_planes_bounded(
-                planes_t0,
-                element_count,
-                4,
-                BIT_SPLIT_TRANSFORM_IDENTITY,
-                level,
-                limit,
-            ) {
-                limit = bs0.len().saturating_sub(1);
-                best = Some((QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD, bs0));
-            }
-            if let Some(bs1) =
-                encode_bit_split_f32_rot1_bounded(planes_t0, element_count, level, limit)
-            {
-                limit = bs1.len().saturating_sub(1);
-                best = Some((QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD, bs1));
-            }
-        }
-        return best;
-    }
-    let (p0, rest) = planes_t0.split_at(element_count);
-    let (p1, rest) = rest.split_at(element_count);
-    let (p2, p3) = rest.split_at(element_count);
-
-    let (m0, e0_l1, e0_l3) = classify_plane_zstd_or_raw(p0);
-    let (m1, e1_l1, e1_l3) = classify_plane_zstd_or_raw(p1);
-    let (m2, e2_l1, e2_l3) = classify_plane_zstd_or_raw(p2);
-    let (m3, e3_l1, e3_l3) = classify_plane_zstd_or_raw(p3);
-    let t0_l1 = 5 + e0_l1 + e1_l1 + e2_l1 + e3_l1;
-    let t0_l3 = 5 + e0_l3 + e1_l3 + e2_l3 + e3_l3;
-    let (t0_lvl, t0_est) = if t0_l1 < t0_l3 {
-        (1, t0_l1)
-    } else {
-        (3, t0_l3)
-    };
-
-    let mut use_rot1 = false;
-    let mut best_lvl = t0_lvl;
-    let mut best_hi_modes = [m0, m1];
-    let best_est = t0_est;
-
-    // Sample rot1 on p0, p1 (p2, p3 are unchanged under hi16 rot1).
-    let samp_n = element_count.min(BIT_SPLIT_SAMPLE_ELEMENTS);
-    let mut s_src0 = Vec::with_capacity(samp_n);
-    let mut s_src1 = Vec::with_capacity(samp_n);
-    if samp_n == element_count {
-        s_src0.extend_from_slice(p0);
-        s_src1.extend_from_slice(p1);
-    } else {
-        const WINDOWS: usize = 16;
-        let win_len = samp_n / WINDOWS;
-        for w in 0..WINDOWS {
-            let start = (w * element_count / WINDOWS).min(element_count.saturating_sub(win_len));
-            s_src0.extend_from_slice(&p0[start..start + win_len]);
-            s_src1.extend_from_slice(&p1[start..start + win_len]);
-        }
-    }
-    let actual_samp_n = s_src0.len();
-    let mut sp0 = vec![0_u8; actual_samp_n];
-    let mut sp1 = vec![0_u8; actual_samp_n];
-    fast_paths::rot1_hi16_planes(&s_src0, &s_src1, &mut sp0, &mut sp1);
-    let (rm0, rs0_l1, rs0_l3) = classify_plane_zstd_or_raw(&sp0);
-    let (rm1, rs1_l1, rs1_l3) = classify_plane_zstd_or_raw(&sp1);
-    let scale = |est: usize| {
-        if actual_samp_n == element_count {
-            est
-        } else {
-            est.saturating_mul(element_count) / actual_samp_n.max(1)
-        }
-    };
-    let t1_l1 = 5 + scale(rs0_l1) + scale(rs1_l1) + e2_l1 + e3_l1;
-    let t1_l3 = 5 + scale(rs0_l3) + scale(rs1_l3) + e2_l3 + e3_l3;
-    let (t1_lvl, t1_est) = if t1_l1 < t1_l3 {
-        (1, t1_l1)
-    } else {
-        (3, t1_l3)
-    };
-    if t1_est < best_est {
-        use_rot1 = true;
-        best_lvl = t1_lvl;
-        best_hi_modes = [rm0, rm1];
-    }
-
-    if !use_rot1
-        && [m0, m1, m2, m3]
-            == [
-                BIT_SPLIT_MODE_ZSTD,
-                BIT_SPLIT_MODE_ZSTD,
-                BIT_SPLIT_MODE_ZSTD,
-                BIT_SPLIT_MODE_ZSTD,
-            ]
-    {
-        return encode_zstd_level_bounded(planes_t0, best_lvl, max_encoded_len)
-            .map(|b| (QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD, b));
-    }
-
-    if use_rot1 {
-        let mut r0 = vec![0_u8; element_count];
-        let mut r1 = vec![0_u8; element_count];
-        fast_paths::rot1_hi16_planes(p0, p1, &mut r0, &mut r1);
-        let cm0 = resolve_full_plane_mode(&r0, best_hi_modes[0]);
-        let cm1 = resolve_full_plane_mode(&r1, best_hi_modes[1]);
-        let modes = [cm0, cm1, m2, m3];
-        if modes == [BIT_SPLIT_MODE_RAW; 4] {
-            return None;
-        }
-        build_bit_split_payload_from_plane_slices(
-            &[&r0, &r1, p2, p3],
-            &modes,
-            BIT_SPLIT_TRANSFORM_HI16_ROT1,
-            best_lvl,
-            max_encoded_len,
-        )
-        .map(|b| (QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD, b))
-    } else {
-        let modes = [m0, m1, m2, m3];
-        if modes == [BIT_SPLIT_MODE_RAW; 4] {
-            return None;
-        }
-        build_bit_split_payload_from_plane_slices(
-            &[p0, p1, p2, p3],
-            &modes,
-            BIT_SPLIT_TRANSFORM_IDENTITY,
-            best_lvl,
-            max_encoded_len,
-        )
-        .map(|b| (QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD, b))
-    }
 }
 
 fn parse_bit_split_header<'a>(
@@ -6078,10 +5789,7 @@ mod tests {
             .collect();
         let encoded = encode_qatq_exact(&values);
 
-        assert_eq!(
-            encoded[HEADER_LEN + 4],
-            QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD
-        );
+        assert_eq!(encoded[HEADER_LEN + 4], QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD);
         assert!(encoded.len() < encode_lossless_f32(&values).len());
         assert_eq!(
             f32_bits(&decode_qatq_exact(&encoded).unwrap()),
@@ -7233,6 +6941,107 @@ mod tests {
         let dec_bf16 = decode_qatq_exact_tensor_le(&enc_bf16).unwrap();
         assert_eq!(dec_bf16.dtype, TensorDType::BF16);
         assert_eq!(dec_bf16.bytes_le, bf16_le);
+        assert_ne!(
+            qatq_exact_strategy(&enc_f32),
+            Ok(QatqExactStrategy::BitSplitPlaneZstd)
+        );
+        assert_ne!(
+            qatq_exact_strategy(&enc_bf16),
+            Ok(QatqExactStrategy::BitSplitPlaneZstd)
+        );
+    }
+
+    #[test]
+    fn default_encoders_are_wire_compatible_and_never_emit_strategy_11() {
+        let f32_vals: Vec<f32> = (0..4096)
+            .map(|i| f32::from_bits(0x3f80_0000 ^ ((i as u32).wrapping_mul(131))))
+            .collect();
+        let f32_fast = encode_qatq_exact(&f32_vals);
+        let f32_exh = encode_qatq_exact_exhaustive(&f32_vals);
+        assert_ne!(
+            qatq_exact_strategy(&f32_fast),
+            Ok(QatqExactStrategy::BitSplitPlaneZstd)
+        );
+        assert_ne!(
+            qatq_exact_strategy(&f32_exh),
+            Ok(QatqExactStrategy::BitSplitPlaneZstd)
+        );
+        assert_eq!(
+            f32_bits(&decode_qatq_exact(&f32_fast).unwrap()),
+            f32_bits(&f32_vals)
+        );
+        assert_eq!(
+            f32_bits(&decode_qatq_exact(&f32_exh).unwrap()),
+            f32_bits(&f32_vals)
+        );
+
+        let u16_le: Vec<u8> = (0..4096_u16)
+            .flat_map(|i| (0x3e00_u16.wrapping_add(i & 0x7f) ^ ((i & 3) << 15)).to_le_bytes())
+            .collect();
+        for dtype in [TensorDType::BF16, TensorDType::F16] {
+            let enc = encode_qatq_exact_tensor_le(&u16_le, dtype);
+            assert_ne!(
+                qatq_exact_strategy(&enc),
+                Ok(QatqExactStrategy::BitSplitPlaneZstd)
+            );
+            let dec = decode_qatq_exact_tensor_le(&enc).unwrap();
+            assert_eq!(dec.dtype, dtype);
+            assert_eq!(dec.bytes_le, u16_le);
+        }
+    }
+
+    #[test]
+    fn zstd_compress_planes_flushed_bounded_roundtrip_and_early_abort() {
+        for plane_len in [1_usize, 7, 15, 16, 17, 31, 33, 65, 1024, 2048, 65536] {
+            for width in [2_usize, 4] {
+                let mut planes = vec![0_u8; plane_len * width];
+                for p in 0..width {
+                    for i in 0..plane_len {
+                        planes[p * plane_len + i] = match p {
+                            0 => (i & 0x07) as u8,
+                            1 => ((i * 17 + 3) & 0x3f) as u8,
+                            2 => 0,
+                            _ => 0x5a,
+                        };
+                    }
+                }
+                let bound = if plane_len >= 65 {
+                    planes.len()
+                } else {
+                    planes.len() + 64
+                };
+                for level in [1, 3] {
+                    let comp = fast_paths::zstd_compress_planes_flushed_bounded(
+                        &planes, plane_len, width, level, bound,
+                    )
+                    .expect("compressible planes must succeed");
+                    let decompressed = fast_paths::zstd_decompress(&comp, planes.len()).unwrap();
+                    assert_eq!(decompressed, planes);
+                }
+            }
+        }
+
+        // High-entropy stream exceeding small budget aborts early cleanly and does not corrupt
+        // subsequent calls on the thread-local CCtx.
+        let mut x = 0x1234_5678_9abc_def0_u64;
+        let mut random_planes = vec![0_u8; 4096 * 2];
+        for b in &mut random_planes {
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            *b = (x.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 56) as u8;
+        }
+        assert!(
+            fast_paths::zstd_compress_planes_flushed_bounded(&random_planes, 4096, 2, 1, 512,)
+                .is_none()
+        );
+        let follow =
+            fast_paths::zstd_compress_planes_flushed_bounded(&vec![0x42_u8; 256], 128, 2, 1, 256)
+                .expect("subsequent encode after early abort must succeed");
+        assert_eq!(
+            fast_paths::zstd_decompress(&follow, 256).unwrap(),
+            vec![0x42_u8; 256]
+        );
     }
 
     #[test]

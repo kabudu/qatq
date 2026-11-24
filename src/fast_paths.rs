@@ -24,6 +24,120 @@ pub fn zstd_compress(bytes: &[u8], level: i32) -> Result<Vec<u8>, std::io::Error
     }
 }
 
+/// Compresses `width` contiguous byte planes of length `plane_len` into a
+/// single standard RFC 8878 Zstd frame, flushing at each plane boundary so each
+/// plane receives its own Zstd block(s) and Huffman/RLE/Raw block selection.
+pub fn zstd_compress_planes_flushed_bounded(
+    planes_flat: &[u8],
+    plane_len: usize,
+    width: usize,
+    level: i32,
+    max_encoded_len: usize,
+) -> Option<Vec<u8>> {
+    use zstd::stream::raw::{Encoder, InBuffer, Operation, OutBuffer};
+
+    if plane_len == 0 || width == 0 || max_encoded_len == 0 {
+        return None;
+    }
+    debug_assert_eq!(planes_flat.len(), plane_len * width);
+    if planes_flat.len() != plane_len * width {
+        return None;
+    }
+
+    let run_with_ctx = |compressor: &mut zstd::bulk::Compressor<'static>| -> Option<Vec<u8>> {
+        let mut enc = Encoder::with_context(compressor.context_mut());
+        enc.set_pledged_src_size(Some(planes_flat.len() as u64))
+            .ok()?;
+        let init_cap = max_encoded_len
+            .saturating_add(256)
+            .min(planes_flat.len().saturating_add(256))
+            .min(262_144);
+        let mut out = Vec::with_capacity(init_cap.max(4096));
+
+        let ensure_room = |out: &mut Vec<u8>| -> bool {
+            let len = out.len();
+            if len > max_encoded_len {
+                return false;
+            }
+            if out.capacity() == len {
+                let target = max_encoded_len.saturating_add(4096);
+                let grow = (len.max(4096)).min(target.saturating_sub(len));
+                if grow == 0 {
+                    out.reserve(64);
+                } else {
+                    out.reserve(grow);
+                }
+            }
+            true
+        };
+
+        for p in 0..width {
+            let plane = &planes_flat[p * plane_len..(p + 1) * plane_len];
+            let mut in_buf = InBuffer::around(plane);
+            while in_buf.pos() < plane.len() {
+                if !ensure_room(&mut out) {
+                    return None;
+                }
+                let pos = out.len();
+                let res = {
+                    let mut ob = OutBuffer::around_pos(&mut out, pos);
+                    enc.run(&mut in_buf, &mut ob)
+                };
+                if res.is_err() || out.len() > max_encoded_len {
+                    return None;
+                }
+            }
+            if p + 1 < width {
+                loop {
+                    if !ensure_room(&mut out) {
+                        return None;
+                    }
+                    let pos = out.len();
+                    let remaining = {
+                        let mut ob = OutBuffer::around_pos(&mut out, pos);
+                        enc.flush(&mut ob)
+                    }
+                    .ok()?;
+                    if out.len() > max_encoded_len {
+                        return None;
+                    }
+                    if remaining == 0 {
+                        break;
+                    }
+                }
+            } else {
+                loop {
+                    if !ensure_room(&mut out) {
+                        return None;
+                    }
+                    let pos = out.len();
+                    let remaining = {
+                        let mut ob = OutBuffer::around_pos(&mut out, pos);
+                        enc.finish(&mut ob, true)
+                    }
+                    .ok()?;
+                    if out.len() > max_encoded_len {
+                        return None;
+                    }
+                    if remaining == 0 {
+                        break;
+                    }
+                }
+            }
+        }
+        Some(out)
+    };
+
+    match level {
+        1 => ZSTD_COMPRESSOR_L1.with(|cell| run_with_ctx(&mut cell.borrow_mut())),
+        3 => ZSTD_COMPRESSOR_L3.with(|cell| run_with_ctx(&mut cell.borrow_mut())),
+        other => {
+            let mut c = zstd::bulk::Compressor::new(other).ok()?;
+            run_with_ctx(&mut c)
+        }
+    }
+}
+
 #[inline]
 pub fn zstd_decompress(bytes: &[u8], capacity: usize) -> Result<Vec<u8>, std::io::Error> {
     ZSTD_DECOMPRESSOR.with(|cell| cell.borrow_mut().decompress(bytes, capacity))
@@ -249,6 +363,7 @@ pub fn transpose_u16_le_to_be_plane_slices(bytes_le: &[u8], p0: &mut [u8], p1: &
 
 /// Transposes little-endian 16-bit elements with `word.rotate_left(1)` into
 /// two big-endian byte planes `[p0 | p1]`.
+#[cfg(test)]
 pub fn transpose_u16_le_rot1_planes(bytes_le: &[u8], p0: &mut [u8], p1: &mut [u8]) {
     let n = p0.len();
     debug_assert_eq!(p1.len(), n);
@@ -336,6 +451,7 @@ pub fn untranspose_be_planes_to_u16_le_and_checksum(
 }
 
 /// Applies `rotate_left(1)` to the high 16 bits `[p0, p1]` of a 4-plane f32 layout.
+#[cfg(test)]
 pub fn rot1_hi16_planes(src_p0: &[u8], src_p1: &[u8], dst_p0: &mut [u8], dst_p1: &mut [u8]) {
     let n = src_p0.len();
     debug_assert_eq!(src_p1.len(), n);
@@ -498,15 +614,15 @@ pub fn classify_plane(plane: &[u8]) -> PlaneStat {
 /// RLE has a realistic chance of beating raw/Zstd candidates.
 pub fn sample_has_rle_potential(bytes: &[u8], threshold_percent: usize) -> bool {
     let len = bytes.len();
-    if len <= 8_192 {
+    if len < 512 {
         return true;
     }
-    const BLOCKS: usize = 32;
+    let blocks = if len <= 8_192 { 4_usize } else { 32_usize };
     const BLOCK_LEN: usize = 64;
     let mut run_bytes = 0_usize;
     let mut total = 0_usize;
-    for block in 0..BLOCKS {
-        let start = block * len / BLOCKS;
+    for block in 0..blocks {
+        let start = block * len / blocks;
         let end = (start + BLOCK_LEN).min(len);
         let slice = &bytes[start..end];
         let mut prev = None;
