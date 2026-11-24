@@ -4,6 +4,8 @@ All notable changes to QATQ are recorded here.
 
 ## Unreleased
 
+## 0.4.5 - 2026-11-24
+
 ### Changed
 
 - Accelerated exact tensor encode and decode with byte-plane transforms, reusable Zstd contexts, and buffered QATC I/O.
