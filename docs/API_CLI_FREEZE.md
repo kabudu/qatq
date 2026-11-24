@@ -85,18 +85,13 @@ QATQ 0.4.0 additively introduces the optional `qatq::oracle` API and separate
 and QATC v2 containers are unchanged. Oracle JSON and certificate schemas begin
 at version 1 and reject unknown critical fields.
 
-QATQ 0.4.x adds `QatqExactStrategy::BitSplitPlaneZstd` (`"bit-split-plane-zstd"`,
-exact strategy identifier `11`) as a decode-compatible QATQ version-1 `QEX1`
-variant for `f32`, `f16`, and `bf16` tensors. The default single-payload and
-QATC chunked encoders stay strictly within wire-compatible strategy identifiers
-`0..=10`, using single-frame RFC 8878 plane-boundary-flushed Zstd within
-`byte-plane-zstd` (`7`), so default encoded outputs remain 100% readable by
-QATQ 0.4.4 decoders. New decoders remain backward compatible with all QATQ
-version-1 strategy identifiers (`0..=11`) and QATC v2 containers. Older
-decoders predating identifier `11` reject `BitSplitPlaneZstd` payloads
-deterministically with `QatqError::InvalidQatqExactBody`. Adding a public
-`QatqExactStrategy` variant is additive for wildcard matches, while exhaustive
-downstream matches should include `BitSplitPlaneZstd`.
+The default single-payload and QATC chunked encoders use strategy identifiers
+`0..=10`. Byte-plane compression can flush each plane into a separate block
+within the standard Zstd frame for strategy `7`. QATQ 0.4.4 can decode these
+outputs. The decoder also accepts internal strategy `11` in experimental
+QATQ v1 and QATC v2 artifacts. The public `QatqExactStrategy` enum continues to
+describe identifiers `0..=10`. For an experimental strategy `11` payload,
+`qatq_exact_strategy` returns `QatqError::InvalidQatqExactBody`.
 
 Before crates.io publication, any API or CLI rename must include:
 

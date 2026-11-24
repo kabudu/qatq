@@ -17,11 +17,12 @@ thread_local! {
 
 #[inline]
 pub fn zstd_compress(bytes: &[u8], level: i32) -> Result<Vec<u8>, std::io::Error> {
-    match level {
-        1 => ZSTD_COMPRESSOR_L1.with(|cell| cell.borrow_mut().compress(bytes)),
-        3 => ZSTD_COMPRESSOR_L3.with(|cell| cell.borrow_mut().compress(bytes)),
-        other => zstd::bulk::compress(bytes, other),
-    }
+    let cached = match level {
+        1 => ZSTD_COMPRESSOR_L1.try_with(|cell| cell.borrow_mut().compress(bytes)),
+        3 => ZSTD_COMPRESSOR_L3.try_with(|cell| cell.borrow_mut().compress(bytes)),
+        _ => return zstd::bulk::compress(bytes, level),
+    };
+    cached.unwrap_or_else(|_| zstd::bulk::compress(bytes, level))
 }
 
 /// Compresses `width` contiguous byte planes of length `plane_len` into a
@@ -128,19 +129,24 @@ pub fn zstd_compress_planes_flushed_bounded(
         Some(out)
     };
 
-    match level {
-        1 => ZSTD_COMPRESSOR_L1.with(|cell| run_with_ctx(&mut cell.borrow_mut())),
-        3 => ZSTD_COMPRESSOR_L3.with(|cell| run_with_ctx(&mut cell.borrow_mut())),
-        other => {
-            let mut c = zstd::bulk::Compressor::new(other).ok()?;
-            run_with_ctx(&mut c)
-        }
-    }
+    let cached = match level {
+        1 => ZSTD_COMPRESSOR_L1
+            .try_with(|cell| run_with_ctx(&mut cell.borrow_mut()))
+            .ok(),
+        3 => ZSTD_COMPRESSOR_L3
+            .try_with(|cell| run_with_ctx(&mut cell.borrow_mut()))
+            .ok(),
+        _ => None,
+    };
+    cached.unwrap_or_else(|| run_with_ctx(&mut zstd::bulk::Compressor::new(level).ok()?))
 }
 
 #[inline]
 pub fn zstd_decompress(bytes: &[u8], capacity: usize) -> Result<Vec<u8>, std::io::Error> {
-    ZSTD_DECOMPRESSOR.with(|cell| cell.borrow_mut().decompress(bytes, capacity))
+    // A caller's thread-local destructor may run after this cache is dropped.
+    ZSTD_DECOMPRESSOR
+        .try_with(|cell| cell.borrow_mut().decompress(bytes, capacity))
+        .unwrap_or_else(|_| zstd::bulk::decompress(bytes, capacity))
 }
 
 #[inline]
@@ -663,4 +669,52 @@ pub fn sample_has_delta_xor_rle_potential(values: &[f32]) -> bool {
         }
     }
     rle_bytes.saturating_mul(100) >= total_bytes.saturating_mul(30)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn zstd_roundtrips(input: &[u8]) -> bool {
+        [1, 3].into_iter().all(|level| {
+            let Ok(bulk) = zstd_compress(input, level) else {
+                return false;
+            };
+            let Some(flushed) =
+                zstd_compress_planes_flushed_bounded(input, input.len() / 2, 2, level, 256)
+            else {
+                return false;
+            };
+            [bulk, flushed].iter().all(|frame| {
+                zstd_decompress(frame, input.len()).is_ok_and(|decoded| decoded == input)
+            })
+        })
+    }
+
+    #[test]
+    fn zstd_roundtrips_after_cached_contexts_are_destroyed() {
+        struct EncodeDecodeOnDrop(std::sync::mpsc::Sender<bool>);
+
+        const PLANES: [u8; 128] = [42; 128];
+
+        impl Drop for EncodeDecodeOnDrop {
+            fn drop(&mut self) {
+                let _ = self.0.send(zstd_roundtrips(&PLANES));
+            }
+        }
+
+        thread_local! {
+            static GUARD: RefCell<Option<EncodeDecodeOnDrop>> = const { RefCell::new(None) };
+        }
+
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            // Initialize the guard first so its destructor runs after the Zstd caches.
+            GUARD.with(|guard| *guard.borrow_mut() = Some(EncodeDecodeOnDrop(send)));
+            assert!(zstd_roundtrips(&PLANES));
+        })
+        .join()
+        .unwrap();
+        assert_eq!(receive.recv(), Ok(true));
+    }
 }

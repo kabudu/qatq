@@ -421,7 +421,6 @@ pub enum QatqExactStrategy {
     QuaternionChainZstd,
     AdjacentXorBytePlaneZstd,
     StridedXorBytePlaneZstd,
-    BitSplitPlaneZstd,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -536,7 +535,6 @@ impl QatqExactStrategy {
             QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => Ok(Self::QuaternionChainZstd),
             QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD => Ok(Self::AdjacentXorBytePlaneZstd),
             QATQ_EXACT_STRATEGY_STRIDED_XOR_BYTE_PLANE_ZSTD => Ok(Self::StridedXorBytePlaneZstd),
-            QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD => Ok(Self::BitSplitPlaneZstd),
             _ => Err(QatqError::InvalidQatqExactBody),
         }
     }
@@ -554,7 +552,6 @@ impl QatqExactStrategy {
             Self::QuaternionChainZstd => "quaternion-chain-zstd",
             Self::AdjacentXorBytePlaneZstd => "adjacent-xor-byte-plane-zstd",
             Self::StridedXorBytePlaneZstd => "strided-xor-byte-plane-zstd",
-            Self::BitSplitPlaneZstd => "bit-split-plane-zstd",
         }
     }
 }
@@ -791,7 +788,7 @@ fn try_encode_qatq_exact_tensor_le_with_optional_stride(
 pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, QatqError> {
     let header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
     let body = &payload[HEADER_LEN..];
-    let (strategy, dtype) = parse_qatq_exact_prefix(body)?;
+    let (strategy_id, dtype) = parse_qatq_exact_prefix(body)?;
     if dtype == TensorDType::F32 {
         return Ok(DecodedTensor {
             dtype,
@@ -801,16 +798,16 @@ pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, Qatq
 
     let expected_len = checked_tensor_byte_len(header.value_count, dtype)?;
     let body = &body[QATQ_EXACT_PREFIX_LEN..];
-    let (bytes_le, actual) = match strategy {
-        QatqExactStrategy::RawBits => decode_qatq_exact_tensor_raw_bits_le(body, expected_len)?,
-        QatqExactStrategy::ByteRle => decode_byte_runs_to_u16_le(body, expected_len)?,
-        QatqExactStrategy::BytePlaneRle => {
+    let (bytes_le, actual) = match strategy_id {
+        QATQ_EXACT_STRATEGY_RAW_BITS => decode_qatq_exact_tensor_raw_bits_le(body, expected_len)?,
+        QATQ_EXACT_STRATEGY_BYTE_RLE => decode_byte_runs_to_u16_le(body, expected_len)?,
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => {
             decode_byte_plane_runs_to_u16_le(body, expected_len, header.value_count)?
         }
-        QatqExactStrategy::BytePlanePackedRle => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => {
             decode_byte_plane_packed_runs_to_u16_le(body, expected_len, header.value_count)?
         }
-        QatqExactStrategy::BytePlaneZstd => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => {
             let plane_bytes = fast_paths::zstd_decompress(body, expected_len)
                 .map_err(|_| QatqError::InvalidResidualStream)?;
             if plane_bytes.len() != expected_len {
@@ -819,7 +816,7 @@ pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, Qatq
             let (p0, p1) = plane_bytes.split_at(header.value_count);
             fast_paths::untranspose_be_planes_to_u16_le_and_checksum(p0, p1, false)
         }
-        QatqExactStrategy::AdjacentXorBytePlaneZstd => {
+        QATQ_EXACT_STRATEGY_ADJACENT_XOR_BYTE_PLANE_ZSTD => {
             let residual_planes = fast_paths::zstd_decompress(body, expected_len)
                 .map_err(|_| QatqError::InvalidResidualStream)?;
             decode_adjacent_xor_u16_byte_planes_to_le(
@@ -828,7 +825,7 @@ pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, Qatq
                 header.value_count,
             )?
         }
-        QatqExactStrategy::StridedXorBytePlaneZstd => {
+        QATQ_EXACT_STRATEGY_STRIDED_XOR_BYTE_PLANE_ZSTD => {
             if body.len() < STRIDED_U16_XOR_METADATA_LEN {
                 return Err(QatqError::InvalidResidualStream);
             }
@@ -845,16 +842,15 @@ pub fn decode_qatq_exact_tensor_le(payload: &[u8]) -> Result<DecodedTensor, Qatq
                 stride,
             )?
         }
-        QatqExactStrategy::BitSplitPlaneZstd => decode_bit_split_plane_zstd_u16_le_and_checksum(
-            body,
-            expected_len,
-            header.value_count,
-            dtype,
-        )?,
-        QatqExactStrategy::PredictorXor
-        | QatqExactStrategy::DeltaXorBytePlaneRle
-        | QatqExactStrategy::BytePlaneBlocks
-        | QatqExactStrategy::QuaternionChainZstd => return Err(QatqError::InvalidQatqExactBody),
+        QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD => {
+            decode_bit_split_plane_zstd_u16_le_and_checksum(
+                body,
+                expected_len,
+                header.value_count,
+                dtype,
+            )?
+        }
+        _ => return Err(QatqError::InvalidQatqExactBody),
     };
     if actual != header.checksum {
         return Err(QatqError::ChecksumMismatch {
@@ -1936,16 +1932,16 @@ fn for_each_container_chunk_unchecked(
 pub fn decode_qatq_exact(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     let header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
     let body = &payload[HEADER_LEN..];
-    let (strategy, dtype) = parse_qatq_exact_prefix(body)?;
+    let (strategy_id, dtype) = parse_qatq_exact_prefix(body)?;
     if dtype != TensorDType::F32 {
         return Err(QatqError::InvalidQatqExactBody);
     }
     let strategy_body = &body[QATQ_EXACT_PREFIX_LEN..];
-    let (values, actual) = match strategy {
-        QatqExactStrategy::RawBits => {
+    let (values, actual) = match strategy_id {
+        QATQ_EXACT_STRATEGY_RAW_BITS => {
             decode_qatq_exact_raw_bits_and_checksum(strategy_body, &header)?
         }
-        QatqExactStrategy::BytePlaneBlocks => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_BLOCKS => {
             let expected_len = checked_value_byte_len(header.value_count)?;
             decode_byte_plane_blocks_to_f32_and_checksum(
                 strategy_body,
@@ -1953,44 +1949,41 @@ pub fn decode_qatq_exact(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
                 header.value_count,
             )?
         }
-        QatqExactStrategy::BytePlaneZstd => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_ZSTD => {
             decode_qatq_exact_byte_plane_zstd_and_checksum(strategy_body, &header)?
         }
-        QatqExactStrategy::QuaternionChainZstd => {
+        QATQ_EXACT_STRATEGY_QUATERNION_CHAIN_ZSTD => {
             decode_qatq_exact_quaternion_chain_zstd_and_checksum(strategy_body, &header)?
         }
-        QatqExactStrategy::BitSplitPlaneZstd => {
+        QATQ_EXACT_STRATEGY_BIT_SPLIT_PLANE_ZSTD => {
             decode_bit_split_plane_zstd_f32_and_checksum(strategy_body, header.value_count)?
         }
-        QatqExactStrategy::ByteRle => {
+        QATQ_EXACT_STRATEGY_BYTE_RLE => {
             let v = decode_qatq_exact_byte_rle(strategy_body, &header)?;
             let c = checksum_f32_bits(&v);
             (v, c)
         }
-        QatqExactStrategy::BytePlaneRle => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_RLE => {
             let v = decode_qatq_exact_byte_plane_rle(strategy_body, &header)?;
             let c = checksum_f32_bits(&v);
             (v, c)
         }
-        QatqExactStrategy::BytePlanePackedRle => {
+        QATQ_EXACT_STRATEGY_BYTE_PLANE_PACKED_RLE => {
             let v = decode_qatq_exact_byte_plane_packed_rle(strategy_body, &header)?;
             let c = checksum_f32_bits(&v);
             (v, c)
         }
-        QatqExactStrategy::DeltaXorBytePlaneRle => {
+        QATQ_EXACT_STRATEGY_DELTA_XOR_BYTE_PLANE_RLE => {
             let v = decode_qatq_exact_delta_xor_byte_plane_rle(strategy_body, &header)?;
             let c = checksum_f32_bits(&v);
             (v, c)
         }
-        QatqExactStrategy::PredictorXor => {
+        QATQ_EXACT_STRATEGY_PREDICTOR_XOR => {
             let v = decode_qatq_exact_predictor_xor(strategy_body, &header)?;
             let c = checksum_f32_bits(&v);
             (v, c)
         }
-        QatqExactStrategy::AdjacentXorBytePlaneZstd
-        | QatqExactStrategy::StridedXorBytePlaneZstd => {
-            return Err(QatqError::InvalidQatqExactBody);
-        }
+        _ => return Err(QatqError::InvalidQatqExactBody),
     };
 
     if actual != header.checksum {
@@ -2003,16 +1996,15 @@ pub fn decode_qatq_exact(payload: &[u8]) -> Result<Vec<f32>, QatqError> {
     Ok(values)
 }
 
+/// Identifies the public encoding strategy for an exact payload.
+/// Internal decode-only strategies return `QatqError::InvalidQatqExactBody`.
 pub fn qatq_exact_strategy(payload: &[u8]) -> Result<QatqExactStrategy, QatqError> {
     let _header = Header::parse_for_mode(payload, CodecMode::QatqExact)?;
-    parse_qatq_exact_strategy_body(&payload[HEADER_LEN..])
+    let (strategy_id, _) = parse_qatq_exact_prefix(&payload[HEADER_LEN..])?;
+    QatqExactStrategy::from_id(strategy_id)
 }
 
-fn parse_qatq_exact_strategy_body(body: &[u8]) -> Result<QatqExactStrategy, QatqError> {
-    parse_qatq_exact_prefix(body).map(|(strategy, _dtype)| strategy)
-}
-
-fn parse_qatq_exact_prefix(body: &[u8]) -> Result<(QatqExactStrategy, TensorDType), QatqError> {
+fn parse_qatq_exact_prefix(body: &[u8]) -> Result<(u8, TensorDType), QatqError> {
     if body.len() < QATQ_EXACT_PREFIX_LEN {
         return Err(QatqError::PayloadTooShort {
             actual: body.len(),
@@ -2023,7 +2015,7 @@ fn parse_qatq_exact_prefix(body: &[u8]) -> Result<(QatqExactStrategy, TensorDTyp
         return Err(QatqError::InvalidQatqExactBody);
     }
     let dtype = TensorDType::from_prefix(body[5..8].try_into().expect("fixed exact prefix"))?;
-    Ok((QatqExactStrategy::from_id(body[4])?, dtype))
+    Ok((body[4], dtype))
 }
 
 fn decode_qatq_exact_predictor_xor(body: &[u8], header: &Header) -> Result<Vec<f32>, QatqError> {
@@ -5325,7 +5317,7 @@ mod tests {
                 .unwrap();
         assert!(matches!(
             qatq_exact_strategy(&automatic),
-            Ok(QatqExactStrategy::BytePlaneZstd | QatqExactStrategy::BitSplitPlaneZstd)
+            Ok(QatqExactStrategy::BytePlaneZstd)
         ));
         assert_eq!(
             qatq_exact_strategy(&encoded),
@@ -6757,7 +6749,7 @@ mod tests {
             );
             assert_eq!(
                 qatq_exact_strategy(&payload),
-                Ok(QatqExactStrategy::BitSplitPlaneZstd)
+                Err(QatqError::InvalidQatqExactBody)
             );
             assert_eq!(
                 f32_bits(&decode_qatq_exact(&payload).unwrap()),
@@ -6941,14 +6933,8 @@ mod tests {
         let dec_bf16 = decode_qatq_exact_tensor_le(&enc_bf16).unwrap();
         assert_eq!(dec_bf16.dtype, TensorDType::BF16);
         assert_eq!(dec_bf16.bytes_le, bf16_le);
-        assert_ne!(
-            qatq_exact_strategy(&enc_f32),
-            Ok(QatqExactStrategy::BitSplitPlaneZstd)
-        );
-        assert_ne!(
-            qatq_exact_strategy(&enc_bf16),
-            Ok(QatqExactStrategy::BitSplitPlaneZstd)
-        );
+        assert!(qatq_exact_strategy(&enc_f32).is_ok());
+        assert!(qatq_exact_strategy(&enc_bf16).is_ok());
     }
 
     #[test]
@@ -6958,14 +6944,8 @@ mod tests {
             .collect();
         let f32_fast = encode_qatq_exact(&f32_vals);
         let f32_exh = encode_qatq_exact_exhaustive(&f32_vals);
-        assert_ne!(
-            qatq_exact_strategy(&f32_fast),
-            Ok(QatqExactStrategy::BitSplitPlaneZstd)
-        );
-        assert_ne!(
-            qatq_exact_strategy(&f32_exh),
-            Ok(QatqExactStrategy::BitSplitPlaneZstd)
-        );
+        assert!(qatq_exact_strategy(&f32_fast).is_ok());
+        assert!(qatq_exact_strategy(&f32_exh).is_ok());
         assert_eq!(
             f32_bits(&decode_qatq_exact(&f32_fast).unwrap()),
             f32_bits(&f32_vals)
@@ -6980,10 +6960,7 @@ mod tests {
             .collect();
         for dtype in [TensorDType::BF16, TensorDType::F16] {
             let enc = encode_qatq_exact_tensor_le(&u16_le, dtype);
-            assert_ne!(
-                qatq_exact_strategy(&enc),
-                Ok(QatqExactStrategy::BitSplitPlaneZstd)
-            );
+            assert!(qatq_exact_strategy(&enc).is_ok());
             let dec = decode_qatq_exact_tensor_le(&enc).unwrap();
             assert_eq!(dec.dtype, dtype);
             assert_eq!(dec.bytes_le, u16_le);
